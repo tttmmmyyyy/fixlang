@@ -5,11 +5,9 @@
 //!
 //! What a copy of a global costs, and where it may be put, is what `InlineCost` holds:
 //! `may_be_inlined_at_non_call_site` answers for the places a global is named, and
-//! `may_be_inlined_at_call_site` for the calls supplying every parameter it takes. A call supplying
-//! fewer builds a closure of the global, and a copy of the body there builds the same closure as a
-//! lambda, which takes away no call. A round of substitution leaves a lambda applied where it
-//! stands, so a symbol the round rewrote is run to the fixpoint of `let_elimination` and
-//! `application_inlining` (`inline_local`), which reduces that shape.
+//! `may_be_inlined_at_call_site` for the places it is called. A round of substitution leaves a
+//! lambda applied where it stands, so a symbol the round rewrote is run to the fixpoint of
+//! `let_elimination` and `application_inlining` (`inline_local`), which reduces that shape.
 //!
 //! Globals that name each other in a cycle never reach a program that stops changing, which is why
 //! the rewriting is bounded: `MAX_ROUNDS` bounds the rounds, and `MAX_NODES_SUBSTITUTED_PER_ROUND`
@@ -95,8 +93,8 @@ const MAX_ROUNDS: usize = 10;
 /// A global whose body is an operation a copy of which costs no more than the operation itself
 /// (`is_free_to_duplicate`), a lambda wrapping a builtin operation, and a global that is one name
 /// standing for another go wherever the name occurs, the operands of builtin operations included;
-/// a lambda small enough (`INLINE_COST_THRESHOLD`) goes into the calls supplying every parameter it
-/// takes. A body that calls itself stays where it is.
+/// a lambda small enough (`INLINE_COST_THRESHOLD`) goes into the calls of it. A body that calls
+/// itself stays where it is.
 ///
 /// Under `develop_mode`, each round also substitutes into the symbols it passes through untouched,
 /// and fails where that would change one.
@@ -349,7 +347,7 @@ fn measure_symbol(name: &FullName, sym: &Symbol, type_env: &TypeEnv) -> (FullNam
     let mut cost = InlineCost::new();
     cost.complexity = cost_calculator.complexity;
     cost.is_self_recursive = cost_calculator.is_self_recursive;
-    cost.lambda_arity = expr.is_lam().then(|| expr.lam_sequence_arity());
+    cost.is_lambda = expr.is_lam();
 
     // Count what a copy of the expression costs the compiler, which is every node of it,
     // including the kinds `complexity` counts as nothing.
@@ -411,8 +409,8 @@ struct InlineCost {
     node_count: usize,
     /// Does the symbol's expression name the symbol itself?
     is_self_recursive: bool,
-    /// The number of parameters the expression takes, where it is a lambda expression.
-    lambda_arity: Option<usize>,
+    /// Is the expression a lambda expression?
+    is_lambda: bool,
     /// Is the expression of the form `|x, y, ...| {builtin}`?
     is_builtin_lam: bool,
     /// Does a copy of the expression cost no more than the expression itself?
@@ -431,7 +429,7 @@ impl InlineCost {
             complexity: 0,
             node_count: 0,
             is_self_recursive: false,
-            lambda_arity: None,
+            is_lambda: false,
             is_builtin_lam: false,
             is_free_to_duplicate: false,
             is_std_fix: false,
@@ -467,17 +465,13 @@ impl InlineCost {
         return false;
     }
 
-    /// Whether the symbol's expression may be substituted where a call supplying `arg_count`
-    /// arguments names the symbol at the root of its application spine.
+    /// Whether the symbol's expression may be substituted where the symbol is called.
     ///
-    /// Only a lambda may be, and only at a call supplying every parameter it takes. A call supplying
-    /// fewer builds a closure of the symbol, and a copy of the body there builds the same closure
-    /// as a lambda, which takes away no call. A body that calls itself is left alone, since
-    /// substituting it leaves the call it makes to itself; so is `Std::fix`, whose
-    /// defunctionalization matches the shape it is written in. What is left is judged by size,
-    /// against `INLINE_COST_THRESHOLD`.
-    fn may_be_inlined_at_call_site(&self, arg_count: usize) -> bool {
-        if !self.lambda_arity.is_some_and(|arity| arg_count >= arity) {
+    /// Only a lambda may be. A body that calls itself is left alone, since substituting it leaves
+    /// the call it makes to itself; so is `Std::fix`, whose defunctionalization matches the shape
+    /// it is written in. What is left is judged by size, against `INLINE_COST_THRESHOLD`.
+    fn may_be_inlined_at_call_site(&self) -> bool {
+        if !self.is_lambda {
             return false;
         }
         if self.is_std_fix {
@@ -768,15 +762,18 @@ impl<'c> Inliner<'c> {
         if !self.take_budget_for(name) {
             return None;
         }
-        Some(
-            self.symbols
-                .get(name)
-                .unwrap()
-                .expr
-                .as_ref()
-                .unwrap()
-                .clone(),
-        )
+        Some(self.body_of(name))
+    }
+
+    /// The expression of the symbol `name` names, a symbol of the program being rewritten.
+    fn body_of(&self, name: &FullName) -> Arc<ExprNode> {
+        self.symbols
+            .get(name)
+            .unwrap()
+            .expr
+            .as_ref()
+            .unwrap()
+            .clone()
     }
 }
 
@@ -790,12 +787,11 @@ impl<'c> ExprVisitor for Inliner<'c> {
         }
     }
 
-    /// Where a call names a global at the root of its application spine and supplies every
-    /// parameter the global takes, replaces the global with its expression, if it may be inlined at
-    /// a call site and the round's budget covers a copy of it.
+    /// Where the function of a call is the name of a global, replaces that name with the global's
+    /// expression, if it may be inlined at a call site and the round's budget covers a copy of it.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Judge whether to inline the function at the call site.
-        let (func, args) = expr.destructure_app();
+        let func = expr.get_app_func();
         if !func.is_var() {
             return EndVisitResult::unchanged(expr);
         }
@@ -803,18 +799,13 @@ impl<'c> ExprVisitor for Inliner<'c> {
         if func_name.is_local() {
             return EndVisitResult::unchanged(expr);
         }
-        if !self
-            .costs
-            .get(func_name)
-            .may_be_inlined_at_call_site(args.len())
-        {
+        if !self.costs.get(func_name).may_be_inlined_at_call_site() {
             return EndVisitResult::unchanged(expr);
         }
         if !self.take_budget_for(func_name) {
             return EndVisitResult::unchanged(expr);
         }
-        let func_expr = self.symbols.get(func_name).unwrap().expr.as_ref().unwrap();
-        EndVisitResult::changed(expr.set_app_spine_head(func_expr.clone()))
+        EndVisitResult::changed(expr.set_app_func(self.body_of(func_name)))
     }
 
     /// Replaces each global name a builtin operation reads with the expression of the symbol it

@@ -54,6 +54,9 @@ where it is built, and `collapse_constructions`, run after this pass, reads the 
   would be for any other lambda calling it.
 * It runs above `collapse_constructions`, which reads the tuple built for `F` into the pattern that
   takes it apart in `F`'s body.
+* It runs above the `inline` that follows lambda set specialization. That `inline` would put the
+  body of `F` where `F(cap)` stands, which turns it back into the lambda it was lifted from, and
+  leaves no `F(cap)` for this pass to read.
 */
 
 use super::{

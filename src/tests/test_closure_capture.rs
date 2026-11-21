@@ -21,10 +21,17 @@ mod tests {
     /// That a closure of the type is built at all is asserted alongside, so that a build where the
     /// lambda no longer stands as a closure fails here rather than passing on an empty search.
     fn assert_closures_at_type_store_nothing(dump: &str, closure_ty: &str) {
-        let held_at = format!(" : {} [", closure_ty);
+        // A binding's type is followed by the name it was minted under, `(as ...)`, or by its
+        // provenance, `[...]`.
+        let held_at = [
+            format!(" : {} (as ", closure_ty),
+            format!(" : {} [", closure_ty),
+        ];
         let built = dump
             .lines()
-            .filter(|line| line.contains("= closure ") && line.contains(&held_at))
+            .filter(|line| {
+                line.contains("= closure ") && held_at.iter().any(|at| line.contains(at.as_str()))
+            })
             .collect::<Vec<_>>();
         assert!(
             !built.is_empty(),

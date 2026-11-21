@@ -124,20 +124,11 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         },
     );
 
-    // Inline again: lambda set specialization lifts lambdas to global functions, and this puts them
-    // into the places that call them by name.
-    run_pass(
-        prg,
-        config,
-        config.enable_lambda_set_specialization() && config.enable_inline_optimization(),
-        "inline",
-        |prg| inline::run(prg, config.develop_mode, config.num_worker_thread),
-    );
-
     // Move the capture struct of the function given to a scope op such as
     // `Std::Array::borrow_elements` into the op's environment operand, so that the function captures
-    // nothing. It runs after lambda set specialization, which leaves every such function a global
-    // function applied to its capture struct.
+    // nothing. It runs right after lambda set specialization, which leaves every such function a
+    // global function applied to its capture struct, and before inlining, which would put the body
+    // of that global function in place of the application.
     run_pass(
         prg,
         config,
@@ -154,6 +145,16 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config.enable_decapture_scope_functions() && config.enable_collapse_constructions(),
         "collapse_constructions",
         |prg| collapse_constructions::run(prg, config.num_worker_thread),
+    );
+
+    // Inline again: lambda set specialization lifts lambdas to global functions, and this puts them
+    // into the places that call them by name.
+    run_pass(
+        prg,
+        config,
+        config.enable_lambda_set_specialization() && config.enable_inline_optimization(),
+        "inline",
+        |prg| inline::run(prg, config.develop_mode, config.num_worker_thread),
     );
 
     // Uncurry again, since the passes after the first run make new global functions and calls

@@ -305,9 +305,9 @@ s = { lam8, lam9[f: u, acc: { lam8, lam9[f: u, acc: { lam8, lam9[...] }] }] }
 inline, inline_local
 uncurry                     1 回目
 lambda_set                  推論 -> 特殊化 -> 書き換え -> move_bodies_into_callers
-inline
 decapture_scope_functions
 collapse_constructions
+inline
 uncurry                     2 回目
 inline_local
 dead_symbol_elimination
@@ -316,7 +316,7 @@ dead_symbol_elimination
 - この位置では単相化が済み、すべてのシンボル (`Program::symbols`) が具体的な型を持ち、すべての式のノードに型が付いている。`inline` がコンビネータを利用者のコードに展開した後なので、ラムダの数が少なく、集合も小さい。RC IR では、クロージャはすでに関数ポインタと `#DynamicObject` の組で、構造体の型のレイアウトも決まっているので、型のコピーを作るには遅い。
 - 1 回目の `uncurry` は、グローバル関数 `g` ごとに、先頭の k 個の引数をまとめて受け取る uncurried function `g#func<k>` を作り、`g(a)(b)` のような呼び出しを `g#func2(a, b)` に書き換える。`g#func<k>` の型は func type `#Func<k>` である。そのため、新しいパスの位置の式には、複数の引数を持つ `Lam` (uncurried function の本体) と、複数の引数を持つ `App` (uncurried function の呼び出し) が現れる。func type の値は集合を持たず、名前で直接呼ばれる。
 - 2 回目の `uncurry` は、1 回目と同じく、func type でないグローバル関数すべてに uncurried function を作る。前の回の uncurried function の扱いは「段階 4 で行うこと」にある。
-- `inline` は、application spine (入れ子の適用を関数の側へ根からたどった道) の根のグローバル関数を、spine 上の引数がその関数の引数をすべて渡すところでだけ展開する。一部の引数だけを渡した適用は関数のクロージャを作る式で、そこに本体を置いても呼び出しは減らず、同じクロージャをラムダとして作ることになる。後段の `inline` がリフトした関数を `lam(cap)` に置くと、リフトする前のラムダに戻ってしまう。
+- `decapture_scope_functions` は、lambda set のパスの直後、2 回目の `inline` の前に動く。このパスは、スコープの組み込み関数に渡された `lam(cap)` を読む。`inline` がリフトした関数の本体を `lam(cap)` の位置に置くと、リフトする前のラムダに戻り、このパスが読む形がなくなる。
 - 新しいパスは `Configuration::enable_lambda_set_specialization` が真のとき (`Max` 以上) に動く。旧と新を切り替える設定は作らない。比べる相手は main のバイナリである。
 
 ## 推論が書き換えに渡すもの
@@ -398,7 +398,7 @@ type Seg#ls7d21 m = box struct { op : #LsCap@main#ls_lam0, data : Array m };
 | 二つ以上の同値類にまたがる | キャプチャをペイロードに持つ unbox の union | union の値の構築 | `f` の `match` と、アームごとの直接呼び出し |
 | クロージャ | 今の関数の型 (引数と結果の型は書き換える) | リフトした関数をキャプチャに部分適用した `lam(cap)` | 今の間接呼び出し |
 
-クロージャの形 `lam(cap)` は、後段の `decapture_scope_functions` と `uncurry` がそのまま読む形である。
+クロージャの形 `lam(cap)` は、直後の `decapture_scope_functions` がそのまま読む形である。その後の `inline` は、小さいリフトした関数の本体を `lam(cap)` の位置に置き、リフトする前のラムダに戻すことがある。
 
 - リフトした関数は、要素のクラスごとに一つ作る。クラスの決め方は次の「表現の決め方」の節にある。キャプチャの構造体で表す集合の要素と、クロージャで表す集合の要素が同じクラスに入れば、二つはリフトした関数とキャプチャの構造体を共有する。
 - 本体が自分のキャプチャを丸ごと (`CAP_NAME`) 読むラムダは、リフトせずに書かれた場所に残す。キャプチャを丸ごと持つのはクロージャのオブジェクトだけだからである。このラムダの集合は `Dynamic` を含むので、クロージャで表される。

@@ -11,7 +11,10 @@ use crate::misc::{collect_results, grow_stack, Map, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use std::{
+    iter,
+    sync::{Arc, Mutex},
+};
 
 /// How a function application is written in the source code, which is what says which of the
 /// function and the argument was written first.
@@ -216,20 +219,6 @@ impl ExprNode {
             }
         }
         Arc::new(ret)
-    }
-
-    /// This application with the function at the root of its application spine replaced by `head`.
-    ///
-    /// # Examples
-    /// Given `g`, `f(x)(y)` becomes `g(x)(y)`.
-    pub fn set_app_spine_head(&self, head: Arc<ExprNode>) -> Arc<Self> {
-        let func = self.get_app_func();
-        let func = if func.is_app() {
-            func.set_app_spine_head(head)
-        } else {
-            head
-        };
-        self.set_app_func(func)
     }
 
     /// The function an application applies. Panics on an expression that is not an application.
@@ -992,7 +981,7 @@ impl ExprNode {
             Expr::Var(v) if v.name.is_generated() => None,
             Expr::Var(v) => Some(EndNode::Expr(v.as_ref().clone(), self.type_.clone())),
             Expr::Builtin(_) => None,
-            Expr::App(func, args) => std::iter::once(func)
+            Expr::App(func, args) => iter::once(func)
                 .chain(args)
                 .find_map(|part| part.find_node_at(pos)),
             Expr::Lam(_, body) => body.find_node_at(pos),
