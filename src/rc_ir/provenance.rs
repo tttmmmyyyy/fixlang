@@ -814,8 +814,14 @@ fn merge_by_unique_name<V>(whole: &mut Map<FullName, V>, one: Map<FullName, V>, 
 }
 
 /// Analyze every function and global initializer of `prog`, after computing each function's result
-/// provenance to a fixed point so that a call composes its callee's effect.
+/// provenance to a fixed point so that a call composes its callee's effect. `prog`'s retains must
+/// not have moved (`RcProgram::retains_sunk`).
 pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalysis {
+    assert!(
+        !prog.retains_sunk,
+        "provenance is analyzed after `sink_retains` moved the retains, where an alias bound above a \
+         moved retain would read as unique"
+    );
     // Phase 1: compute each function's effect (its result provenance, symbolic in its parameters) to
     // a fixed point. A direct call substitutes the callee's effect, so recursion needs iteration;
     // the lattice is finite and the join is monotone, so it converges. Start each effect at `⊥`.
@@ -887,10 +893,15 @@ pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalys
 #[cfg(test)]
 mod tests {
     use super::{
-        join_envs, resolve, sole_origin, LeafOrigin, Provenance, SharingVerdict, Uniqueness,
+        analyze_program, join_envs, resolve, sole_origin, LeafOrigin, Provenance, SharingVerdict,
+        Uniqueness,
     };
     use crate::ast::name::FullName;
+    use crate::ast::type_env::TypeEnv;
+    use crate::fixstd::builtin::builtin_tycons;
     use crate::misc::{Map, Set};
+    use crate::rc_ir::borrow::sink_retains;
+    use crate::rc_ir::test_program::{func, global_name, prog};
 
     /// A single boxed value's provenance: one leaf at the root path.
     fn boxed(src: LeafOrigin) -> Provenance {
@@ -1075,5 +1086,18 @@ mod tests {
             resolve(&agg(vec![Provenance::empty(), fresh()]), &[]),
             uniq(vec![(vec![1], SharingVerdict::Unique)])
         );
+    }
+
+    /// Verifies that `analyze_program` accepts a program before `sink_retains` and refuses the same
+    /// program after it. Provenance reads a retain as demoting only the variable it names, and a
+    /// moved retain can sit below where an alias is bound.
+    #[test]
+    #[should_panic(expected = "after `sink_retains` moved the retains")]
+    fn analyze_program_refuses_a_program_whose_retains_sunk() {
+        let type_env = TypeEnv::new(builtin_tycons(), Map::default());
+        let main = global_name("main");
+        let unsunk = prog(vec![func(main.clone(), &[])], vec![], &[main]);
+        analyze_program(&unsunk, &type_env);
+        analyze_program(&sink_retains(&unsunk, &type_env), &type_env);
     }
 }

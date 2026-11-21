@@ -97,8 +97,13 @@ pub fn divide_among_units(
         .map(|global| (global.symbol.clone(), global.clone()))
         .collect();
 
-    let mut unit_programs: Vec<RcProgram> =
-        (0..units.len()).map(|_| RcProgram::default()).collect();
+    let retains_sunk = program.retains_sunk;
+    let mut unit_programs: Vec<RcProgram> = (0..units.len())
+        .map(|_| RcProgram {
+            retains_sunk,
+            ..RcProgram::default()
+        })
+        .collect();
     for (fref, func) in program.funcs {
         let index = unit_of[&fref.name];
         unit_programs[index].funcs.insert(fref, func);

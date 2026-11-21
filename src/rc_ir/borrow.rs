@@ -368,11 +368,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         );
     }
 
-    RcProgram {
-        funcs,
-        globals,
-        roots: prog.roots.clone(),
-    }
+    prog.with_code(funcs, globals)
 }
 
 /// The versions of the program's functions, and what deciding the key of one reads.
@@ -1420,11 +1416,7 @@ fn rewrite_bodies(
             g.with_init(rewrite(&vars, &g.init))
         })
         .collect();
-    RcProgram {
-        funcs,
-        globals,
-        roots: prog.roots.clone(),
-    }
+    prog.with_code(funcs, globals)
 }
 
 /// What the reference-count nodes and the consumes of one body act on. Every pass that deletes or
@@ -1834,6 +1826,9 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
 /// `BodyModel`'s answers, the ones `cancel` decides by: a pair deleted on a path is a pair `cancel`
 /// would delete if that path were the only one.
 ///
+/// The program returned is marked `RcProgram::retains_sunk`, which `provenance::analyze_program`
+/// refuses.
+///
 /// # Examples
 /// With `f` consuming its argument, the body
 /// ```text
@@ -1846,7 +1841,7 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
 /// ```
 pub(crate) fn sink_retains(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let owned_units = all_owned_units(prog, type_env);
-    rewrite_bodies(prog, |vars, body| {
+    let mut sunk = rewrite_bodies(prog, |vars, body| {
         let sinker = RetainSinker {
             model: BodyModel {
                 vars,
@@ -1856,7 +1851,9 @@ pub(crate) fn sink_retains(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             },
         };
         sinker.rewrite(body)
-    })
+    });
+    sunk.retains_sunk = true;
+    sunk
 }
 
 /// The rewrite `sink_retains` makes of one body.

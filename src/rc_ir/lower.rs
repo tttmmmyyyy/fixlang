@@ -84,6 +84,7 @@ pub fn lower_program(
         funcs,
         globals,
         roots,
+        retains_sunk: false,
     }
 }
 

@@ -83,11 +83,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         );
     }
 
-    RcProgram {
-        funcs: spec.output_funcs,
-        globals,
-        roots: prog.roots.clone(),
-    }
+    prog.with_code(spec.output_funcs, globals)
 }
 
 /// The mutable state of the specialization pass: the program and analysis it reads, and the clones

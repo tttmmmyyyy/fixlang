@@ -543,7 +543,7 @@ mod tests {
         TyConVariant, TypeNode,
     };
     use crate::fixstd::builtin::{
-        bulitin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_ptr_ty,
+        builtin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_ptr_ty,
         CaptureProjectOp, NullPtrLitOp,
     };
     use crate::misc::{Map, Set};
@@ -556,7 +556,7 @@ mod tests {
     /// boxed type from an unboxed one, and `Test::Pair`, an unboxed struct of an `Array I64` and an
     /// `I64`.
     fn type_env() -> TypeEnv {
-        let mut tycons = bulitin_tycons();
+        let mut tycons = builtin_tycons();
         tycons.insert(
             TyCon::new(FullName::from_strs(&["Test"], "Pair")),
             TyConInfo {
@@ -612,6 +612,7 @@ mod tests {
             funcs: Map::default(),
             globals: vec![],
             roots: Set::default(),
+            retains_sunk: false,
         }
     }
 
@@ -652,6 +653,7 @@ mod tests {
             funcs,
             globals: vec![],
             roots: [root].into_iter().collect(),
+            retains_sunk: false,
         };
         validate(&prog, &Set::default(), &type_env(), "test");
     }

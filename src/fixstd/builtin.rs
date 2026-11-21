@@ -69,7 +69,7 @@ use std::sync::Arc;
 // The type constructors the compiler provides itself — the primitive types, the function arrow,
 // `Array` and its storage, and the dynamic object — each with the kind, boxedness and document that
 // a user-defined type would get from its declaration.
-pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
+pub fn builtin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
     ret.insert(
