@@ -116,8 +116,8 @@ pub struct Component {
 /// order `Expr` holds them. The pattern of a `Let`, and of each arm of a `Match`, comes after the
 /// expression it takes apart and before the expression it binds names in, its nodes in preorder.
 pub struct NodeType {
-    /// The node itself. A walk reading the nodes in order checks, at each node it reads, that this
-    /// is the node it has reached.
+    /// The node itself, so that a walk over the list in order can check that it has reached this
+    /// node.
     pub node: NodeRef,
     /// The annotated type of the node, each slot a root of the solver.
     pub ty: AType,
