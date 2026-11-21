@@ -76,6 +76,8 @@ impl Predicate {
         Ok(())
     }
 
+    /// This constraint written in source syntax, as `ty : Trait`, under the names its own type
+    /// variables carry.
     pub fn to_string(&self) -> String {
         format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
     }
