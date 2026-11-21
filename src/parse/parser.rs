@@ -625,11 +625,11 @@ fn report_if_missing_else(
             return None;
         }
         patched.insert_str(at, INSERTED);
-        let shifted = insertions.partition_point(|&i| i < at);
-        for i in &mut insertions[shifted..] {
+        let first_shifted = insertions.partition_point(|&i| i < at);
+        for i in &mut insertions[first_shifted..] {
             *i += INSERTED.len();
         }
-        insertions.insert(shifted, at + INSERTED.find(';').unwrap());
+        insertions.insert(first_shifted, at + INSERTED.find(';').unwrap());
         match FixParser::parse(Rule::file, &patched) {
             Ok(file) => break file,
             Err(e) => error = e,
