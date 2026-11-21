@@ -69,8 +69,8 @@ main : IO () = println $ f(3).to_string;
     );
 }
 
-/// The position of an `if` reported after another `let` before it was given its `;` points into
-/// the source as it is written.
+/// The `if` of a second `let`, found after a `;` was put in for the `let` before it, is reported at
+/// its position in the source as written.
 #[test]
 pub fn test_an_if_after_a_block_already_given_a_semicolon_is_reported_where_it_is_written() {
     let source = r##"
@@ -101,7 +101,7 @@ main : IO () = println $ (f(3) + g(3)).to_string;
 }
 
 /// A `let` ended by `;` right before the closing token, whose bound expression is an `if` with no
-/// `else`, reports that `if`: the `;` it is given beside the written one stays a `;` of its own.
+/// `else`, reports that `if`: the `;` put in next to the written one stays a separate `;`.
 #[test]
 pub fn test_an_if_with_no_else_right_before_the_closing_token_is_reported() {
     let source = r##"
@@ -325,8 +325,8 @@ main : IO () = println $ f(3).to_string;
     assert!(first < second, "{}", errmsg);
 }
 
-/// When one `let` left without its `;` ends with an `if` with no `else` and another is one whose
-/// cause is not certain, the parse error is reported as it is, so the error of neither is hidden.
+/// When one `let` left without its `;` ends with an `if` with no `else` and the cause for another
+/// `let` is not certain, the parse error is reported as it is for both.
 #[test]
 pub fn test_a_let_whose_cause_is_not_certain_leaves_the_parse_error_for_all() {
     let source = r##"

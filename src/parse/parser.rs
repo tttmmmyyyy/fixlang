@@ -583,11 +583,10 @@ pub fn parse_renamed_source_file(
     parse_file(file, source_cloned, renaming, config)
 }
 
-/// The errors for the parse error `e` of `source_code` when what caused it is an `if` with no `else`
-/// block, or `None` when `e` is reported as it is. `source` is the source `source_code` is the text
-/// of.
+/// Reports the `if` with no `else` block that caused the parse error `e` of `source_code`, the text
+/// of `source`. `None` says `e` is to be reported as it is.
 ///
-/// The `if` this reports is one in the bound expression of a `let`, in the form `if c { a }; b`:
+/// The `if` this reports is in the bound expression of a `let`, in the form `if c { a }; b`:
 ///
 /// ```text
 /// let x = if n > 0 { 1 };
@@ -596,16 +595,20 @@ pub fn parse_renamed_source_file(
 /// ```
 ///
 /// The `;` after `{ 1 }` makes `x + 2`, the rest of the block, the else branch of the `if`. The
-/// bound expression then runs up to the `)` that closes the block, and `e` is the failure to find
-/// the `;` of the `let` there.
+/// bound expression then runs up to the `)` that closes the block, and `e` says that the `;` of the
+/// `let` is missing there.
 ///
-/// To find that `if`, this parses `source_code` again with a `;` put where `e` expected one, and
-/// again at each such failure that follows, since each `let` left without its `;` fails once. The
-/// `let` each `;` ends has a hole for its body, and its `if` is the first expression on the right
-/// end of its bound expression that reads a `;`. An `if` whose else branch follows `else` reads none.
-/// When that first expression is a `let` or an `eval` instead, either of the two `;` could be the
-/// one meant for the outer `let`, so `e` is reported as it is. So it is as well when the `;` of the
-/// `if` has its else branch after it on the same line, and when any `;` put in finds no `if`.
+/// To find that `if`, this puts a `;` where `e` expected one and parses `source_code` again. It does
+/// this again at each such error that follows, since each `let` left without its `;` fails once.
+/// Each `let` that a `;` put in ends has a hole for its body. Its `if` is the first expression on the
+/// right end of its bound expression that reads a `;`. An `if` whose else branch follows `else`
+/// reads none.
+///
+/// `e` is reported as it is in these cases:
+/// - That first expression is a `let` or an `eval`. Either of the two `;` could be the one meant for
+///   the outer `let`.
+/// - The `;` of the `if` has its else branch after it on the same line.
+/// - A `;` put in finds no `if`.
 fn report_if_missing_else(
     e: &Error<Rule>,
     source_code: &str,
@@ -676,7 +679,7 @@ fn report_if_missing_else(
 }
 
 /// The byte offset in `source_code` at which the parse error `e` expected a `;`, when the token
-/// there closes a block: a `)`, a `}`, a `]` or a `,`. `None` says `e` is some other error.
+/// there ends the block: a `)`, a `}`, a `]` or a `,`. `None` says `e` is some other error.
 fn semicolon_expected_before_a_closing_token(e: &Error<Rule>, source_code: &str) -> Option<usize> {
     let RepairHint { insert_at: at, kind } = repair_hint_from_pest_error(e);
     if kind != RepairHintKind::Semicolon {
@@ -690,8 +693,8 @@ fn semicolon_expected_before_a_closing_token(e: &Error<Rule>, source_code: &str)
     .then_some(at)
 }
 
-/// The `;` that `expr_if`, an `expr_if`, has between its then branch and its else branch when its
-/// else branch is written in the form `if c { a }; b`, or `None` when it is written otherwise.
+/// The `;` between the then branch and the else branch of the `expr_if` pair `expr_if`, when the
+/// else branch is written in the form `if c { a }; b`. `None` says it is written otherwise.
 fn semicolon_before_the_else_branch<'i>(expr_if: &Pair<'i, Rule>) -> Option<Pair<'i, Rule>> {
     expr_if
         .clone()
@@ -701,7 +704,7 @@ fn semicolon_before_the_else_branch<'i>(expr_if: &Pair<'i, Rule>) -> Option<Pair
         .find(|pair| pair.as_rule() == Rule::semicolon)
 }
 
-/// Whether nothing but spaces and a comment follows `pair` on its line.
+/// Whether `pair` is followed on its line by nothing but spaces or a line comment.
 fn ends_its_line(pair: Pair<Rule>) -> bool {
     let rest = &pair.get_input()[pair.as_span().end()..];
     let rest = rest.trim_start_matches([' ', '\t', '\u{00A0}']);
