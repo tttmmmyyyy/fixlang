@@ -616,7 +616,8 @@ fn report_if_missing_else(
 ) -> Option<Errors> {
     // The text put in. The spaces keep its `;` from joining a `;` beside it into a `;;`.
     const INSERTED: &str = " ; ";
-    // Each `;` put in ends a `let` of its own, which bounds how many can be put in.
+    // The `if`s are reported only when every `;` put in ends a `let`, so there are no more `;`s to
+    // put in than `let`s, and the text has at least as many `let` in it as `let`s.
     let max_insertions = source_code.matches("let").count();
     let mut patched = source_code.to_string();
     // The byte offsets in `patched` of the `;`s put in, in ascending order.
