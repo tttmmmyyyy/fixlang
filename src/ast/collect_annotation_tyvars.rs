@@ -3,17 +3,22 @@ use crate::{
         expr::{Expr, ExprNode},
         pattern::{Pattern, PatternNode},
         traverse::{ExprVisitor, StartVisitResult, VisitState},
-        types::TyVar,
+        types::{is_type_wildcard_tyvar, TyVar},
     },
     parse::sourcefile::Span,
 };
 use std::sync::Arc;
 
-// Collect type variables used in type annotations within the expr.
+/// The named type variables the type annotations within `expr` write, each with where it is
+/// written. A `_` type wildcard names no variable, so it is left out.
 pub fn collect_annotation_tyvars(expr: &Arc<ExprNode>) -> Vec<(Arc<TyVar>, Option<Span>)> {
     let mut collector = Collector { tyvars: Vec::new() };
     collector.traverse(expr);
-    collector.tyvars
+    collector
+        .tyvars
+        .into_iter()
+        .filter(|(tv, _)| !is_type_wildcard_tyvar(&tv.name))
+        .collect()
 }
 
 struct Collector {
