@@ -694,15 +694,13 @@ fn semicolon_expected_before_a_closing_token(e: &Error<Rule>, source_code: &str)
     .then_some(at)
 }
 
-/// The `;` between the then branch and the else branch of the `expr_if` pair `expr_if`, when the
-/// else branch is written in the form `if c { a }; b`. `None` says it is written otherwise.
-fn semicolon_before_the_else_branch<'i>(expr_if: &Pair<'i, Rule>) -> Option<Pair<'i, Rule>> {
-    expr_if
-        .clone()
-        .into_inner()
-        .find(|pair| pair.as_rule() == Rule::else_of_if_with_space)?
-        .into_inner()
-        .find(|pair| pair.as_rule() == Rule::semicolon)
+/// Whether the `expr_if` pair `expr_if` is written in the form `if c { a }; b`, with a `;` between
+/// its then branch and its else branch.
+fn reads_a_semicolon_before_its_else_branch(expr_if: &Pair<Rule>) -> bool {
+    expr_if.clone().into_inner().any(|pair| {
+        pair.as_rule() == Rule::else_of_if_with_space
+            && pair.into_inner().any(|p| p.as_rule() == Rule::semicolon)
+    })
 }
 
 /// The bound expression of the binding of `expr_let` whose `in` or `;` is at the byte offset `at`,
@@ -726,7 +724,7 @@ fn first_expression_reading_a_semicolon_at_the_end(mut expr: Pair<Rule>) -> Opti
         match expr.as_rule() {
             Rule::expr_let | Rule::expr_eval => return Some(expr),
             Rule::expr_if => {
-                if semicolon_before_the_else_branch(&expr).is_some() {
+                if reads_a_semicolon_before_its_else_branch(&expr) {
                     return Some(expr);
                 }
             }
