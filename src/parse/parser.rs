@@ -88,10 +88,10 @@ struct ParseContext {
     /// diagnostics and LSP queries can locate any component of the
     /// absolute path.
     abs_path_uses: Vec<(FullName, Vec<Span>)>,
-    // Counter for naming pattern-wildcard (`_`) binders; see
-    // `fresh_pattern_wildcard_name`.
+    /// Counter for naming pattern-wildcard (`_`) binders; see
+    /// `fresh_pattern_wildcard_name`.
     pattern_wildcard_counter: u32,
-    // Counter for naming `_` type wildcards; see `fresh_type_wildcard_name`.
+    /// Counter for naming `_` type wildcards; see `fresh_type_wildcard_name`.
     type_wildcard_counter: u32,
     /// Whether the type being parsed is the type annotation of an expression or a pattern, the one
     /// place a `_` type wildcard may stand.
@@ -3219,14 +3219,14 @@ fn parse_annotation_type(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNo
     ty
 }
 
-// Parse a `_` type wildcard as a fresh type variable of kind `*`.
+/// Parse a `_` type wildcard as a fresh type variable of kind `*`.
 fn parse_type_wildcard(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_wildcard);
     let span = Span::from_pair(&ctx.source, &pair);
     ctx.make_type_wildcard(&kind_star(), span)
 }
 
-// Parse a `(_ : k)` type wildcard as a fresh type variable of the given kind.
+/// Parse a `(_ : k)` type wildcard as a fresh type variable of the given kind.
 fn parse_type_wildcard_kinded(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_wildcard_kinded);
     let span = Span::from_pair(&ctx.source, &pair);
