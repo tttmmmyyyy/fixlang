@@ -8,7 +8,7 @@
 
 use super::{
     concrete::SetId,
-    infer::{Analysis, NameRef, NodeType},
+    infer::{Analysis, NameRef, NodeRef, NodeType},
     represent::{Repr, Representation},
     slots::{AType, SlotFold, SlotLayout},
     solver::{LamId, SetVar},
@@ -194,23 +194,23 @@ impl<'n> Walk<'n> {
     /// unless inference recorded `e` itself there: the inference and the rewrite walk an expression
     /// in the same order, and a walk out of step would read another node's type.
     fn take_expr(&mut self, e: &Arc<ExprNode>) -> &'n NodeType {
-        let node = &self.nodes[self.cursor];
-        assert!(
-            node.node.is_expr(e),
-            "the rewrite meets an expression at node {} where inference recorded another node",
-            self.cursor
-        );
-        self.cursor += 1;
-        node
+        self.take(|node| node.is_expr(e), "an expression")
     }
 
     /// The record of `pat`, the pattern the walk meets next, moving the walk past it. Panics unless
     /// inference recorded `pat` itself there, as `take_expr` does for an expression.
     fn take_pattern(&mut self, pat: &Arc<PatternNode>) -> &'n NodeType {
+        self.take(|node| node.is_pattern(pat), "a pattern")
+    }
+
+    /// The record the walk meets next, moving the walk past it. Panics unless `is_reached` holds of
+    /// the node recorded there; `what` names the kind of node the walk has reached.
+    fn take(&mut self, is_reached: impl FnOnce(&NodeRef) -> bool, what: &str) -> &'n NodeType {
         let node = &self.nodes[self.cursor];
         assert!(
-            node.node.is_pattern(pat),
-            "the rewrite meets a pattern at node {} where inference recorded another node",
+            is_reached(&node.node),
+            "the rewrite meets {} at node {} where inference recorded another node",
+            what,
             self.cursor
         );
         self.cursor += 1;
