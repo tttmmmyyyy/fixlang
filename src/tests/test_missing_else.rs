@@ -346,11 +346,11 @@ main : IO () = println $ f(3).to_string;
         run_source_assert_failed(&source, Configuration::develop_mode())
             .contains("This `if` has no `else` block.")
     };
-    let on_the_next_line = reported("\n    ");
+    let reported_on_the_next_line = reported("\n    ");
     for after_semicolon in [" ", " /* one */ ", " // one\n    ", "\r\n    "] {
         assert_eq!(
             reported(after_semicolon),
-            on_the_next_line,
+            reported_on_the_next_line,
             "{:?}",
             after_semicolon
         );
