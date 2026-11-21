@@ -18,7 +18,7 @@
 - #1019, #1035: For the element type of an empty array literal `[]`, a type error now says `` `#1` is the element type of `[]`. `` and points at the whole literal, where it said `` `#1` is the type for this expression. `` and pointed at the `]`.
 - #1032, #1040: A type error now says `` `#1` is the type expected for `x`. `` where it said `` `#1` is the type for `x`. ``. An error raised before `x` is checked, such as one about the function `x` is passed to, can show `x` with a type other than `#1`. For a variadic argument of `FFI_CALL`, the sentence now points at that argument, where it pointed at the whole `FFI_CALL[...]`.
 - #1012, #1046: A type error about `true` or `false` used where another type is expected now names the type `Std::Bool`, as it does for a number literal: ``Expected `Std::I64`, found `Std::Bool`.``. It used to name the constructor `Std::Bool::_true` with the type `() -> Std::Bool`.
-- #1021: A kind mismatch, a type alias given too few arguments, a circular type alias, and an implementation against the orphan rule now quote the type with the type variables the program writes, as in ``Kind mismatch in `Std::Array t t`.``. They used to rename the variables `a`, `b`, ..., as in ``Kind mismatch in `Std::Array a a`.``.
+- #1021: A kind mismatch, a type alias given too few arguments, a circular type alias, and an `impl` of an external trait for an external type now quote the type with the type variables the program writes, as in ``Kind mismatch in `Std::Array t t`.``. They used to rename the variables `a`, `b`, ..., as in ``Kind mismatch in `Std::Array a a`.``.
 
 #### Tool
 
