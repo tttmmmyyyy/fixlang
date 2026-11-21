@@ -194,18 +194,31 @@ impl<'n> Walk<'n> {
     /// unless inference recorded `e` itself there: the inference and the rewrite walk an expression
     /// in the same order, and a walk out of step would read another node's type.
     fn take_expr(&mut self, e: &Arc<ExprNode>) -> &'n NodeType {
-        self.take(|node| node.is_expr(e), "an expression")
+        self.take(|node| node.is_same_expr(e), "an expression")
     }
 
     /// The record of `pat`, the pattern the walk meets next, moving the walk past it. Panics unless
     /// inference recorded `pat` itself there, as `take_expr` does for an expression.
     fn take_pattern(&mut self, pat: &Arc<PatternNode>) -> &'n NodeType {
-        self.take(|node| node.is_pattern(pat), "a pattern")
+        self.take(|node| node.is_same_pattern(pat), "a pattern")
     }
 
-    /// The record the walk meets next, moving the walk past it. Panics unless `is_reached` holds of
-    /// the node recorded there; `what` names the kind of node the walk has reached.
+    /// The record of `e`, the expression the walk meets next, leaving the walk where it is. Panics
+    /// as `take_expr` does.
+    fn peek_expr(&self, e: &Arc<ExprNode>) -> &'n NodeType {
+        self.peek(|node| node.is_same_expr(e), "an expression")
+    }
+
+    /// The record the walk meets next, moving the walk past it, as `peek` checks it.
     fn take(&mut self, is_reached: impl FnOnce(&NodeRef) -> bool, what: &str) -> &'n NodeType {
+        let record = self.peek(is_reached, what);
+        self.cursor += 1;
+        record
+    }
+
+    /// The record the walk meets next, leaving the walk where it is. Panics unless `is_reached`
+    /// holds of the node recorded there; `what` names the kind of node the walk has reached.
+    fn peek(&self, is_reached: impl FnOnce(&NodeRef) -> bool, what: &str) -> &'n NodeType {
         let record = &self.nodes[self.cursor];
         assert!(
             is_reached(&record.node),
@@ -213,7 +226,6 @@ impl<'n> Walk<'n> {
             what,
             self.cursor
         );
-        self.cursor += 1;
         record
     }
 }
@@ -738,16 +750,14 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             symbol: Some(lambda.symbol.clone()),
             instance,
             nodes,
-            cursor: lambda.nodes.start + 1,
+            cursor: lambda.nodes.start,
             made_symbol: Some(name.clone()),
         };
+        let lam_record = walk.take_expr(&lambda.expr);
         let (params, body) = lambda.expr.destructure_lam();
         let body = self.walk_expr(&mut walk, &body, false);
         assert_eq!(walk.cursor, lambda.nodes.end);
-        let param_ty = self.rewrite_type(
-            instance,
-            &self.layout.type_arg(&nodes[lambda.nodes.start].ty, 0),
-        );
+        let param_ty = self.rewrite_type(instance, &self.layout.type_arg(&lam_record.ty, 0));
         let lam = expr_abs_typed(params[0].clone(), param_ty, body)
             .set_source(lambda.expr.source.clone());
         let func = self
@@ -862,7 +872,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 e.set_app_func(func).set_app_args(args).set_type(ty)
             }
             Expr::App(func, args) => {
-                let func_node = &walk.nodes[walk.cursor];
+                let func_node = walk.peek_expr(func);
                 let own = self
                     .repr
                     .of(self.set_of(walk.instance, func_node.ty.slots[0]));

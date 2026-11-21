@@ -136,12 +136,12 @@ pub enum NodeRef {
 
 impl NodeRef {
     /// Whether this is the expression node `e` itself, the same allocation.
-    pub fn is_expr(&self, e: &Arc<ExprNode>) -> bool {
+    pub fn is_same_expr(&self, e: &Arc<ExprNode>) -> bool {
         matches!(self, NodeRef::Expr(node) if Arc::ptr_eq(node, e))
     }
 
     /// Whether this is the pattern node `pat` itself, the same allocation.
-    pub fn is_pattern(&self, pat: &Arc<PatternNode>) -> bool {
+    pub fn is_same_pattern(&self, pat: &Arc<PatternNode>) -> bool {
         matches!(self, NodeRef::Pattern(node) if Arc::ptr_eq(node, pat))
     }
 }
