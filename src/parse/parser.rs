@@ -575,11 +575,180 @@ pub fn parse_renamed_source_file(
     let file = match FixParser::parse(Rule::file, &source_code) {
         Ok(res) => res,
         Err(e) => {
-            return Err(message_parse_error(e, &source));
+            return Err(report_if_missing_else(&e, &source_code, &source)
+                .unwrap_or_else(|| message_parse_error(e, &source)));
         }
     };
     reject_underscore_capital_value_names(file.clone(), &source)?;
     parse_file(file, source_cloned, renaming, config)
+}
+
+/// The errors for the parse error `e` of `source_code` when what caused it is an `if` with no `else`
+/// block, or `None` when `e` is reported as it is. `source` is the source `source_code` is the text
+/// of.
+///
+/// The `if` this reports is one in the bound expression of a `let`, in the form `if c { a }; b`:
+///
+/// ```text
+/// let x = if n > 0 { 1 };
+/// x + 2
+/// )
+/// ```
+///
+/// The `;` after `{ 1 }` makes `x + 2`, the rest of the block, the else branch of the `if`. The
+/// bound expression then runs up to the `)` that closes the block, and `e` is the failure to find
+/// the `;` of the `let` there.
+///
+/// To find that `if`, this parses `source_code` again with a `;` put where `e` expected one, and
+/// again at each such failure that follows, since each `let` left without its `;` fails once. The
+/// `let` each `;` ends has a hole for its body, and its `if` is the first expression on the right
+/// end of its bound expression that reads a `;`. An `if` whose else branch follows `else` reads none.
+/// When that first expression is a `let` or an `eval` instead, either of the two `;` could be the
+/// one meant for the outer `let`, so `e` is reported as it is. So it is as well when the `;` of the
+/// `if` has its else branch after it on the same line, and when any `;` put in finds no `if`.
+fn report_if_missing_else(
+    e: &Error<Rule>,
+    source_code: &str,
+    source: &SourceFile,
+) -> Option<Errors> {
+    // The text put in. The spaces keep its `;` from joining a `;` beside it into a `;;`.
+    const INSERTED: &str = " ; ";
+    // Each `;` put in ends a `let` of its own, which bounds how many can be put in.
+    let max_insertions = source_code.matches("let").count();
+    let mut patched = source_code.to_string();
+    // The byte offsets in `patched` of the `;`s put in, in ascending order.
+    let mut insertions: Vec<usize> = vec![];
+    let mut error = e.clone();
+    let file = loop {
+        let at = semicolon_expected_before_a_closing_token(&error, &patched)?;
+        if insertions.len() == max_insertions {
+            return None;
+        }
+        patched.insert_str(at, INSERTED);
+        let shifted = insertions.partition_point(|&i| i < at);
+        for i in &mut insertions[shifted..] {
+            *i += INSERTED.len();
+        }
+        insertions.insert(shifted, at + INSERTED.find(';').unwrap());
+        match FixParser::parse(Rule::file, &patched) {
+            Ok(file) => break file,
+            Err(e) => error = e,
+        }
+    };
+    let expr_lets: Vec<Pair<Rule>> = file
+        .flatten()
+        .filter(|pair| pair.as_rule() == Rule::expr_let)
+        .collect();
+    // The byte offsets in `source_code` of the `if`s to report.
+    let mut if_starts = vec![];
+    for &at in &insertions {
+        let bound = expr_lets
+            .iter()
+            .find_map(|expr_let| bound_expression_ended_at(expr_let.clone(), at))?;
+        let expr_if = first_expression_reading_a_semicolon_at_the_end(bound)?;
+        if expr_if.as_rule() != Rule::expr_if {
+            return None;
+        }
+        // An `if` whose `;` is followed by its else branch on the same line, as in
+        // `let x = if c { 0 }; n * 2`, is written in the form `if c { a }; b` on purpose, and it is the
+        // `;` of the `let` that is missing.
+        if !ends_its_line(semicolon_before_the_else_branch(&expr_if).unwrap()) {
+            return None;
+        }
+        let patched_start = expr_if.as_span().start();
+        if_starts.push(
+            patched_start - INSERTED.len() * insertions.partition_point(|&i| i < patched_start),
+        );
+    }
+    if_starts.sort();
+    let mut errors = Errors::empty();
+    for start in if_starts {
+        errors.append(Errors::from_msg_srcs(
+            "This `if` has no `else` block.".to_string(),
+            &[&Some(Span {
+                input: source.clone(),
+                start,
+                end: start + "if".len(),
+            })],
+        ));
+    }
+    Some(errors)
+}
+
+/// The byte offset in `source_code` at which the parse error `e` expected a `;`, when the token
+/// there closes a block: a `)`, a `}`, a `]` or a `,`. `None` says `e` is some other error.
+fn semicolon_expected_before_a_closing_token(e: &Error<Rule>, source_code: &str) -> Option<usize> {
+    let ErrorVariant::ParsingError { positives, .. } = &e.variant else {
+        return None;
+    };
+    if !positives
+        .iter()
+        .any(|r| matches!(r, Rule::semicolon | Rule::in_of_let))
+    {
+        return None;
+    }
+    let InputLocation::Pos(at) = e.location else {
+        return None;
+    };
+    // The rest of the block runs into the else branch only up to the token that closes the block.
+    matches!(
+        source_code[at..].chars().next(),
+        Some(')' | '}' | ']' | ',')
+    )
+    .then_some(at)
+}
+
+/// The `;` that `expr_if`, an `expr_if`, has between its then branch and its else branch when its
+/// else branch is written in the form `if c { a }; b`, or `None` when it is written otherwise.
+fn semicolon_before_the_else_branch<'i>(expr_if: &Pair<'i, Rule>) -> Option<Pair<'i, Rule>> {
+    expr_if
+        .clone()
+        .into_inner()
+        .find(|pair| pair.as_rule() == Rule::else_of_if_with_space)?
+        .into_inner()
+        .find(|pair| pair.as_rule() == Rule::semicolon)
+}
+
+/// Whether nothing but spaces and a comment follows `pair` on its line.
+fn ends_its_line(pair: Pair<Rule>) -> bool {
+    let rest = &pair.get_input()[pair.as_span().end()..];
+    let rest = rest.trim_start_matches([' ', '\t', '\u{00A0}']);
+    rest.is_empty() || rest.starts_with(['\n', '\r']) || rest.starts_with("//")
+}
+
+/// The bound expression of the binding of `expr_let` whose `in` or `;` is at the byte offset `at`,
+/// or `None` when no binding of it has one there.
+fn bound_expression_ended_at(expr_let: Pair<Rule>, at: usize) -> Option<Pair<Rule>> {
+    let mut previous = None;
+    for pair in expr_let.into_inner() {
+        if pair.as_rule() == Rule::in_of_let && pair.as_span().start() == at {
+            return previous;
+        }
+        previous = Some(pair);
+    }
+    None
+}
+
+/// Of the expressions on the right end of `expr` — `expr` itself, its last part when `expr` ends with
+/// that part, and so on down — the first that reads a `;` followed by an expression open to its
+/// right: an `if` in the form `if c { a }; b`, a `let` or an `eval`. `None` says that none does.
+fn first_expression_reading_a_semicolon_at_the_end(mut expr: Pair<Rule>) -> Option<Pair<Rule>> {
+    loop {
+        match expr.as_rule() {
+            Rule::expr_let | Rule::expr_eval => return Some(expr),
+            Rule::expr_if => {
+                if semicolon_before_the_else_branch(&expr).is_some() {
+                    return Some(expr);
+                }
+            }
+            _ => {}
+        }
+        let last = expr.clone().into_inner().last()?;
+        if last.as_span().end() != expr.as_span().end() {
+            return None;
+        }
+        expr = last;
+    }
 }
 
 /// Reports every value, field and variant of the parsed `file` named with `_` followed by a capital
