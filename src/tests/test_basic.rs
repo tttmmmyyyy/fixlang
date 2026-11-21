@@ -11999,8 +11999,8 @@ pub fn test_type_wildcard_outside_an_annotation_is_error() {
     }
 }
 
-/// A `_` type wildcard written in a signature after a type annotation that holds a `_` is still an
-/// error: the annotation's leave to write `_` ends with the annotation.
+/// A `_` type wildcard in a signature that follows a type annotation holding a `_` is an error: an
+/// annotation allows `_` only up to its own end.
 #[test]
 pub fn test_type_wildcard_after_an_annotation_is_error() {
     let source = r##"

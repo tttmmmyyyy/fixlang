@@ -1293,8 +1293,9 @@ impl TypeNode {
         resolved
     }
 
-    /// The part of a `resolve_type_aliases_internal` step that follows its cycle check: expands
-    /// the alias heading this type, or else resolves the types this one is built from.
+    /// Expands the type alias at the head of this type, or, when the head is not an alias,
+    /// resolves the aliases in the types this one is built from. The caller has checked this type
+    /// for a cycle and pushed it onto `type_name_path`.
     fn resolve_type_aliases_below(
         self: &Arc<TypeNode>,
         env: &TypeEnv,

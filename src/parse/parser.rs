@@ -96,8 +96,8 @@ struct ParseContext {
     /// Whether the type being parsed is the type annotation of an expression or a pattern, the one
     /// place a `_` type wildcard may stand.
     in_type_annotation: bool,
-    /// Where a `_` type wildcard is written outside a type annotation. The module reports each as
-    /// an error once it is parsed.
+    /// The places where a `_` type wildcard is written outside a type annotation, each reported as
+    /// an error once the module is parsed.
     misplaced_type_wildcards: Vec<Span>,
     /// The renaming the module of this source is compiled under, if any.
     renaming: Option<ModuleRenaming>,
