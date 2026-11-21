@@ -273,7 +273,9 @@ type_var = { !keywords ~ "?"? ~ tyvar_head ~ tyvar_char* }
 // becomes a fresh type variable. A bare `_` has kind `*`. Fix does not
 // infer kinds, so to give a wildcard a higher kind write `(_ : k)`, e.g.
 // `(_ : * -> *) I64`. The `!name_char` stops `_` from matching the start
-// of a longer identifier.
+// of a longer identifier. A wildcard may stand only in the type annotation
+// of an expression or a pattern; the parser reports one written anywhere
+// else (`ParseContext::make_type_wildcard`).
 type_wildcard = { "_" ~ !name_char }
 type_wildcard_kinded = { "(" ~ sep* ~ "_" ~ !name_char ~ sep* ~ ":" ~ sep* ~ kind ~ sep* ~ ")" }
 

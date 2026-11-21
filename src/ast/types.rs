@@ -1288,7 +1288,8 @@ impl TypeNode {
             ));
         }
         type_name_path.push((type_name, self.clone()));
-        let resolved = self.resolve_type_aliases_below(env, type_name_path, entry_type_src);
+        let resolved =
+            self.resolve_type_aliases_after_cycle_check(env, type_name_path, entry_type_src);
         type_name_path.pop();
         resolved
     }
@@ -1296,7 +1297,7 @@ impl TypeNode {
     /// Expands the type alias at the head of this type, or, when the head is not an alias,
     /// resolves the aliases in the types this one is built from. The caller has checked this type
     /// for a cycle and pushed it onto `type_name_path`.
-    fn resolve_type_aliases_below(
+    fn resolve_type_aliases_after_cycle_check(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
         type_name_path: &mut Vec<(String, Arc<TypeNode>)>,

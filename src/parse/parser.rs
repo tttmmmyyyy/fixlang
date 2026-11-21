@@ -179,7 +179,7 @@ impl ParseContext {
 
     /// The `_` type wildcard of kind `kind` written at `span`: a type variable under a fresh name.
     /// Unless the type being parsed is a type annotation, `span` is recorded as misplaced.
-    fn type_wildcard(&mut self, kind: &Arc<Kind>, span: Span) -> Arc<TypeNode> {
+    fn make_type_wildcard(&mut self, kind: &Arc<Kind>, span: Span) -> Arc<TypeNode> {
         if !self.in_type_annotation {
             self.misplaced_type_wildcards.push(span.clone());
         }
@@ -808,7 +808,7 @@ fn parse_module(
     for span in take(&mut ctx.misplaced_type_wildcards) {
         errors.append(Errors::from_msg_srcs(
             "A type wildcard `_` stands for a type to be inferred, and is written only in the type annotation of an expression or a pattern.\n\
-             HINT: To leave a type unnamed in a signature, a type definition or an `impl`, write a type variable such as `a`."
+             HINT: To leave a type unnamed in a signature or an `impl`, write a type variable such as `a`; in a type definition, also declare it as a parameter, as in `type S a = ...`."
                 .to_string(),
             &[&Some(span)],
         ));
@@ -3223,7 +3223,7 @@ fn parse_annotation_type(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNo
 fn parse_type_wildcard(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_wildcard);
     let span = Span::from_pair(&ctx.source, &pair);
-    ctx.type_wildcard(&kind_star(), span)
+    ctx.make_type_wildcard(&kind_star(), span)
 }
 
 // Parse a `(_ : k)` type wildcard as a fresh type variable of the given kind.
@@ -3231,7 +3231,7 @@ fn parse_type_wildcard_kinded(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<T
     assert_eq!(pair.as_rule(), Rule::type_wildcard_kinded);
     let span = Span::from_pair(&ctx.source, &pair);
     let kind = parse_kind(pair.into_inner().next().unwrap(), ctx);
-    ctx.type_wildcard(&kind, span)
+    ctx.make_type_wildcard(&kind, span)
 }
 
 fn parse_type_tycon(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {

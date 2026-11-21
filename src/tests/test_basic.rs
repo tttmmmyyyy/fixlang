@@ -11994,9 +11994,26 @@ pub fn test_type_wildcard_outside_an_annotation_is_error() {
         test_source_fail(
             &source,
             Configuration::develop_mode(),
-            &format!("{}\nHINT: To leave a type unnamed in a signature, a type definition or an `impl`, write a type variable such as `a`.\n\n{} in ", message, span),
+            &format!("{}\nHINT: To leave a type unnamed in a signature or an `impl`, write a type variable such as `a`; in a type definition, also declare it as a parameter, as in `type S a = ...`.\n\n{} in ", message, span),
         );
     }
+}
+
+/// A `_` type wildcard in an annotation inside an `impl` member that has no signature of its own
+/// is inferred like any other: only the named type variables there have to be ones the `impl`'s
+/// type names.
+#[test]
+pub fn test_type_wildcard_in_an_impl_member_without_a_signature() {
+    let source = r##"
+module Main;
+
+trait a : Tr { g : a -> I64; }
+impl Array a : Tr { g = |x| (x : Array _).@size; }
+
+main : IO ();
+main = assert_eq(|_|"", [1, 2].g, 2);
+"##;
+    test_source(&source, Configuration::develop_mode());
 }
 
 /// A `_` type wildcard in a signature that follows a type annotation holding a `_` is an error: an
