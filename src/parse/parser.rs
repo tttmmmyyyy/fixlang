@@ -681,7 +681,10 @@ fn report_if_missing_else(
 /// The byte offset in `source_code` at which the parse error `e` expected a `;`, when the token
 /// there ends the block: a `)`, a `}`, a `]` or a `,`. `None` says `e` is some other error.
 fn semicolon_expected_before_a_closing_token(e: &Error<Rule>, source_code: &str) -> Option<usize> {
-    let RepairHint { insert_at: at, kind } = repair_hint_from_pest_error(e);
+    let RepairHint {
+        insert_at: at,
+        kind,
+    } = repair_hint_from_pest_error(e);
     if kind != RepairHintKind::Semicolon {
         return None;
     }
