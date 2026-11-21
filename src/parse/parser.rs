@@ -176,6 +176,16 @@ impl ParseContext {
     fn fresh_type_wildcard_name(&mut self) -> String {
         next_prefixed_name(TYPE_WILDCARD_VAR_PREFIX, &mut self.type_wildcard_counter)
     }
+
+    /// The `_` type wildcard of kind `kind` written at `span`: a type variable under a fresh name.
+    /// Unless the type being parsed is a type annotation, `span` is recorded as misplaced.
+    fn type_wildcard(&mut self, kind: &Arc<Kind>, span: Span) -> Arc<TypeNode> {
+        if !self.in_type_annotation {
+            self.misplaced_type_wildcards.push(span.clone());
+        }
+        let tv = make_tyvar(&self.fresh_type_wildcard_name(), kind);
+        type_from_tyvar(tv).set_source(Some(span))
+    }
 }
 
 /// The `*`s met while an expression is parsed, which are turned into binds around it once it is
@@ -3209,30 +3219,19 @@ fn parse_annotation_type(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNo
     ty
 }
 
-/// Records `span` as a misplaced type wildcard unless the type being parsed is a type annotation.
-fn check_type_wildcard_place(span: &Span, ctx: &mut ParseContext) {
-    if !ctx.in_type_annotation {
-        ctx.misplaced_type_wildcards.push(span.clone());
-    }
-}
-
 // Parse a `_` type wildcard as a fresh type variable of kind `*`.
 fn parse_type_wildcard(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_wildcard);
     let span = Span::from_pair(&ctx.source, &pair);
-    check_type_wildcard_place(&span, ctx);
-    let tv = make_tyvar(&ctx.fresh_type_wildcard_name(), &kind_star());
-    type_from_tyvar(tv).set_source(Some(span))
+    ctx.type_wildcard(&kind_star(), span)
 }
 
 // Parse a `(_ : k)` type wildcard as a fresh type variable of the given kind.
 fn parse_type_wildcard_kinded(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_wildcard_kinded);
     let span = Span::from_pair(&ctx.source, &pair);
-    check_type_wildcard_place(&span, ctx);
     let kind = parse_kind(pair.into_inner().next().unwrap(), ctx);
-    let tv = make_tyvar(&ctx.fresh_type_wildcard_name(), &kind);
-    type_from_tyvar(tv).set_source(Some(span))
+    ctx.type_wildcard(&kind, span)
 }
 
 fn parse_type_tycon(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
