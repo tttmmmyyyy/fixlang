@@ -1256,35 +1256,51 @@ impl TypeNode {
         env: &TypeEnv,
     ) -> Result<Arc<TypeNode>, Errors> {
         let self_src = self.get_source().clone();
-        let ty = self.resolve_type_aliases_internal(env, vec![], &self_src)?;
+        let ty = self.resolve_type_aliases_internal(env, &mut vec![], &self_src)?;
         Ok(ty)
     }
 
     /// One step of the `resolve_type_aliases` walk.
     ///
     /// # Arguments
-    /// * `type_name_path` — the types the walk has expanded on the way to this one, each as the
-    ///   pair of its normalized string and the string of it as written. A type whose normalized
-    ///   string is met twice is an alias leading back to itself, and the report quotes it as
-    ///   written where the walk first met it.
+    /// * `type_name_path` — the types the walk has expanded on the way to this one, each with its
+    ///   normalized string. A type whose normalized string is met twice is an alias leading back
+    ///   to itself, and the report quotes it as written where the walk first met it. The step
+    ///   pushes this type for the steps below it and pops it before returning, so the path is
+    ///   left as it was given.
     /// * `entry_type_src` — where the type the walk started from was written, which a report about
     ///   such an alias points at.
     fn resolve_type_aliases_internal(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
-        mut type_name_path: Vec<(String, String)>,
+        type_name_path: &mut Vec<(String, Arc<TypeNode>)>,
         entry_type_src: &Option<Span>,
     ) -> Result<Arc<TypeNode>, Errors> {
         // Check circular aliasing.
         let type_name = self.to_string_normalize();
         if let Some((_, first_met)) = type_name_path.iter().find(|(name, _)| *name == type_name) {
             return Err(Errors::from_msg_srcs(
-                format!("Circular type aliasing is found in `{}`.", first_met),
+                format!(
+                    "Circular type aliasing is found in `{}`.",
+                    first_met.to_string()
+                ),
                 &[entry_type_src],
             ));
         }
-        type_name_path.push((type_name, self.to_string()));
+        type_name_path.push((type_name, self.clone()));
+        let resolved = self.resolve_type_aliases_below(env, type_name_path, entry_type_src);
+        type_name_path.pop();
+        resolved
+    }
 
+    /// The part of a `resolve_type_aliases_internal` step that follows its cycle check: expands
+    /// the alias heading this type, or else resolves the types this one is built from.
+    fn resolve_type_aliases_below(
+        self: &Arc<TypeNode>,
+        env: &TypeEnv,
+        type_name_path: &mut Vec<(String, Arc<TypeNode>)>,
+        entry_type_src: &Option<Span>,
+    ) -> Result<Arc<TypeNode>, Errors> {
         // First, treat the case where top-level type constructor is a type alias.
         // As an example, consider type alias `type Lazy a = () -> a`. Then `Lazy Bool` should be resolved to `() -> Bool`.
         let app_seq = self.flatten_type_application();
@@ -1332,7 +1348,7 @@ impl TypeNode {
             Type::TyApp(fun_ty, arg_ty) => Ok(self
                 .set_tyapp_fun(fun_ty.resolve_type_aliases_internal(
                     env,
-                    type_name_path.clone(),
+                    type_name_path,
                     entry_type_src,
                 )?)
                 .set_tyapp_arg(arg_ty.resolve_type_aliases_internal(
@@ -1342,7 +1358,7 @@ impl TypeNode {
                 )?)),
             Type::AssocTy(_, args) => {
                 let args = collect_results(args.iter().map(|arg| {
-                    arg.resolve_type_aliases_internal(env, type_name_path.clone(), entry_type_src)
+                    arg.resolve_type_aliases_internal(env, type_name_path, entry_type_src)
                 }))?;
                 Ok(self.set_assocty_args(args))
             }
