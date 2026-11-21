@@ -328,7 +328,7 @@ main : IO () = (
 }
 
 /// Whether the `if` is reported does not depend on the layout between its `;` and its else branch:
-/// Fix's grammar reads no layout.
+/// Fix's grammar ignores layout.
 #[test]
 pub fn test_whether_the_if_is_reported_does_not_depend_on_the_layout_after_its_semicolon() {
     let reported = |after_semicolon: &str| {
