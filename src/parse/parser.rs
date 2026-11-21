@@ -3685,9 +3685,6 @@ fn rule_to_string(r: &Rule) -> String {
 fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
     let mut msg: String = Default::default();
 
-    #[allow(unused)]
-    let mut suggestion: Option<String> = None;
-
     // Show error content.
     msg += "Expected ";
     match &e.variant {
@@ -3717,10 +3714,6 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
         }
         ErrorVariant::CustomError { message: _ } => unreachable!(),
     };
-    if suggestion.is_some() {
-        msg += "\n";
-        msg += &suggestion.unwrap();
-    }
 
     let src_string = src.string();
     if let Err(e) = src_string {
