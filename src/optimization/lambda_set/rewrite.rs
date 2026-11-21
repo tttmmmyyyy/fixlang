@@ -189,35 +189,6 @@ struct Walk<'n> {
     made_symbol: Option<FullName>,
 }
 
-impl<'n> Walk<'n> {
-    /// The record of `e`, the expression the walk meets next, moving the walk past it. Panics
-    /// unless inference recorded `e` itself there: the inference and the rewrite walk an expression
-    /// in the same order, and a walk out of step would read another node's type.
-    fn take_expr(&mut self, e: &Arc<ExprNode>) -> &'n NodeType {
-        let node = &self.nodes[self.cursor];
-        assert!(
-            node.node.is_expr(e),
-            "the rewrite meets an expression at node {} where inference recorded another node",
-            self.cursor
-        );
-        self.cursor += 1;
-        node
-    }
-
-    /// The record of `pat`, the pattern the walk meets next, moving the walk past it. Panics unless
-    /// inference recorded `pat` itself there, as `take_expr` does for an expression.
-    fn take_pattern(&mut self, pat: &Arc<PatternNode>) -> &'n NodeType {
-        let node = &self.nodes[self.cursor];
-        assert!(
-            node.node.is_pattern(pat),
-            "the rewrite meets a pattern at node {} where inference recorded another node",
-            self.cursor
-        );
-        self.cursor += 1;
-        node
-    }
-}
-
 impl<'a, 'e> Rewriter<'a, 'e> {
     /// A rewriter that has decided the copy of each component and made nothing yet. Copies of one
     /// component that represent the sets of `Component::body_params` alike share one copy of the
@@ -817,7 +788,8 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     /// the body of a symbol, which stays a lambda where it is one.
     fn walk_expr(&mut self, walk: &mut Walk, e: &Arc<ExprNode>, as_body: bool) -> Arc<ExprNode> {
         let index = walk.cursor;
-        let node = walk.take_expr(e);
+        walk.cursor += 1;
+        let node = &walk.nodes[index];
         let ty = if as_body && e.is_lam() && !node.ty.ty.is_func() {
             self.rewrite_function_type(walk.instance, &node.ty)
         } else {
@@ -982,7 +954,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
 
     /// The pattern `pat` rewritten by `walk`, whose next node is that of `pat`.
     fn walk_pattern(&mut self, walk: &mut Walk, pat: &Arc<PatternNode>) -> Arc<PatternNode> {
-        let ty = self.rewrite_type(walk.instance, &walk.take_pattern(pat).ty);
+        let index = walk.cursor;
+        walk.cursor += 1;
+        let ty = self.rewrite_type(walk.instance, &walk.nodes[index].ty);
         let pat = match &pat.pattern {
             Pattern::Var(_, anno) => match anno {
                 Some(_) => pat.set_var_tyanno(Some(ty.clone())),

@@ -116,34 +116,11 @@ pub struct Component {
 /// order `Expr` holds them. The pattern of a `Let`, and of each arm of a `Match`, comes after the
 /// expression it takes apart and before the expression it binds names in, its nodes in preorder.
 pub struct NodeType {
-    /// The node itself. A walk reading the nodes in order checks, at each node it reads, that this
-    /// is the node it has reached.
-    pub node: NodeRef,
     /// The annotated type of the node, each slot a root of the solver.
     pub ty: AType,
     /// The names the node refers to: for a variable its name, and for a builtin operation each
     /// operand, in the order `BuiltinOp::free_vars` lists them. Every other node refers to none.
     pub names: Vec<NameRef>,
-}
-
-/// A node of an expression or of a pattern, as `NodeType` records it.
-pub enum NodeRef {
-    /// A node of an expression.
-    Expr(Arc<ExprNode>),
-    /// A node of a pattern.
-    Pattern(Arc<PatternNode>),
-}
-
-impl NodeRef {
-    /// Whether this is the expression node `e` itself, the same allocation.
-    pub fn is_expr(&self, e: &Arc<ExprNode>) -> bool {
-        matches!(self, NodeRef::Expr(node) if Arc::ptr_eq(node, e))
-    }
-
-    /// Whether this is the pattern node `pat` itself, the same allocation.
-    pub fn is_pattern(&self, pat: &Arc<PatternNode>) -> bool {
-        matches!(self, NodeRef::Pattern(node) if Arc::ptr_eq(node, pat))
-    }
 }
 
 /// What a name a node refers to stands for.
@@ -677,7 +654,6 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         };
         self.record_vars(slots_to_record);
         self.nodes[index] = Some(NodeType {
-            node: NodeRef::Expr(e.clone()),
             ty: result.clone(),
             names,
         });
@@ -792,7 +768,6 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     /// each node of `pat`.
     fn bind_pattern_into(&mut self, pat: &Arc<PatternNode>, ty: &AType, names: &mut Vec<FullName>) {
         self.nodes.push(Some(NodeType {
-            node: NodeRef::Pattern(pat.clone()),
             ty: ty.clone(),
             names: vec![],
         }));
