@@ -1151,18 +1151,20 @@ impl TypeCheckContext {
     /// generalized variable of that name, which carries the kind its signature gives it.
     ///
     /// A named type variable has to be one the value being checked generalizes; any other name is
-    /// an error.
+    /// an error, and so is an annotation whose kinds do not fit. The kinds are checked while each
+    /// `_` is still a wildcard, so that a report quotes it as the `_` the program writes.
     pub fn validate_type_annotation(
         &mut self,
         ty: &Arc<TypeNode>,
     ) -> Result<Arc<TypeNode>, Errors> {
-        let mut sub = Substitution::default();
+        let mut fixed_sub = Substitution::default();
+        let mut wildcard_sub = Substitution::default();
         for tv in ty.free_vars_vec() {
-            let target = if is_type_wildcard_tyvar(&tv.name) {
+            let (sub, target) = if is_type_wildcard_tyvar(&tv.name) {
                 // A `_` type wildcard asks for this type to be inferred: replace it
                 // with a fresh inference variable, keeping the wildcard's kind, so
                 // that it unifies freely.
-                self.new_tyvar_by(&tv)
+                (&mut wildcard_sub, self.new_tyvar_by(&tv))
             } else if let Some(fixed_tv) = self
                 .fixed_tyvars
                 .iter()
@@ -1170,7 +1172,7 @@ impl TypeCheckContext {
             {
                 // A named type variable must be one generalized by the current
                 // scheme. Substitute the fixed variable to carry over its kind.
-                fixed_tv.clone()
+                (&mut fixed_sub, fixed_tv.clone())
             } else {
                 return Err(Errors::from_msg_srcs(
                     format!("Unknown type variable `{}`.", tv.name),
@@ -1181,7 +1183,9 @@ impl TypeCheckContext {
             assert!(merge_ok);
         }
 
-        Ok(sub.substitute_type(ty))
+        let with_fixed = fixed_sub.substitute_type(ty);
+        with_fixed.kind(&self.kind_env)?;
+        Ok(wildcard_sub.substitute_type(&with_fixed))
     }
 
     /// Perform typechecking: update the type substitution so that `ei` has
