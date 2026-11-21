@@ -659,7 +659,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
 /// Two classes reaching each other, `A` of the lambda `f@lam1` representing its interface as
 /// `[Closure, Single(B)]` and `B` of `g@lam0` representing it as `[Single(A)]`, are written
 /// `f@lam1(c,g@lam0(^0))` and `g@lam0(f@lam1(c,^0))`. A union of the classes of `f@lam0()` and
-/// `g@lam0()` is written `{f@lam0(),g@lam0()}`.
+/// `g@lam0()`, neither reaching the union, is written `{#h1,#h2}`, with their hashes `h1` and `h2`.
 fn name_classes_and_unions(
     analysis: &Analysis,
     classes: &mut [LamClass],
