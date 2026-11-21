@@ -291,7 +291,7 @@ mod tests {
     use crate::ast::types::{
         kind_star, tycon, type_tyapp, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode,
     };
-    use crate::fixstd::builtin::{bulitin_tycons, make_array_ty, make_i64_ty};
+    use crate::fixstd::builtin::{builtin_tycons, make_array_ty, make_i64_ty};
     use crate::misc::{Map, Set};
     use std::sync::Arc;
 
@@ -331,7 +331,7 @@ mod tests {
 
     /// The built-in type constructors and `Test::S` with its array at field `array_index`.
     fn type_env(array_index: usize) -> TypeEnv {
-        let mut tycons = bulitin_tycons();
+        let mut tycons = builtin_tycons();
         tycons.insert(s_tycon(), s_info(array_index));
         TypeEnv::new(tycons, Map::default())
     }
@@ -388,7 +388,7 @@ mod tests {
             ],
             ..s_info(0)
         };
-        let mut tycons = bulitin_tycons();
+        let mut tycons = builtin_tycons();
         tycons.insert(w_tycon.clone(), w_info);
         tycons.insert(s_tycon(), s_info);
         let mut env = TypeEnv::new(tycons, Map::default());

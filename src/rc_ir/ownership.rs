@@ -1036,7 +1036,7 @@ mod tests {
     };
     use crate::constants::{CLOSURE_CAPTURE_IDX, CLOSURE_FIELD_COUNT, CLOSURE_FUNPTR_IDX};
     use crate::fixstd::builtin::{
-        bulitin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_punched_array_ty,
+        builtin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_punched_array_ty,
         make_punched_array_tycon,
     };
     use crate::misc::{Map, Set};
@@ -1081,7 +1081,7 @@ mod tests {
     /// A type environment holding the built-in type constructors, `Std::PunchedArray` as `std.fix`
     /// declares it, and one declaration of each kind a unit walk distinguishes.
     fn type_env() -> TypeEnv {
-        let mut tycons = bulitin_tycons();
+        let mut tycons = builtin_tycons();
         tycons.insert(
             make_punched_array_tycon(),
             TyConInfo {
