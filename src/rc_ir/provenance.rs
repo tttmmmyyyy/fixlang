@@ -898,7 +898,7 @@ mod tests {
     };
     use crate::ast::name::FullName;
     use crate::ast::type_env::TypeEnv;
-    use crate::fixstd::builtin::bulitin_tycons;
+    use crate::fixstd::builtin::builtin_tycons;
     use crate::misc::{Map, Set};
     use crate::rc_ir::borrow::sink_retains;
     use crate::rc_ir::test_program::{func, global_name, prog};
@@ -1094,7 +1094,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "after `sink_retains` moved the retains")]
     fn analyze_program_refuses_a_program_whose_retains_sunk() {
-        let type_env = TypeEnv::new(bulitin_tycons(), Map::default());
+        let type_env = TypeEnv::new(builtin_tycons(), Map::default());
         let main = global_name("main");
         let unsunk = prog(vec![func(main.clone(), &[])], vec![], &[main]);
         analyze_program(&unsunk, &type_env);

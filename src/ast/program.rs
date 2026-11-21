@@ -36,7 +36,7 @@ use crate::error::{
 };
 use crate::ffi::{c_entry_point_signature, unpassable_variadic_type_msg, CSignature};
 use crate::fixstd::builtin::{
-    boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
+    boxed_trait_instance, builtin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
     struct_act_const, struct_act_identity, struct_act_tuple2, struct_get, struct_mod,
     struct_plug_in, struct_punch, struct_set, tuple_defn, union_as, union_is, union_mod_function,
     union_new,
@@ -901,7 +901,7 @@ impl Program {
     /// the environment.
     pub fn calculate_type_env(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        let mut tycons = bulitin_tycons();
+        let mut tycons = builtin_tycons();
         let mut aliases: Map<TyCon, TyAliasInfo> = Map::default();
         for type_decl in &mut self.type_defns {
             // Set kinds of type variables in the right hand side of type definition.
