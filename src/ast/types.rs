@@ -1263,25 +1263,27 @@ impl TypeNode {
     /// One step of the `resolve_type_aliases` walk.
     ///
     /// # Arguments
-    /// * `type_name_path` — the types the walk has expanded on the way to this one, written out
-    ///   with normalized variable names; a type met twice is an alias leading back to itself.
+    /// * `type_name_path` — the types the walk has expanded on the way to this one, each as the
+    ///   pair of its normalized string and the string of it as written. A type whose normalized
+    ///   string is met twice is an alias leading back to itself, and the report quotes it as
+    ///   written where the walk first met it.
     /// * `entry_type_src` — where the type the walk started from was written, which a report about
     ///   such an alias points at.
     fn resolve_type_aliases_internal(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
-        mut type_name_path: Vec<String>,
+        mut type_name_path: Vec<(String, String)>,
         entry_type_src: &Option<Span>,
     ) -> Result<Arc<TypeNode>, Errors> {
         // Check circular aliasing.
         let type_name = self.to_string_normalize();
-        if type_name_path.contains(&type_name) {
+        if let Some((_, first_met)) = type_name_path.iter().find(|(name, _)| *name == type_name) {
             return Err(Errors::from_msg_srcs(
-                format!("Circular type aliasing is found in `{}`.", self.to_string()),
+                format!("Circular type aliasing is found in `{}`.", first_met),
                 &[entry_type_src],
             ));
         }
-        type_name_path.push(type_name);
+        type_name_path.push((type_name, self.to_string()));
 
         // First, treat the case where top-level type constructor is a type alias.
         // As an example, consider type alias `type Lazy a = () -> a`. Then `Lazy Bool` should be resolved to `() -> Bool`.

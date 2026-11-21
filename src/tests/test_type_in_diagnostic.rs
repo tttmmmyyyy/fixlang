@@ -112,3 +112,25 @@ main = pure();
         ": Kind mismatch in `Main::MyTrait::MyAssoc s Std::String`. Expected `*->*`, found `*`.",
     );
 }
+
+/// A type alias that expands into itself with its arguments swapped, which meets the type written
+/// first under a renaming of its variables.
+#[test]
+pub fn test_a_circular_alias_with_swapped_arguments_is_quoted_as_written() {
+    let source = r##"
+module Main;
+
+type Hoge p q = Hoge q p;
+
+f : [x : ToString] Hoge x y -> I64;
+f = |v| 0;
+
+main : IO ();
+main = pure();
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": Circular type aliasing is found in `Main::Hoge x y`.",
+    );
+}
