@@ -3,7 +3,7 @@
 
 use crate::{
     configuration::Configuration,
-    tests::test_util::{test_source, test_source_fail},
+    tests::test_util::{run_source_assert_failed, test_source, test_source_fail},
 };
 
 /// The `if` of `let x = if c { a };` followed by the rest of the block is reported, at its `if`.
@@ -66,34 +66,6 @@ main : IO () = println $ f(3).to_string;
         &source,
         Configuration::develop_mode(),
         "This `if` has no `else` block.\n\n5:13-5:15",
-    );
-}
-
-/// Two `let`s each left without its `;` by an `if` with no `else` report both `if`s, in the order
-/// they are written.
-#[test]
-pub fn test_each_let_left_without_its_semicolon_reports_its_if() {
-    let source = r##"
-module Main;
-
-f : I64 -> I64 = |n| (
-    let x = if n > 0 { 1 };
-    if n > 9 { 0 };
-    let y = if n < 0 { 1 };
-    x + y
-);
-
-main : IO () = println $ f(3).to_string;
-    "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "This `if` has no `else` block.\n\n5:13-5:15",
-    );
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "This `if` has no `else` block.\n\n7:13-7:15",
     );
 }
 
@@ -306,4 +278,91 @@ main : IO () = (
 );
     "##;
     test_source(&source, Configuration::develop_mode());
+}
+
+/// An `if` whose `;` is followed on its line by nothing but spaces or a line comment is reported,
+/// in a source whose lines end with `\n` or with `\r\n`: its else branch starts on a later line.
+#[test]
+pub fn test_an_if_whose_semicolon_ends_its_line_is_reported() {
+    let message = "This `if` has no `else` block.\n\n5:13-5:15";
+    for after_semicolon in ["   \t", " // one"] {
+        let source = format!(
+            r##"
+module Main;
+
+f : I64 -> I64 = |n| (
+    let x = if n > 0 {{ 1 }};{after_semicolon}
+    x + 2
+);
+
+main : IO () = println $ f(3).to_string;
+    "##
+        );
+        test_source_fail(&source, Configuration::develop_mode(), message);
+    }
+    let crlf = "\r\nmodule Main;\r\n\r\nf : I64 -> I64 = |n| (\r\n    let x = if n > 0 { 1 };\r\n    x + 2\r\n);\r\n\r\nmain : IO () = println $ f(3).to_string;\r\n";
+    test_source_fail(&crlf, Configuration::develop_mode(), message);
+}
+
+/// The `if`s of two `let`s each left without its `;` are reported in the order they are written.
+#[test]
+pub fn test_the_ifs_of_two_lets_are_reported_in_the_order_they_are_written() {
+    let source = r##"
+module Main;
+
+f : I64 -> I64 = |n| (
+    let x = if n > 0 { 1 };
+    if n > 9 { 0 };
+    let y = if n < 0 { 1 };
+    x + y
+);
+
+main : IO () = println $ f(3).to_string;
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    let first = errmsg.find("5:13-5:15").unwrap();
+    let second = errmsg.find("7:13-7:15").unwrap();
+    assert!(first < second, "{}", errmsg);
+}
+
+/// When one `let` left without its `;` ends with an `if` with no `else` and another is one whose
+/// cause is not certain, the parse error is reported as it is, so the error of neither is hidden.
+#[test]
+pub fn test_a_let_whose_cause_is_not_certain_leaves_the_parse_error_for_all() {
+    let source = r##"
+module Main;
+
+f : I64 -> I64 = |n| (
+    let x = if n > 0 { 1 };
+    x + 2
+);
+
+g : I64 -> I64 = |n| (
+    let y = let z = n; if z > 0 { 1 };
+    y + 2
+);
+
+main : IO () = println $ (f(3) + g(3)).to_string;
+    "##;
+    test_source_fail(&source, Configuration::develop_mode(), "Expected `;`");
+}
+
+/// A `;` that an `eval` at the end of the block misses leaves the parse error, though the `let`
+/// before it ends with an `if` with no `else`: the `eval` misses its `;` either way.
+#[test]
+pub fn test_an_eval_missing_its_semicolon_before_the_closing_token_leaves_the_parse_error() {
+    let source = r##"
+module Main;
+
+f : I64 -> I64 = |n| (
+    let x = if n > 0 { 1 };
+    eval x
+);
+
+main : IO () = (
+    let m = f(3);
+    println $ m.to_string
+);
+    "##;
+    test_source_fail(&source, Configuration::develop_mode(), "Expected `;`");
 }
