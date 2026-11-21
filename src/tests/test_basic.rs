@@ -11999,6 +11999,28 @@ pub fn test_type_wildcard_outside_an_annotation_is_error() {
     }
 }
 
+/// A `_` type wildcard written in a signature after a type annotation that holds a `_` is still an
+/// error: the annotation's leave to write `_` ends with the annotation.
+#[test]
+pub fn test_type_wildcard_after_an_annotation_is_error() {
+    let source = r##"
+module Main;
+
+x : I64 = 1 : _;
+
+f : Array _ -> I64;
+f = |a| 0;
+
+main : IO ();
+main = println((f([1]) + x).to_string);
+"##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        ": A type wildcard `_` stands for a type to be inferred, and is written only in the type annotation of an expression or a pattern.",
+    );
+}
+
 /// A type annotation inside a definition that names the type variables of the definition's own
 /// signature, one of them of a higher kind: `let reader : ReaderT e m e = ...` in a value of type
 /// `[m : Monad] e -> m e` annotates with the `e` and the `m` the signature bound.
