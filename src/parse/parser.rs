@@ -36,7 +36,7 @@ use crate::constants::{
     INDEXABLE_TRAIT_NAME, IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
     PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
-use crate::error::Errors;
+use crate::error::{Error, Errors};
 use crate::ffi::unsupported_128_bit_integer_msg;
 use crate::fixstd::builtin::{
     expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, expr_unit,
@@ -51,7 +51,7 @@ use crate::fixstd::builtin::{
 use crate::misc::{make_map, save_temporary_source, to_absolute_path, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use either::Either;
-use pest::error::{Error, ErrorVariant, InputLocation};
+use pest::error::{Error as PestError, ErrorVariant, InputLocation};
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use std::ops::Range;
@@ -489,7 +489,7 @@ pub fn probe_parse_for_completion_repair(source: &str) -> Result<(), RepairHint>
 
 /// Build a `RepairHint` from a pest parse error: pull out the failure
 /// location and classify the expected-rule set.
-fn repair_hint_from_pest_error(e: &Error<Rule>) -> RepairHint {
+fn repair_hint_from_pest_error(e: &PestError<Rule>) -> RepairHint {
     let insert_at = match e.location {
         InputLocation::Pos(p) => p,
         InputLocation::Span((s, _)) => s,
@@ -575,18 +575,29 @@ pub fn parse_renamed_source_file(
     let file = match FixParser::parse(Rule::file, &source_code) {
         Ok(res) => res,
         Err(e) => {
-            return Err(report_if_missing_else(&e, &source_code, &source)
-                .unwrap_or_else(|| message_parse_error(e, &source)));
+            let if_starts = ifs_that_may_be_missing_else(&e, &source_code).unwrap_or_default();
+            let mut err = message_parse_error(e, &source, &source_code);
+            for start in if_starts {
+                err.add_src(
+                    "This `if` may be missing its `else`.".to_string(),
+                    Span {
+                        input: source.clone(),
+                        start,
+                        end: start + "if".len(),
+                    },
+                );
+            }
+            return Err(Errors::from_err(err));
         }
     };
     reject_underscore_capital_value_names(file.clone(), &source)?;
     parse_file(file, source_cloned, renaming, config)
 }
 
-/// Reports the `if` with no `else` block that caused the parse error `e` of `source_code`, the text
-/// of `source`. `None` says `e` is to be reported as it is.
+/// The byte offsets in `source_code` of the `if`s that may be missing their `else` and so have caused
+/// the parse error `e`, in ascending order. `None` says no such `if` is certain to be one of them.
 ///
-/// The `if` this reports is in the bound expression of a `let`, in the form `if c { a }; b`:
+/// Such an `if` is in the bound expression of a `let`, in the form `if c { a }; b`:
 ///
 /// ```text
 /// let x = if n > 0 { 1 };
@@ -598,21 +609,20 @@ pub fn parse_renamed_source_file(
 /// bound expression then runs up to the `)` that closes the block, and `e` says that the `;` of the
 /// `let` is missing there.
 ///
+/// The same parse error arises when the `if` is written in that form on purpose and the `;` after `b`
+/// is missing, which only the layout tells apart, so the `if` is a guess to report beside `e`.
+///
 /// To find that `if`, this puts a `;` where `e` expected one and parses `source_code` again. It does
 /// this again at each such error that follows, since each `let` left without its `;` fails once.
 /// Each `let` that a `;` put in ends has a hole for its body. Its `if` is the first expression on the
 /// right end of its bound expression that reads a `;`. An `if` whose else branch follows `else`
 /// reads none.
 ///
-/// `e` is reported as it is in these cases:
+/// No `if` is found in these cases:
 /// - That first expression is a `let` or an `eval`. Either of the two `;` could be the one meant for
 ///   the outer `let`.
 /// - A `;` put in finds no `if`.
-fn report_if_missing_else(
-    e: &Error<Rule>,
-    source_code: &str,
-    source: &SourceFile,
-) -> Option<Errors> {
+fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Option<Vec<usize>> {
     // The text put in. The spaces keep its `;` from joining a `;` beside it into a `;;`.
     const INSERTED: &str = " ; ";
     // The `if`s are reported only when every `;` put in ends a `let`, so there are no more `;`s to
@@ -662,23 +672,15 @@ fn report_if_missing_else(
         );
     }
     if_starts.sort();
-    let mut errors = Errors::empty();
-    for start in if_starts {
-        errors.append(Errors::from_msg_srcs(
-            "This `if` has no `else` block.".to_string(),
-            &[&Some(Span {
-                input: source.clone(),
-                start,
-                end: start + "if".len(),
-            })],
-        ));
-    }
-    Some(errors)
+    Some(if_starts)
 }
 
 /// The byte offset in `source_code` at which the parse error `e` expected a `;`, when the token
 /// there ends the block: a `)`, a `}`, a `]` or a `,`. `None` says `e` is some other error.
-fn semicolon_expected_before_a_closing_token(e: &Error<Rule>, source_code: &str) -> Option<usize> {
+fn semicolon_expected_before_a_closing_token(
+    e: &PestError<Rule>,
+    source_code: &str,
+) -> Option<usize> {
     let RepairHint {
         insert_at: at,
         kind,
@@ -3682,7 +3684,9 @@ fn rule_to_string(r: &Rule) -> String {
     }
 }
 
-fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
+/// The error reporting the parse error `e` of `source_code`, the text of `src`: the rules pest expected,
+/// at the position it failed at.
+fn message_parse_error(e: PestError<Rule>, src: &SourceFile, source_code: &str) -> Error {
     let mut msg: String = Default::default();
 
     // Show error content.
@@ -3715,18 +3719,12 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
         ErrorVariant::CustomError { message: _ } => unreachable!(),
     };
 
-    let src_string = src.string();
-    if let Err(e) = src_string {
-        return e;
-    }
-    let src_string = src_string.ok().unwrap();
-
     // Create span (source location).
     let span = match e.location {
         InputLocation::Pos(s) => Span {
             input: src.clone(),
             start: s,
-            end: min(s + 1, src_string.len()),
+            end: min(s + 1, source_code.len()),
         },
         InputLocation::Span((s, e)) => Span {
             input: src.clone(),
@@ -3735,5 +3733,5 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
         },
     };
 
-    Errors::from_msg_srcs(msg, &[&Some(span)])
+    Error::from_msg_srcs(msg, &[&Some(span)])
 }

@@ -1,14 +1,46 @@
-//! The error for an `if` with no `else` block in the bound expression of a `let`, whose `;` makes the
-//! rest of the block the else branch of the `if` and leaves the `let` without its `;`.
+//! The `if` pointed at beside the parse error of a `let` left without its `;`, when the `if` is in
+//! the bound expression of the `let` with no `else` block: its `;` makes the rest of the block its
+//! else branch.
 
 use crate::{
     configuration::Configuration,
-    tests::test_util::{run_source_assert_failed, test_source, test_source_fail},
+    tests::test_util::{run_source_assert_failed, test_source},
 };
 
-/// The `if` of `let x = if c { a };` followed by the rest of the block is reported, at its `if`.
+/// The description of the location of an `if` that may be missing its `else`.
+const MAY_BE_MISSING_ELSE: &str = "This `if` may be missing its `else`.";
+
+/// Compiles `source`, which fails to parse, and asserts that the parse error is reported with the
+/// `if`s at `if_spans` pointed at beside it, in that order and no other.
+fn assert_ifs_are_pointed_at(source: &str, if_spans: &[&str]) {
+    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+    assert!(errmsg.contains("Expected `;`"), "{}", errmsg);
+    let pointed_at: Vec<usize> = if_spans
+        .iter()
+        .map(|span| {
+            errmsg
+                .find(&format!("{}\n\n{}", MAY_BE_MISSING_ELSE, span))
+                .unwrap_or_else(|| panic!("{} is not pointed at:\n{}", span, errmsg))
+        })
+        .collect();
+    assert!(pointed_at.is_sorted(), "{}", errmsg);
+    assert_eq!(
+        errmsg.matches(MAY_BE_MISSING_ELSE).count(),
+        if_spans.len(),
+        "{}",
+        errmsg
+    );
+}
+
+/// Compiles `source`, which fails to parse, and asserts that the parse error is reported with no
+/// `if` pointed at beside it.
+fn assert_no_if_is_pointed_at(source: &str) {
+    assert_ifs_are_pointed_at(source, &[]);
+}
+
+/// The `if` of `let x = if c { a };` followed by the rest of the block is pointed at beside the parse error.
 #[test]
-pub fn test_an_if_with_no_else_in_a_let_is_reported() {
+pub fn test_an_if_with_no_else_in_a_let_is_pointed_at() {
     let source = r##"
 module Main;
 
@@ -19,17 +51,13 @@ f : I64 -> I64 = |n| (
 
 main : IO () = println $ f(3).to_string;
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "This `if` has no `else` block.\n\n5:13-5:15",
-    );
+    assert_ifs_are_pointed_at(&source, &["5:13-5:15"]);
 }
 
-/// In an `if` ... `else if` chain with no last `else`, the last `if` is reported: an `if` whose else
+/// In an `if` ... `else if` chain with no last `else`, the last `if` is pointed at: an `if` whose else
 /// branch follows `else` reads no `;`.
 #[test]
-pub fn test_the_last_if_of_an_else_if_chain_is_reported() {
+pub fn test_the_last_if_of_an_else_if_chain_is_pointed_at() {
     let source = r##"
 module Main;
 
@@ -40,17 +68,13 @@ f : I64 -> I64 = |n| (
 
 main : IO () = println $ f(3).to_string;
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "This `if` has no `else` block.\n\n5:33-5:35",
-    );
+    assert_ifs_are_pointed_at(&source, &["5:33-5:35"]);
 }
 
 /// Of the `if`s in the form `if c { a }; b` on the right end of the bound expression, the first is
-/// reported: the `if`s in the rest of the block it took are written as they are meant.
+/// pointed at: the `if`s in the rest of the block it took are written as they are meant.
 #[test]
-pub fn test_the_first_if_with_no_else_is_reported() {
+pub fn test_the_first_if_with_no_else_is_pointed_at() {
     let source = r##"
 module Main;
 
@@ -62,17 +86,13 @@ f : I64 -> I64 = |n| (
 
 main : IO () = println $ f(3).to_string;
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "This `if` has no `else` block.\n\n5:13-5:15",
-    );
+    assert_ifs_are_pointed_at(&source, &["5:13-5:15"]);
 }
 
-/// The `if` of a second `let`, found after a `;` was put in for the `let` before it, is reported at
-/// its position in the source as written.
+/// The `if` of a second `let`, found after a `;` was put in for the `let` before it, is pointed at
+/// at its position in the source as written.
 #[test]
-pub fn test_an_if_after_a_block_already_given_a_semicolon_is_reported_where_it_is_written() {
+pub fn test_an_if_after_a_block_already_given_a_semicolon_is_pointed_at_where_it_is_written() {
     let source = r##"
 module Main;
 
@@ -88,22 +108,13 @@ g : I64 -> I64 = |n| (
 
 main : IO () = println $ (f(3) + g(3)).to_string;
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "This `if` has no `else` block.\n\n5:13-5:15",
-    );
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "This `if` has no `else` block.\n\n10:13-10:15",
-    );
+    assert_ifs_are_pointed_at(&source, &["5:13-5:15", "10:13-10:15"]);
 }
 
 /// A `let` ended by `;` right before the closing token, whose bound expression is an `if` with no
-/// `else`, reports that `if`: the `;` put in next to the written one stays a separate `;`.
+/// `else`, has that `if` pointed at: the `;` put in next to the written one stays a separate `;`.
 #[test]
-pub fn test_an_if_with_no_else_right_before_the_closing_token_is_reported() {
+pub fn test_an_if_with_no_else_right_before_the_closing_token_is_pointed_at() {
     let source = r##"
 module Main;
 
@@ -113,16 +124,12 @@ f : I64 -> I64 = |n| (
 
 main : IO () = println $ f(3).to_string;
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "This `if` has no `else` block.\n\n5:13-5:15",
-    );
+    assert_ifs_are_pointed_at(&source, &["5:13-5:15"]);
 }
 
-/// An `if` with no `else` in a lambda that is the bound expression is reported.
+/// An `if` with no `else` in a lambda that is the bound expression is pointed at.
 #[test]
-pub fn test_an_if_with_no_else_in_a_lambda_bound_by_a_let_is_reported() {
+pub fn test_an_if_with_no_else_in_a_lambda_bound_by_a_let_is_pointed_at() {
     let source = r##"
 module Main;
 
@@ -133,18 +140,13 @@ f : I64 -> I64 = |n| (
 
 main : IO () = println $ f(3).to_string;
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "This `if` has no `else` block.\n\n5:17-5:19",
-    );
+    assert_ifs_are_pointed_at(&source, &["5:17-5:19"]);
 }
 
-/// The `if` is reported wherever the rest of the block ends: at a `}`, at a `,` and at a `]`, as well
+/// The `if` is pointed at wherever the rest of the block ends: at a `}`, at a `,` and at a `]`, as well
 /// as at a `)`.
 #[test]
-pub fn test_an_if_with_no_else_is_reported_before_each_closing_token() {
-    let message = "This `if` has no `else` block.\n\n5:13-5:15";
+pub fn test_an_if_with_no_else_is_pointed_at_before_each_closing_token() {
     let before_brace = r##"
 module Main;
 
@@ -155,7 +157,7 @@ f : I64 -> I64 = |n| if n > 0 {
 
 main : IO () = println $ f(3).to_string;
     "##;
-    test_source_fail(&before_brace, Configuration::develop_mode(), message);
+    assert_ifs_are_pointed_at(&before_brace, &["5:13-5:15"]);
     let before_comma = r##"
 module Main;
 
@@ -166,7 +168,7 @@ f : I64 -> (I64, I64) = |n| (
 
 main : IO () = println $ f(3).@0.to_string;
     "##;
-    test_source_fail(&before_comma, Configuration::develop_mode(), message);
+    assert_ifs_are_pointed_at(&before_comma, &["5:13-5:15"]);
     let before_bracket = r##"
 module Main;
 
@@ -177,15 +179,14 @@ f : I64 -> Array I64 = |n| [
 
 main : IO () = println $ f(3).@(0).to_string;
     "##;
-    test_source_fail(&before_bracket, Configuration::develop_mode(), message);
+    assert_ifs_are_pointed_at(&before_bracket, &["5:13-5:15"]);
 }
 
 /// When the first expression on the right end of the bound expression that reads a `;` is an `eval`
-/// or a `let`, the `;` meant for the outer `let` may be the one it reads, so the parse error is
-/// reported as it is.
+/// or a `let`, the `;` meant for the outer `let` may be the one it reads, so no `if` is pointed at
+/// beside the parse error.
 #[test]
-pub fn test_a_let_or_an_eval_in_the_bound_expression_leaves_the_parse_error() {
-    let message = "Expected `;`";
+pub fn test_a_let_or_an_eval_in_the_bound_expression_points_at_no_if() {
     let eval_in_else = r##"
 module Main;
 
@@ -197,7 +198,7 @@ f : I64 -> I64 = |n| (
 
 main : IO () = println $ f(3).to_string;
     "##;
-    test_source_fail(&eval_in_else, Configuration::develop_mode(), message);
+    assert_no_if_is_pointed_at(&eval_in_else);
     let let_in_bound = r##"
 module Main;
 
@@ -208,13 +209,13 @@ f : I64 -> I64 = |n| (
 
 main : IO () = println $ f(3).to_string;
     "##;
-    test_source_fail(&let_in_bound, Configuration::develop_mode(), message);
+    assert_no_if_is_pointed_at(&let_in_bound);
 }
 
-/// An `if` in the form `if c { a }; { b }` closes its else branch with the brace, so the parse error
-/// it leaves is reported as it is.
+/// An `if` in the form `if c { a }; { b }` closes its else branch with the brace, so no `if` is pointed at
+/// beside the parse error it leaves.
 #[test]
-pub fn test_an_if_whose_else_branch_is_in_braces_leaves_the_parse_error() {
+pub fn test_an_if_whose_else_branch_is_in_braces_points_at_no_if() {
     let source = r##"
 module Main;
 
@@ -224,13 +225,13 @@ f : I64 -> I64 = |n| (
 
 main : IO () = println $ f(3).to_string;
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "Expected `;`");
+    assert_no_if_is_pointed_at(&source);
 }
 
-/// A `;` expected anywhere but before the token closing the block is reported as the parse error
-/// it is, though the bound expression of the `let` before it ends with an `if` with no `else`.
+/// A `;` expected anywhere but before the token closing the block has no `if` pointed at
+/// beside it, though the bound expression of the `let` before it ends with an `if` with no `else`.
 #[test]
-pub fn test_a_semicolon_expected_inside_the_block_leaves_the_parse_error() {
+pub fn test_a_semicolon_expected_inside_the_block_points_at_no_if() {
     let source = r##"
 module Main;
 
@@ -240,7 +241,7 @@ main : IO () = (
     pure()
 );
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "Expected `;`");
+    assert_no_if_is_pointed_at(&source);
 }
 
 /// A `let` whose bound expression is an `if` in the form `if c { a }; b`, ended by its own `;`, binds
@@ -264,9 +265,9 @@ main : IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
-/// The `if`s of two `let`s each left without its `;` are reported in the order they are written.
+/// The `if`s of two `let`s each left without its `;` are pointed at in the order they are written.
 #[test]
-pub fn test_the_ifs_of_two_lets_are_reported_in_the_order_they_are_written() {
+pub fn test_the_ifs_of_two_lets_are_pointed_at_in_the_order_they_are_written() {
     let source = r##"
 module Main;
 
@@ -279,16 +280,13 @@ f : I64 -> I64 = |n| (
 
 main : IO () = println $ f(3).to_string;
     "##;
-    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
-    let first = errmsg.find("5:13-5:15").unwrap();
-    let second = errmsg.find("7:13-7:15").unwrap();
-    assert!(first < second, "{}", errmsg);
+    assert_ifs_are_pointed_at(&source, &["5:13-5:15", "7:13-7:15"]);
 }
 
 /// When one `let` left without its `;` ends with an `if` with no `else` and the cause for another
-/// `let` is not certain, the parse error is reported as it is for both.
+/// `let` is not certain, no `if` is pointed at for either.
 #[test]
-pub fn test_a_let_whose_cause_is_not_certain_leaves_the_parse_error_for_all() {
+pub fn test_a_let_whose_cause_is_not_certain_points_at_no_if_for_any_let() {
     let source = r##"
 module Main;
 
@@ -304,13 +302,13 @@ g : I64 -> I64 = |n| (
 
 main : IO () = println $ (f(3) + g(3)).to_string;
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "Expected `;`");
+    assert_no_if_is_pointed_at(&source);
 }
 
-/// A `;` that an `eval` at the end of the block misses leaves the parse error, though the `let`
+/// A `;` that an `eval` at the end of the block misses has no `if` pointed at, though the `let`
 /// before it ends with an `if` with no `else`: the `eval` misses its `;` either way.
 #[test]
-pub fn test_an_eval_missing_its_semicolon_before_the_closing_token_leaves_the_parse_error() {
+pub fn test_an_eval_missing_its_semicolon_before_the_closing_token_points_at_no_if() {
     let source = r##"
 module Main;
 
@@ -324,14 +322,14 @@ main : IO () = (
     println $ m.to_string
 );
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "Expected `;`");
+    assert_no_if_is_pointed_at(&source);
 }
 
-/// Whether the `if` is reported does not depend on the layout between its `;` and its else branch:
+/// Whether the `if` is pointed at does not depend on the layout between its `;` and its else branch:
 /// Fix's grammar ignores layout.
 #[test]
-pub fn test_whether_the_if_is_reported_does_not_depend_on_the_layout_after_its_semicolon() {
-    let reported = |after_semicolon: &str| {
+pub fn test_whether_the_if_is_pointed_at_does_not_depend_on_the_layout_after_its_semicolon() {
+    let pointed_at = |after_semicolon: &str| {
         let source = format!(
             r##"
 module Main;
@@ -344,13 +342,13 @@ main : IO () = println $ f(3).to_string;
     "##
         );
         run_source_assert_failed(&source, Configuration::develop_mode())
-            .contains("This `if` has no `else` block.")
+            .contains(MAY_BE_MISSING_ELSE)
     };
-    let reported_on_the_next_line = reported("\n    ");
+    let pointed_at_on_the_next_line = pointed_at("\n    ");
     for after_semicolon in [" ", " /* one */ ", " // one\n    ", "\r\n    "] {
         assert_eq!(
-            reported(after_semicolon),
-            reported_on_the_next_line,
+            pointed_at(after_semicolon),
+            pointed_at_on_the_next_line,
             "{:?}",
             after_semicolon
         );

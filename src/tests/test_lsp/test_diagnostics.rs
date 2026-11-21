@@ -719,4 +719,35 @@ mod tests {
             diagnostics
         );
     }
+
+    /// A `let` left without its `;` by an `if` with no `else` in its bound expression is reported in
+    /// the editor at the bracket closing the block, with the `if` named as a related location.
+    #[test]
+    fn test_an_if_that_may_be_missing_its_else_is_a_related_location_of_the_parse_error() {
+        let (_temp_dir, project_dir) = setup_test_env("missing_else");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+
+        let diag = sole_diagnostic_containing(&diagnostics, "Expected `;`");
+
+        // `main.fix` closes the block on the 6th line and writes the `if` on the 4th, at the 13th
+        // column, which the protocol counts from zero.
+        assert_eq!(diag["range"]["start"]["line"], 5, "at the closing bracket");
+        assert_eq!(diag["severity"], 1, "as an error");
+        let related = &diag["relatedInformation"][0];
+        assert_eq!(
+            related["message"], "This `if` may be missing its `else`.",
+            "the report is {:?}",
+            diag
+        );
+        assert_eq!(related["location"]["range"]["start"]["line"], 3);
+        assert_eq!(related["location"]["range"]["start"]["character"], 12);
+        assert!(
+            related["location"]["uri"]
+                .as_str()
+                .expect("the related location carries a URI")
+                .ends_with("/main.fix"),
+            "the related location is in `main.fix`, but the report is {:?}",
+            diag
+        );
+    }
 }
