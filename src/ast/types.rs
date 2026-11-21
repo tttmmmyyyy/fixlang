@@ -1282,7 +1282,7 @@ impl TypeNode {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Circular type aliasing is found in `{}`.",
-                    first_met.to_string_as_written()
+                    first_met.to_string()
                 ),
                 &[entry_type_src],
             ));
@@ -1313,7 +1313,7 @@ impl TypeNode {
                         format!(
                             "Cannot resolve type alias `{}` in `{}` because it is not fully applied.",
                             tc.to_string(),
-                            self.to_string_as_written()
+                            self.to_string()
                         ),
                         &[toplevel_ty.get_source()],
                     ));
@@ -1599,10 +1599,10 @@ impl TypeNode {
             Errors::from_msg_srcs(
                 format!(
                     "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
-                    application.to_string_as_written(),
-                    fun.to_string_as_written(),
+                    application.to_string(),
+                    fun.to_string(),
                     fun_kind.to_string(),
-                    arg.to_string_as_written(),
+                    arg.to_string(),
                     arg_kind.to_string()
                 ),
                 &[application.get_source()],
@@ -1635,7 +1635,7 @@ impl TypeNode {
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "Kind mismatch in `{}`. Expected `{}`, found `{}`.",
-                                self.to_string_as_written(),
+                                self.to_string(),
                                 expected.to_string(),
                                 found.to_string()
                             ),
@@ -1918,23 +1918,8 @@ impl TypeNode {
         s.substitute_type(self).to_string()
     }
 
-    /// This type written as the program writes it, for a diagnostic to quote: in source syntax,
-    /// under the names its type variables carry, and with each `_` type wildcard written `_`.
-    ///
-    /// The string tells two wildcards apart from neither each other nor `_`, so it is for display
-    /// alone; a key that has to tell types apart is built by `to_string`.
-    pub fn to_string_as_written(self: &Arc<TypeNode>) -> String {
-        let mut s = Substitution::default();
-        for tv in self.free_vars_vec() {
-            if is_type_wildcard_tyvar(&tv.name) {
-                let merge_ok = s.merge(&Substitution::single(&tv.name, type_tyvar("_", &tv.kind)));
-                assert!(merge_ok, "`{}` is replaced twice.", tv.name);
-            }
-        }
-        s.substitute_type(self).to_string()
-    }
-
-    /// This type written in source syntax, under the names its own type variables carry.
+    /// This type written in source syntax, under the names its own type variables carry, with a
+    /// `_` type wildcard written `_`.
     ///
     /// # Examples
     /// A saturated tuple is written `(a, b)`, a saturated arrow `a -> b`, and an argument that is
@@ -1959,6 +1944,7 @@ impl TypeNode {
         }
 
         match &self.ty {
+            Type::TyVar(v) if is_type_wildcard_tyvar(&v.name) => "_".to_string(),
             Type::TyVar(v) => v.name.clone(),
             Type::TyApp(fun, arg) => {
                 let tycon = self.toplevel_tycon();

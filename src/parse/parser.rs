@@ -93,6 +93,12 @@ struct ParseContext {
     pattern_wildcard_counter: u32,
     // Counter for naming `_` type wildcards; see `fresh_type_wildcard_name`.
     type_wildcard_counter: u32,
+    /// Whether the type being parsed is the type annotation of an expression or a pattern, the one
+    /// place a `_` type wildcard may stand.
+    in_type_annotation: bool,
+    /// Where a `_` type wildcard is written outside a type annotation. The module reports each as
+    /// an error once it is parsed.
+    misplaced_type_wildcards: Vec<Span>,
     /// The renaming the module of this source is compiled under, if any.
     renaming: Option<ModuleRenaming>,
 }
@@ -138,6 +144,8 @@ impl ParseContext {
             abs_path_uses: vec![],
             pattern_wildcard_counter: 0,
             type_wildcard_counter: 0,
+            in_type_annotation: false,
+            misplaced_type_wildcards: vec![],
             renaming,
         }
     }
@@ -786,6 +794,15 @@ fn parse_module(
     fix_mod.deprecation_statements = replace(&mut deprecation_statements, vec![]);
 
     fix_mod.inject_abs_path_implicit_imports(&ctx.module_name, take(&mut ctx.abs_path_uses));
+
+    for span in take(&mut ctx.misplaced_type_wildcards) {
+        errors.append(Errors::from_msg_srcs(
+            "A type wildcard `_` stands for a type to be inferred, and is written only in the type annotation of an expression or a pattern.\n\
+             HINT: To leave a type unnamed in a signature, a type definition or an `impl`, write a type variable such as `a`."
+                .to_string(),
+            &[&Some(span)],
+        ));
+    }
 
     errors.to_result().map(|_| fix_mod)
 }
@@ -1772,7 +1789,7 @@ fn parse_expr_type_annotation(
     match pairs.next() {
         None => {}
         Some(ty) => {
-            expr = expr_tyanno(expr, parse_type(ty, ctx), Some(span));
+            expr = expr_tyanno(expr, parse_annotation_type(ty, ctx), Some(span));
         }
     }
     Ok(expr)
@@ -3184,10 +3201,26 @@ fn parse_type_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     type_from_tyvar(tv).set_source(Some(span))
 }
 
+/// Parses the type annotation of an expression or a pattern, where a `_` type wildcard may stand.
+fn parse_annotation_type(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
+    let outer = replace(&mut ctx.in_type_annotation, true);
+    let ty = parse_type(pair, ctx);
+    ctx.in_type_annotation = outer;
+    ty
+}
+
+/// Records `span` as a misplaced type wildcard unless the type being parsed is a type annotation.
+fn check_type_wildcard_place(span: &Span, ctx: &mut ParseContext) {
+    if !ctx.in_type_annotation {
+        ctx.misplaced_type_wildcards.push(span.clone());
+    }
+}
+
 // Parse a `_` type wildcard as a fresh type variable of kind `*`.
 fn parse_type_wildcard(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_wildcard);
     let span = Span::from_pair(&ctx.source, &pair);
+    check_type_wildcard_place(&span, ctx);
     let tv = make_tyvar(&ctx.fresh_type_wildcard_name(), &kind_star());
     type_from_tyvar(tv).set_source(Some(span))
 }
@@ -3196,6 +3229,7 @@ fn parse_type_wildcard(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode
 fn parse_type_wildcard_kinded(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_wildcard_kinded);
     let span = Span::from_pair(&ctx.source, &pair);
+    check_type_wildcard_place(&span, ctx);
     let kind = parse_kind(pair.into_inner().next().unwrap(), ctx);
     let tv = make_tyvar(&ctx.fresh_type_wildcard_name(), &kind);
     type_from_tyvar(tv).set_source(Some(span))
@@ -3277,7 +3311,7 @@ fn parse_pattern_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNod
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let var_name = pairs.next().unwrap().as_str();
-    let ty = pairs.next().map(|ty| parse_type(ty, ctx));
+    let ty = pairs.next().map(|ty| parse_annotation_type(ty, ctx));
     make_pattern_var(var_name, ty, span, ctx)
 }
 

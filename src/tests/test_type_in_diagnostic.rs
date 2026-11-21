@@ -135,24 +135,9 @@ main = pure();
     );
 }
 
-/// A `_` type wildcard is quoted as the `_` the program writes, in a signature and in a type
-/// annotation of an expression alike.
+/// A `_` type wildcard in an expression's type annotation is quoted as the `_` the program writes.
 #[test]
 pub fn test_a_type_wildcard_is_quoted_as_an_underscore() {
-    let source = r##"
-module Main;
-
-f : Array _ _ -> I64;
-f = |x| 0;
-
-main : IO ();
-main = pure();
-"##;
-    test_source_fail(
-        source,
-        Configuration::develop_mode(),
-        ": Kind mismatch in `Std::Array _ _`. Type `Std::Array _` of kind `*` cannot be applied to type `_` of kind `*`.",
-    );
     let source = r##"
 module Main;
 
@@ -167,19 +152,25 @@ main = (
         Configuration::develop_mode(),
         ": Kind mismatch in `Std::Array _ _`. Type `Std::Array _` of kind `*` cannot be applied to type `_` of kind `*`.",
     );
+}
+
+/// A pattern annotated with a `_` type wildcard is quoted with the `_` the program writes.
+#[test]
+pub fn test_a_pattern_with_a_type_wildcard_is_quoted_as_written() {
     let source = r##"
 module Main;
 
-impl Array _ : ToString {
-    to_string = |_| "array!";
-}
-
 main : IO ();
-main = pure();
+main = (
+    let v = match 1 {
+        some(_ : _) => 0,
+    };
+    println(v.to_string)
+);
 "##;
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        ": Implementing trait `Std::ToString` for type `Std::Array _` in module `Main` is illegal;",
+        ": The matched value has non-union type `Std::I64`, but it is matched on a variant pattern `some(_: _)`.",
     );
 }
