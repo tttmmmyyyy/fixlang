@@ -627,12 +627,16 @@ fn report_if_missing_else(
         if insertions.len() == max_insertions {
             return None;
         }
+        // The text before `at` is as it was in the parse that failed there, so the parse that fails
+        // next reaches past the `;` put in last.
+        assert!(
+            insertions.last().map_or(true, |&last| last < at),
+            "a `;` is expected at {} before the `;` put in at {:?}",
+            at,
+            insertions.last()
+        );
         patched.insert_str(at, INSERTED);
-        let first_shifted = insertions.partition_point(|&i| i < at);
-        for i in &mut insertions[first_shifted..] {
-            *i += INSERTED.len();
-        }
-        insertions.insert(first_shifted, at + INSERTED.find(';').unwrap());
+        insertions.push(at + INSERTED.find(';').unwrap());
         match FixParser::parse(Rule::file, &patched) {
             Ok(file) => break file,
             Err(e) => error = e,
