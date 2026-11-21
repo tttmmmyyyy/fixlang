@@ -607,7 +607,6 @@ pub fn parse_renamed_source_file(
 /// `e` is reported as it is in these cases:
 /// - That first expression is a `let` or an `eval`. Either of the two `;` could be the one meant for
 ///   the outer `let`.
-/// - The `;` of the `if` has its else branch after it on the same line.
 /// - A `;` put in finds no `if`.
 fn report_if_missing_else(
     e: &Error<Rule>,
@@ -657,12 +656,6 @@ fn report_if_missing_else(
         if expr_if.as_rule() != Rule::expr_if {
             return None;
         }
-        // An `if` whose `;` is followed by its else branch on the same line, as in
-        // `let x = if c { 0 }; n * 2`, is written in the form `if c { a }; b` on purpose, and it is the
-        // `;` of the `let` that is missing.
-        if !ends_its_line(semicolon_before_the_else_branch(&expr_if).unwrap()) {
-            return None;
-        }
         let patched_start = expr_if.as_span().start();
         if_starts.push(
             patched_start - INSERTED.len() * insertions.partition_point(|&i| i < patched_start),
@@ -710,12 +703,6 @@ fn semicolon_before_the_else_branch<'i>(expr_if: &Pair<'i, Rule>) -> Option<Pair
         .find(|pair| pair.as_rule() == Rule::else_of_if_with_space)?
         .into_inner()
         .find(|pair| pair.as_rule() == Rule::semicolon)
-}
-
-/// Whether `pair` is followed on its line by nothing but spaces and comments.
-fn ends_its_line(pair: Pair<Rule>) -> bool {
-    let rest = &pair.get_input()[pair.as_span().end()..];
-    FixParser::parse(Rule::rest_of_line_of_separators, rest).is_ok()
 }
 
 /// The bound expression of the binding of `expr_let` whose `in` or `;` is at the byte offset `at`,

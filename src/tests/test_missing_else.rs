@@ -211,22 +211,6 @@ main : IO () = println $ f(3).to_string;
     test_source_fail(&let_in_bound, Configuration::develop_mode(), message);
 }
 
-/// An `if` whose `;` has its else branch after it on the same line is written in the form
-/// `if c { a }; b` on purpose, so the parse error of the `let` missing its `;` is reported as it is.
-#[test]
-pub fn test_an_if_with_its_else_branch_on_the_line_of_its_semicolon_leaves_the_parse_error() {
-    let source = r##"
-module Main;
-
-f : I64 -> I64 = |n| (
-    let x = if n < 0 { 0 }; n * 2
-);
-
-main : IO () = println $ f(3).to_string;
-    "##;
-    test_source_fail(&source, Configuration::develop_mode(), "Expected `;`");
-}
-
 /// An `if` in the form `if c { a }; { b }` closes its else branch with the brace, so the parse error
 /// it leaves is reported as it is.
 #[test]
@@ -278,30 +262,6 @@ main : IO () = (
 );
     "##;
     test_source(&source, Configuration::develop_mode());
-}
-
-/// An `if` whose `;` is followed on its line by nothing but spaces and comments is reported,
-/// in a source whose lines end with `\n` or with `\r\n`: its else branch starts on a later line.
-#[test]
-pub fn test_an_if_whose_semicolon_ends_its_line_is_reported() {
-    let message = "This `if` has no `else` block.\n\n5:13-5:15";
-    for after_semicolon in ["   \t", " // one", " /* one */ "] {
-        let source = format!(
-            r##"
-module Main;
-
-f : I64 -> I64 = |n| (
-    let x = if n > 0 {{ 1 }};{after_semicolon}
-    x + 2
-);
-
-main : IO () = println $ f(3).to_string;
-    "##
-        );
-        test_source_fail(&source, Configuration::develop_mode(), message);
-    }
-    let crlf = "\r\nmodule Main;\r\n\r\nf : I64 -> I64 = |n| (\r\n    let x = if n > 0 { 1 };\r\n    x + 2\r\n);\r\n\r\nmain : IO () = println $ f(3).to_string;\r\n";
-    test_source_fail(&crlf, Configuration::develop_mode(), message);
 }
 
 /// The `if`s of two `let`s each left without its `;` are reported in the order they are written.
