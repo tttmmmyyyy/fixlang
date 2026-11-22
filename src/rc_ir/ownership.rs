@@ -98,39 +98,6 @@ impl VarTable {
         vars
     }
 
-    /// The variables whose references the value of `name` is made of with no object updated in
-    /// place: the variable a move-bind renames, the unboxed container a field is destructured out
-    /// of, the unboxed union a payload comes from (or the scrutinee a catch-all binds), the arm
-    /// results a match binding joins, and the operands of an op that branches on no operand's
-    /// uniqueness (`BuiltinOp::unique_check_operand`). `None` for any other variable: a parameter or
-    /// capture, a producer, a value read out of a boxed container, and the result of an op that
-    /// updates an operand in place where it is unique.
-    ///
-    /// An op that updates an operand in place with no check of its own, because the code checked the
-    /// operand unique before it (`StructPunchOp` and `StructPlugInOp` without `force_unique`), declares
-    /// its result fresh (`BuiltinOp::result_prov`), so no unit of its result belongs to the operand's
-    /// object, and a reader asking which variables hold that object does not reach it.
-    pub(crate) fn sources_without_update(
-        &self,
-        name: &FullName,
-        type_env: &TypeEnv,
-    ) -> Option<Vec<&RcVar>> {
-        match self.bindings.get(name)? {
-            Binding::Move(y) => Some(vec![y]),
-            Binding::Field(container, _) if !container.ty.is_box(type_env) => Some(vec![container]),
-            Binding::Payload(scrut, None) => Some(vec![scrut]),
-            Binding::Payload(scrut, Some(_)) if !scrut.ty.is_box(type_env) => Some(vec![scrut]),
-            Binding::Join(arm_results) => Some(arm_results.iter().collect()),
-            Binding::Builtin(op, args, _) => {
-                let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-                op.unique_check_operand(&arg_tys, type_env)
-                    .is_none()
-                    .then(|| args.iter().collect())
-            }
-            Binding::Param | Binding::Producer | Binding::Field(..) | Binding::Payload(..) => None,
-        }
-    }
-
     /// An empty table, which a constructor fills.
     fn empty() -> VarTable {
         VarTable {
@@ -338,7 +305,7 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// passes on the way holds the same reference.
 pub(crate) enum AliasStep {
     /// The value is its own object: a parameter or capture, a producer, a global, or a value read
-    /// out of a boxed container, which the read retains or lends (`borrow_ify`'s `lent_reads`).
+    /// out of a boxed container, which the read retains or lends (`lend::lend_reads`).
     Stops,
     /// The value is the value at this path of another variable: a move-bind, a field of an unboxed
     /// container, the payload of an unboxed union's variant or of a catch-all, or a pure projection

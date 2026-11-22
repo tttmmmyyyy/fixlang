@@ -629,7 +629,7 @@ impl<'a> Walk<'a> {
                 let arg_shapes: Vec<ExtShape> = args.iter().map(|a| self.shape_of(a)).collect();
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 let declared = op.result_locality(&result.ty, &arg_tys, self.type_env);
-                // An op that reads its result out of an operand (`borrow_ify` lends that result
+                // An op that reads its result out of an operand (`lend_reads` lends that result
                 // while the operand lives on) declares the result taken out of that operand.
                 if let Some(j) = op.result_held_by_operand(&arg_tys, self.type_env) {
                     assert_eq!(

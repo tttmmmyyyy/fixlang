@@ -30,7 +30,9 @@ use crate::{
         ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, sink_retains, split_rc_units},
         codegen::keep_initializers_out_of_shared_accessors,
-        dead_code_elim, locality,
+        dead_code_elim,
+        lend::lend_reads,
+        locality,
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
@@ -170,6 +172,8 @@ fn optimize_rc_program(
     before_sinking(&prog);
     prog = sink_retains(&prog, type_env);
     validate(&prog, "after sink_retains");
+    prog = lend_reads(&prog, type_env);
+    validate(&prog, "after lend_reads");
     prog
 }
 
