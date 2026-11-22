@@ -1062,7 +1062,7 @@ mod dump_tests {
     use super::{chain_source, global_read_back_source, CHAIN_DEPTH, CHAIN_OUTPUT};
     use crate::constants::{
         LS_CAP_PREFIX, LS_COPY_BUDGET_BASE, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX,
-        MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_STORED_CAPTURE_WORDS, MAX_LS_UNION_VARIANTS,
+        MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_STORED_VALUE_WORDS, MAX_LS_UNION_VARIANTS,
     };
     use crate::misc::Set;
     use crate::tests::test_util::{
@@ -2058,16 +2058,16 @@ mod dump_tests {
     }
 
     /// A set whose values an array stores is represented by an unboxed capture struct while its
-    /// values take `MAX_LS_STORED_CAPTURE_WORDS` words, and by a boxed one once they take more: the
+    /// values take `MAX_LS_STORED_VALUE_WORDS` words, and by a boxed one once they take more: the
     /// fold over an array filled with a lambda calls it by name either way.
     #[test]
     fn test_a_set_an_array_stores_is_a_boxed_capture_struct_past_the_stored_words() {
-        let words = MAX_LS_STORED_CAPTURE_WORDS;
+        let words = MAX_LS_STORED_VALUE_WORDS;
         let dump = build_run_and_read_rc_ir(
             &wide_capture_source(words, "", FOLD_OVER_AN_ARRAY_OF_F),
             "max",
             &(3 * wide_capture_sum(words)).to_string(),
-            "a fold over an array of a lambda capturing `MAX_LS_STORED_CAPTURE_WORDS` words",
+            "a fold over an array of a lambda capturing `MAX_LS_STORED_VALUE_WORDS` words",
         );
         assert_calls_by_name(&dump, "Std::Iterator::fold");
         assert!(
@@ -2075,13 +2075,13 @@ mod dump_tests {
             "the capture struct should be unboxed"
         );
 
-        let words = MAX_LS_STORED_CAPTURE_WORDS + 1;
+        let words = MAX_LS_STORED_VALUE_WORDS + 1;
         let dump = build_run_and_read_rc_ir(
             &wide_capture_source(words, "", FOLD_OVER_AN_ARRAY_OF_F),
             "max",
             &(3 * wide_capture_sum(words)).to_string(),
             "a fold over an array of a lambda capturing a word more than \
-             `MAX_LS_STORED_CAPTURE_WORDS`",
+             `MAX_LS_STORED_VALUE_WORDS`",
         );
         assert_calls_by_name(&dump, "Std::Iterator::fold");
         assert!(
@@ -2090,46 +2090,47 @@ mod dump_tests {
         );
     }
 
-    /// A list of functions, each node a boxed union holding one, and `sum_up`, which applies them in
+    /// A list of functions, each node a boxed union holding one, and `apply_in_turn`, which applies them in
     /// turn.
     const LIST_OF_FUNCTIONS_DECLS: &str = r#"
     type Fns = box union { nil : (), cons : (I64 -> I64, Fns) };
 
-    sum_up : Fns -> I64 -> I64;
-    sum_up = |fs, acc| match fs {
+    apply_in_turn : Fns -> I64 -> I64;
+    apply_in_turn = |fs, acc| match fs {
         nil(_) => acc,
-        cons((g, rest)) => sum_up(rest, g(acc))
+        cons((g, rest)) => apply_in_turn(rest, g(acc))
     };"#;
 
     /// Applies a list of two `f` of `wide_capture_source`.
-    const SUM_OVER_A_LIST_OF_F: &str = "sum_up(Fns::cons((f, Fns::cons((f, Fns::nil())))), 0)";
+    const SUM_OVER_A_LIST_OF_F: &str =
+        "apply_in_turn(Fns::cons((f, Fns::cons((f, Fns::nil())))), 0)";
 
     /// A set whose values a boxed union stores is represented by an unboxed capture struct while its
-    /// values take `MAX_LS_STORED_CAPTURE_WORDS` words, and by a boxed one once they take more:
-    /// `sum_up` calls the lambda the list holds by name either way.
+    /// values take `MAX_LS_STORED_VALUE_WORDS` words, and by a boxed one once they take more:
+    /// `apply_in_turn` calls the lambda the list holds by name either way.
     #[test]
     fn test_a_set_a_boxed_union_stores_is_a_boxed_capture_struct_past_the_stored_words() {
-        let words = MAX_LS_STORED_CAPTURE_WORDS;
+        let words = MAX_LS_STORED_VALUE_WORDS;
         let dump = build_run_and_read_rc_ir(
             &wide_capture_source(words, LIST_OF_FUNCTIONS_DECLS, SUM_OVER_A_LIST_OF_F),
             "max",
             &(2 * wide_capture_sum(words)).to_string(),
-            "a list of a lambda capturing `MAX_LS_STORED_CAPTURE_WORDS` words",
+            "a list of a lambda capturing `MAX_LS_STORED_VALUE_WORDS` words",
         );
-        assert_calls_by_name(&dump, "Main::sum_up");
+        assert_calls_by_name(&dump, "Main::apply_in_turn");
         assert!(
             !main_capture_struct_is_boxed(&dump, words),
             "the capture struct should be unboxed"
         );
 
-        let words = MAX_LS_STORED_CAPTURE_WORDS + 1;
+        let words = MAX_LS_STORED_VALUE_WORDS + 1;
         let dump = build_run_and_read_rc_ir(
             &wide_capture_source(words, LIST_OF_FUNCTIONS_DECLS, SUM_OVER_A_LIST_OF_F),
             "max",
             &(2 * wide_capture_sum(words)).to_string(),
-            "a list of a lambda capturing a word more than `MAX_LS_STORED_CAPTURE_WORDS`",
+            "a list of a lambda capturing a word more than `MAX_LS_STORED_VALUE_WORDS`",
         );
-        assert_calls_by_name(&dump, "Main::sum_up");
+        assert_calls_by_name(&dump, "Main::apply_in_turn");
         assert!(
             main_capture_struct_is_boxed(&dump, words),
             "the capture struct should be boxed"
@@ -2138,16 +2139,16 @@ mod dump_tests {
 
     /// A set whose values nothing stores in an array or a boxed object is represented by an unboxed
     /// capture struct however many words its values take: a loop calling a lambda capturing more
-    /// than `MAX_LS_STORED_CAPTURE_WORDS` words calls it by name, through the unboxed capture struct
+    /// than `MAX_LS_STORED_VALUE_WORDS` words calls it by name, through the unboxed capture struct
     /// of the lambda it is given.
     #[test]
     fn test_a_set_stored_in_no_heap_object_is_a_capture_struct_however_wide() {
-        let words = MAX_LS_STORED_CAPTURE_WORDS + 1;
+        let words = MAX_LS_STORED_VALUE_WORDS + 1;
         let dump = build_run_and_read_rc_ir(
             &wide_capture_source(words, "", "range(0, 3).fold(0, |_, acc| f(acc))"),
             "max",
             &(3 * wide_capture_sum(words)).to_string(),
-            "a loop calling a lambda capturing more than `MAX_LS_STORED_CAPTURE_WORDS` words",
+            "a loop calling a lambda capturing more than `MAX_LS_STORED_VALUE_WORDS` words",
         );
         assert_calls_by_name(&dump, "Std::Iterator::fold");
         assert!(
@@ -2157,7 +2158,7 @@ mod dump_tests {
     }
 
     /// A set the capture struct of a lambda of a set of closures holds in place is held in the
-    /// closure's object, so it is boxed past `MAX_LS_STORED_CAPTURE_WORDS` words as one an array
+    /// closure's object, so it is boxed past `MAX_LS_STORED_VALUE_WORDS` words as one an array
     /// stores is: the lambda `wrap` returns captures a value of its own set, which is so represented
     /// by closures, and captures `f`, whose capture struct is boxed.
     #[test]
@@ -2194,7 +2195,7 @@ mod dump_tests {
     }
 
     /// A set of three lambdas whose values an array stores, a union taking more than
-    /// `MAX_LS_STORED_CAPTURE_WORDS` words, boxes the capture structs of its classes that take more
+    /// `MAX_LS_STORED_VALUE_WORDS` words, boxes the capture structs of its classes that take more
     /// than a word, and leaves the one taking a word unboxed: the fold over the array calls each
     /// lambda by name.
     #[test]
@@ -2238,7 +2239,7 @@ mod dump_tests {
 
     /// A lambda `h` that an array stores and that captures, beside two integers, a lambda `f` whose
     /// capture struct is boxed counts `f` as the word it takes boxed: `h` takes three words, within
-    /// `MAX_LS_STORED_CAPTURE_WORDS`, and its capture struct stays unboxed.
+    /// `MAX_LS_STORED_VALUE_WORDS`, and its capture struct stays unboxed.
     #[test]
     fn test_a_set_an_array_stores_counts_a_held_boxed_capture_struct_as_a_word() {
         let source = r#"
@@ -2280,7 +2281,7 @@ mod dump_tests {
 
     /// The words a capture struct takes are those of the values it captures laid out in place, which
     /// an array spans three of: a lambda capturing two arrays takes six words, past
-    /// `MAX_LS_STORED_CAPTURE_WORDS`, and an array of it holds it boxed.
+    /// `MAX_LS_STORED_VALUE_WORDS`, and an array of it holds it boxed.
     #[test]
     fn test_a_set_an_array_stores_counts_the_words_of_its_captured_values() {
         let source = r#"
