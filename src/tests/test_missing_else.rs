@@ -351,30 +351,39 @@ main : IO () = println $ f(3).to_string;
     }
 }
 
-/// The `if` of the `let` is pointed at when the `;` put in before it ends an `eval` or an `if` in the
-/// form `if c { a }; b`, though the text holds no other `let`.
+/// The `if` is pointed at however many `;`s the text after the parse error needs: here, one for each
+/// trait member.
 #[test]
-pub fn test_the_if_of_the_only_let_is_pointed_at_after_a_semicolon_put_in_for_an_eval_or_an_if() {
-    let after_eval = r##"
+pub fn test_the_if_is_pointed_at_however_many_semicolons_the_rest_of_the_text_needs() {
+    let source = r##"
 module Main;
 
 f : I64 -> I64 = |n| (
     let x = if n > 0 { 1 };
-    eval x
+    x + 2
 );
+
+trait a : T1 { m1 : a -> a }
+trait a : T2 { m2 : a -> a }
+trait a : T3 { m3 : a -> a }
 
 main : IO () = println $ f(3).to_string;
     "##;
-    assert_ifs_are_pointed_at(&after_eval, &["5:13-5:15"]);
-    let after_if = r##"
+    assert_ifs_are_pointed_at(&source, &["5:13-5:15"]);
+}
+
+/// The `if` of `eval if c { a };` followed by the rest of the block is pointed at beside the parse
+/// error, as that of a `let` is.
+#[test]
+pub fn test_an_if_with_no_else_in_an_eval_is_pointed_at() {
+    let source = r##"
 module Main;
 
-f : I64 -> I64 = |n| (
-    let x = if n > 0 { 1 };
-    if x > 9 { 0 }
+main : IO () = (
+    let n = 3;
+    eval if n > 0 { debug_println("positive") };
+    println("done")
 );
-
-main : IO () = println $ f(3).to_string;
     "##;
-    assert_ifs_are_pointed_at(&after_if, &["5:13-5:15"]);
+    assert_ifs_are_pointed_at(&source, &["6:10-6:12"]);
 }
