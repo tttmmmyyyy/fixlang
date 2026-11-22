@@ -3002,8 +3002,8 @@ pub fn inference_tyvar_name(id: u32) -> Name {
     INFERENCE_TYVAR_PREFIX.to_string() + &id.to_string()
 }
 
-/// The number of a type variable the inference created, which counts the variables its context
-/// created before it, as `inference_tyvar_name` writes it.
+/// The number `inference_tyvar_name` writes in the name of a type variable the inference created:
+/// how many variables its context created before it.
 ///
 /// # Examples
 /// `inference_tyvar_id("#a3")` is `Some(3)`, and `inference_tyvar_id("a")` is `None`.

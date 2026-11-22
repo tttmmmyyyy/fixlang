@@ -532,15 +532,16 @@ pub enum InstantiationMode {
     /// Each variable the scheme generalizes is replaced by a fresh type variable, and each
     /// constraint becomes one the type checking has to deduce. `site`, when given, is where an
     /// expression uses the value that has this scheme; diagnostics point there each fresh variable
-    /// that replaces a variable the source names, which `is_generated_tyvar` tells apart.
+    /// that replaces a variable written in the source.
     Require { site: Option<InstantiationSite> },
     /// Each variable the scheme generalizes stays as the scheme writes it and is fixed against
     /// replacement, and each constraint becomes one that later deductions may use.
     Assume,
 }
 
-/// Where an expression uses a global value. Diagnostics point at it the type variables made by
-/// instantiating the value's type scheme for the variables the source names.
+/// Where an expression uses a global value. Instantiating the value's type scheme replaces each of
+/// its variables with a fresh one, and diagnostics point here each fresh one that replaces a
+/// variable written in the source.
 pub struct InstantiationSite {
     /// The value the expression uses.
     value: Arc<FullName>,
@@ -679,11 +680,11 @@ impl TypeCheckContext {
         }
     }
 
-    /// The sources this context records, with the source `checked` records for each type variable
-    /// `checked` created. `checked` is a copy of this context that went on to check an expression,
-    /// so a variable this context already has keeps what is recorded here, a source or none: that
-    /// is what agrees with the types this context prints, where `checked` may have unified the
-    /// variable with another one and taken that one's source.
+    /// The sources this context records, together with those `checked` records for the type
+    /// variables `checked` created. `checked` is a copy of this context that went on to check an
+    /// expression. A variable that already exists here keeps the record of this context, a source
+    /// or none, since that record matches the types this context prints; `checked` may have
+    /// unified the variable with another one and given it that one's source.
     fn tyvar_sources_with_those_created_in(&self, checked: &TypeCheckContext) -> TyVarSources {
         assert!(
             checked.tyvar_id >= self.tyvar_id,
@@ -1811,9 +1812,9 @@ impl TypeCheckContext {
     /// to the source of one carries the line's number.
     ///
     /// # Arguments
-    /// * `failures` — for each value, the type variable sources for its line
-    ///   (`tyvar_sources_with_those_created_in` the context its check ended in), its full name, its
-    ///   type and its error under the substitution of that check.
+    /// * `failures` — for each value: the sources of the type variables, those of this context
+    ///   together with those its check created; its full name; and its type and its error under the
+    ///   substitution of that check.
     fn create_no_candidate_matches_report(
         &self,
         name: &FullName,
@@ -3253,8 +3254,7 @@ impl TyVarSources {
         self.0.insert(id, source);
     }
 
-    /// The expression or pattern the type variable named `tyvar_name` arose at, where the inference
-    /// created the variable and a source was recorded for it.
+    /// The expression or pattern the type variable named `tyvar_name` arose at.
     fn get(&self, tyvar_name: &str) -> Option<&TyVarSource> {
         self.0.get(&inference_tyvar_id(tyvar_name)?)
     }
