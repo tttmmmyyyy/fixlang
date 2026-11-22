@@ -724,7 +724,7 @@ impl Pattern {
                 match t {
                     Some(t) => {
                         ret += ": ";
-                        ret += &t.to_string();
+                        ret += &t.to_string_as_written();
                     }
                     None => {}
                 }

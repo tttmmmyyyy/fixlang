@@ -1275,7 +1275,7 @@ impl TraitEnv {
                     "Implementing trait `{}` for type `{}` in module `{}` is illegal; \
                             it is not allowed to implement an external trait for an external type.",
                     trait_id.to_string(),
-                    impl_ty.to_string(),
+                    impl_ty.to_string_as_written(),
                     instance_def_mod.to_string(),
                 ),
                 &[&impl_.source.as_ref().map(|s| s.to_head_character())],

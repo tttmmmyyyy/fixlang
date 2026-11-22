@@ -92,8 +92,9 @@ impl Predicate {
         if *expected != found {
             return Err(Errors::from_msg_srcs(
                 format!(
-                    "Kind mismatch in `{}`. Expect: {}, found: {}.",
-                    self.to_string(),
+                    "Kind mismatch in `{} : {}`. Expect: {}, found: {}.",
+                    self.ty.to_string_as_written(),
+                    self.trait_id.to_string(),
                     expected.to_string(),
                     found.to_string()
                 ),
