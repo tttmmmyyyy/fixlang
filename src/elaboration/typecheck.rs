@@ -542,7 +542,7 @@ pub enum InstantiationMode {
 /// instantiating the value's type scheme at it.
 pub struct InstantiationSite {
     /// The value the expression uses.
-    value: FullName,
+    value: Arc<FullName>,
     /// The span of the expression that uses it.
     span: Span,
 }
@@ -555,10 +555,12 @@ pub struct InstantiationSite {
 pub struct TypeCheckContext {
     /// The number the next type variable created here is named after.
     tyvar_id: u32,
-    /// For each type variable the inference created, by name, the expression or pattern it arose
-    /// at, so that a diagnostic naming the variable can point at it. A type variable of a signature
-    /// has no entry: a diagnostic shows it under the name the signature gives it, with no location.
-    tyvar_source: Map<String, TyVarSource>,
+    /// For each type variable the inference created, by its number (`inference_tyvar_id`), the
+    /// expression or pattern it arose at, so that a diagnostic naming the variable can point at it.
+    /// A type variable of a signature has no entry: a diagnostic shows it under the name the
+    /// signature gives it, with no location. The key is a number so that copying the context, which
+    /// the check of a name does for each of its candidates, allocates nothing per entry.
+    tyvar_source: Map<u32, TyVarSource>,
     /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
     /// What the inference has settled about the type variables so far.
@@ -687,9 +689,9 @@ impl TypeCheckContext {
     /// taken that one's source.
     fn with_sources_of_tyvars_created_in(&self, checked: &TypeCheckContext) -> TypeCheckContext {
         let mut ctx = self.clone();
-        for (name, source) in &checked.tyvar_source {
-            if inference_tyvar_id(name).is_some_and(|id| id >= self.tyvar_id) {
-                ctx.tyvar_source.insert(name.clone(), source.clone());
+        for (id, source) in &checked.tyvar_source {
+            if *id >= self.tyvar_id {
+                ctx.tyvar_source.insert(*id, source.clone());
             }
         }
         ctx
@@ -698,12 +700,19 @@ impl TypeCheckContext {
     /// Records `source` as the expression or pattern the type variable named `tyvar_name` arose at.
     /// `tyvar_name` must name a type variable the inference created.
     fn insert_tyvar_source(&mut self, tyvar_name: Name, source: TyVarSource) {
-        assert!(
-            is_inference_tyvar(&tyvar_name),
-            "source recorded for `{}`, a type variable the inference did not create",
-            tyvar_name
-        );
-        self.tyvar_source.insert(tyvar_name, source);
+        let id = inference_tyvar_id(&tyvar_name).unwrap_or_else(|| {
+            panic!(
+                "source recorded for `{}`, a type variable the inference did not create",
+                tyvar_name
+            )
+        });
+        self.tyvar_source.insert(id, source);
+    }
+
+    /// The expression or pattern the type variable named `tyvar_name` arose at, where the inference
+    /// created the variable and recorded one.
+    fn tyvar_source_of(&self, tyvar_name: &str) -> Option<&TyVarSource> {
+        self.tyvar_source.get(&inference_tyvar_id(tyvar_name)?)
     }
 
     /// Fresh type variable wrapped as `TypeNode`, with `src` registered
@@ -972,9 +981,8 @@ impl TypeCheckContext {
     /// kept. Only a type variable the inference created takes the source.
     fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let src = self
-            .tyvar_source
-            .get(&tv2)
-            .or_else(|| self.tyvar_source.get(&tv1))
+            .tyvar_source_of(&tv2)
+            .or_else(|| self.tyvar_source_of(&tv1))
             .cloned();
         let Some(src) = src else {
             return;
@@ -1111,7 +1119,7 @@ impl TypeCheckContext {
                                 TyVarSource {
                                     span: site.span.clone(),
                                     role: TyVarRole::InstantiatedVarOf {
-                                        tyvar: tv.name.clone(),
+                                        tyvar: tv.clone(),
                                         value: site.value.clone(),
                                     },
                                 },
@@ -1327,7 +1335,7 @@ impl TypeCheckContext {
                         &scm,
                         InstantiationMode::Require {
                             site: ei.source.clone().map(|span| InstantiationSite {
-                                value: fullname.clone(),
+                                value: Arc::new(fullname.clone()),
                                 span,
                             }),
                         },
@@ -1847,7 +1855,7 @@ impl TypeCheckContext {
             if !seen.insert(tv.name.clone()) {
                 continue;
             }
-            if let Some(src) = self.tyvar_source.get(&tv.name) {
+            if let Some(src) = self.tyvar_source_of(&tv.name) {
                 let name = names.name(&tv.name);
                 let prefix = if let Some(ref_no) = ref_no {
                     format!("`{}` in ({})", name, ref_no)
@@ -1875,7 +1883,7 @@ impl TypeCheckContext {
                         format!(
                             "{} is `{}` in the type of `{}`.",
                             prefix,
-                            tyvar,
+                            tyvar.name,
                             value.to_string()
                         )
                     }
@@ -3345,8 +3353,12 @@ enum TyVarRole {
     /// The variable is the element type of the expression, an array literal with no element.
     ElementTypeOf,
     /// The variable replaces the type variable `tyvar` of the type of the global value `value`,
-    /// where the expression uses that value.
-    InstantiatedVarOf { tyvar: Name, value: FullName },
+    /// where the expression uses that value. Both are shared, since a context is copied for each
+    /// candidate of every name a body uses, and every record is copied with it.
+    InstantiatedVarOf {
+        tyvar: Arc<TyVar>,
+        value: Arc<FullName>,
+    },
 }
 
 /// The trimmed source text `span` covers, where that text stands on one line and stays inside a
