@@ -365,7 +365,7 @@ The signs of a design with no such argument:
 - A second model of a fact the code base already models. The argument would have to show the two agree, and nothing keeps them agreeing.
 - A correctness that depends on code that runs later and does not know the mechanism exists: the argument then needs a premise about each such pass.
 
-When the argument cannot be written, is tangled, or needs a premise kept only by convention, flag it: give the argument as far as it goes, the step where it stops, and a design whose argument goes through — often one that rests on a model the code base already has. When the argument goes through, give its outline in the report in a few lines, with its premises; the author cites it in the pull request, and the next reviewer checks against it.
+When the argument cannot be written, is tangled, or needs a premise kept only by convention, flag it: give the argument as far as it goes, the step where it stops, and a design whose argument goes through — often one that rests on a model the code base already has. When the argument goes through, give it in the report, with its premises. Whether it could be written is the judgment, so the orchestrator's summary says only that it went through and on which premises; the argument itself is kept for the pull request body, which carries it (the `pr-message` skill's *The correctness argument*).
 
 ### What the implementation reveals about the design
 

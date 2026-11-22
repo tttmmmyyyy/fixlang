@@ -1,6 +1,6 @@
 ---
 name: pr-message
-description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain what every item the diff touches is, what the change did to it, and why, show the diff of each changed item, bounded to that item, and the code of each added one that carries logic, link every item the change adds or modifies to its implementation on GitHub, cover the tests in a section of their own saying what each pins and what it does without the change, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
+description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain what every item the diff touches is, what the change did to it, and why, show the diff of each changed item, bounded to that item, and the code of each added one that carries logic, link every item the change adds or modifies to its implementation on GitHub, cover the tests in a section of their own saying what each pins and what it does without the change, quote every text the change shows to a user, explain a bug fix by tracing the program state through the failing run and the fixed run, and carry the correctness argument of a mechanism whose correctness the code does not make obvious. Use when: writing or revising a pull request body.'
 ---
 
 # Writing a pull request body
@@ -153,6 +153,14 @@ A bug fix is understood when the reader sees both mechanisms: the one by which t
 Carry through the trace only the state the wrong step depends on.
 
 **The trace is composed, not pasted.** Write it in prose, with pseudocode where it helps (see Pseudocode in the devdoc skill). An analysis log — debugger output, print-debugging output, an IR dump — must not stand in for the trace: a log records everything the run did, and the reader would have to dig the mechanism out of it. A log excerpt may back the trace up from the appendix, as evidence.
+
+## The correctness argument
+
+A change that adds a mechanism whose correctness the code does not make obvious — an analysis, a transformation, an optimization, an invariant other code relies on — carries in its body the argument that the mechanism is correct: the premises it rests on, the invariant it keeps, and the steps from those to the property the change needs. The `code-review` skill's design-fit aspect judges whether such an argument can be written and whether it is clean; the body is where the argument the change ended with is written down.
+
+- **State the premises first, and say how each is kept**: an assertion, a validator, a type, or the contract of another pass named by its function. A reader checks a premise once and the steps after it many times.
+- **Write the argument the final code has**, not the one the change started from. A later commit that moved a check or dropped a condition changes the argument, and the body is revised with it.
+- **Keep it in the shape that made it clean**: one invariant, a short chain of steps, each step citing the one fact it uses.
 
 ## No Claude session link
 
