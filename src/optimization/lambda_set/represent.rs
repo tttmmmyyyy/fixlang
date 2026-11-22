@@ -432,7 +432,12 @@ fn boxed_classes(
                 Repr::Single(c) => self.class_words(c),
                 Repr::Union(u) => {
                     let members = &self.unions[u as usize].members;
-                    UNION_TAG_WORDS + members.iter().map(|c| self.class_words(*c)).max().unwrap_or(0)
+                    UNION_TAG_WORDS
+                        + members
+                            .iter()
+                            .map(|c| self.class_words(*c))
+                            .max()
+                            .unwrap_or(0)
                 }
             }
         }
