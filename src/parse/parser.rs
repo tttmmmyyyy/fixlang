@@ -575,7 +575,7 @@ pub fn parse_renamed_source_file(
     let file = match FixParser::parse(Rule::file, &source_code) {
         Ok(res) => res,
         Err(e) => {
-            let if_starts = ifs_that_may_be_missing_else(&e, &source_code).unwrap_or_default();
+            let if_starts = ifs_that_may_be_missing_else(&e, &source_code);
             let mut err = message_parse_error(e, &source, &source_code);
             for start in if_starts {
                 err.add_src(
@@ -595,7 +595,7 @@ pub fn parse_renamed_source_file(
 }
 
 /// The byte offsets in `source_code` of the `if`s that may be missing their `else` and so have caused
-/// the parse error `e`, in ascending order. `None` says no such `if` is certain to be one of them.
+/// the parse error `e`, in ascending order.
 ///
 /// Such an `if` is in the bound expression of a `let`, in the form `if c { a }; b`:
 ///
@@ -613,40 +613,54 @@ pub fn parse_renamed_source_file(
 /// is missing, which only the layout tells apart, so the `if` is a guess to report beside `e`.
 ///
 /// To find that `if`, this puts a `;` where `e` expected one and parses `source_code` again. It does
-/// this again at each such error that follows, since each `let` left without its `;` fails once.
-/// Each `let` that a `;` put in ends has a hole for its body. Its `if` is the first expression on the
-/// right end of its bound expression that reads a `;`. An `if` whose else branch follows `else`
-/// reads none.
-///
-/// No `if` is found in these cases:
-/// - That first expression is a `let` or an `eval`. Either of the two `;` could be the one meant for
-///   the outer `let`.
-/// - A `;` put in finds no `if`.
-fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Option<Vec<usize>> {
+/// this again at each such error that follows, until the whole text parses: one token can close
+/// several `let`s left without their `;`, and the text after `e` can hold more of them. The `;`s
+/// put in at the position of `e` each end a `let` whose body is a hole, and the `if` of such a `let`
+/// is the first expression on the right end of its bound expression that reads a `;`. An `if` whose
+/// else branch follows `else` reads none. When that first expression is a `let` or an `eval`, either
+/// of the two `;` could be the one meant for the outer `let`, and that `let` has no `if` to report.
+fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Vec<usize> {
     // The text put in. The spaces keep its `;` from joining a `;` beside it into a `;;`.
     const INSERTED: &str = " ; ";
-    // The `if`s are reported only when every `;` put in ends a `let`, so there are no more `;`s to
-    // put in than `let`s, and the text has at least as many `let` in it as `let`s.
-    let max_insertions = source_code.matches("let").count();
+    let InputLocation::Pos(error_at) = e.location else {
+        return vec![];
+    };
+    // Each `;` put in ends a `let`, an `eval` or an `if` in the form `if c { a }; b`, and the text
+    // has at least as many of those words in it as there are of those expressions.
+    let max_insertions = ["let", "eval", "if"]
+        .iter()
+        .map(|word| source_code.matches(word).count())
+        .sum::<usize>();
     let mut patched = source_code.to_string();
-    // The byte offsets in `patched` of the `;`s put in, in ascending order.
-    let mut insertions: Vec<usize> = vec![];
+    // The byte offsets in `patched` of the `;`s put in at `error_at`, in ascending order.
+    let mut semicolons_at_the_error = vec![];
+    let mut insertion_count = 0;
+    let mut last_inserted_at = None;
     let mut error = e.clone();
     let file = loop {
-        let at = semicolon_expected_before_a_closing_token(&error, &patched)?;
-        if insertions.len() == max_insertions {
-            return None;
+        let Some(at) = semicolon_expected_before_a_closing_token(&error, &patched) else {
+            return vec![];
+        };
+        if insertion_count == max_insertions {
+            return vec![];
         }
         // The text before `at` is as it was in the parse that failed there, so the parse that fails
-        // next reaches past the `;` put in last.
+        // next reaches past the text put in last.
         assert!(
-            insertions.last().map_or(true, |&last| last < at),
-            "a `;` is expected at {} before the `;` put in at {:?}",
+            last_inserted_at.map_or(true, |last| last < at),
+            "a `;` is expected at {} before the text put in at {:?}",
             at,
-            insertions.last()
+            last_inserted_at
         );
+        last_inserted_at = Some(at);
+        // Every `;` put in before is before `at`, and each moved the text after it by the length of
+        // the text put in.
+        let original_at = at - INSERTED.len() * insertion_count;
+        if original_at == error_at {
+            semicolons_at_the_error.push(at + INSERTED.find(';').unwrap());
+        }
         patched.insert_str(at, INSERTED);
-        insertions.push(at + INSERTED.find(';').unwrap());
+        insertion_count += 1;
         match FixParser::parse(Rule::file, &patched) {
             Ok(file) => break file,
             Err(e) => error = e,
@@ -656,23 +670,26 @@ fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Optio
         .flatten()
         .filter(|pair| pair.as_rule() == Rule::expr_let)
         .collect();
-    // The byte offsets in `source_code` of the `if`s to report.
-    let mut if_starts = vec![];
-    for &at in &insertions {
-        let bound = expr_lets
-            .iter()
-            .find_map(|expr_let| bound_expression_ended_at(expr_let.clone(), at))?;
-        let expr_if = first_expression_reading_a_semicolon_at_the_end(bound)?;
-        if expr_if.as_rule() != Rule::expr_if {
-            return None;
-        }
-        let patched_start = expr_if.as_span().start();
-        if_starts.push(
-            patched_start - INSERTED.len() * insertions.partition_point(|&i| i < patched_start),
-        );
-    }
+    let mut if_starts: Vec<usize> = semicolons_at_the_error
+        .iter()
+        .filter_map(|&semicolon| {
+            let bound = expr_lets
+                .iter()
+                .find_map(|expr_let| bound_expression_ended_at(expr_let.clone(), semicolon))?;
+            let expr_if = first_expression_reading_a_semicolon_at_the_end(bound)?;
+            (expr_if.as_rule() == Rule::expr_if).then(|| expr_if.as_span().start())
+        })
+        .collect();
+    // The `if`s are inside bound expressions that end at `error_at`, before every `;` put in, so
+    // their offsets in `patched` are those in `source_code`.
+    assert!(
+        if_starts.iter().all(|&start| start < error_at),
+        "an `if` at {:?} is past the parse error at {}",
+        if_starts,
+        error_at
+    );
     if_starts.sort();
-    Some(if_starts)
+    if_starts
 }
 
 /// The byte offset in `source_code` at which the parse error `e` expected a `;`, when the token

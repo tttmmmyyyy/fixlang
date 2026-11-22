@@ -89,10 +89,10 @@ main : IO () = println $ f(3).to_string;
     assert_ifs_are_pointed_at(&source, &["5:13-5:15"]);
 }
 
-/// The `if` of a second `let`, found after a `;` was put in for the `let` before it, is pointed at
-/// at its position in the source as written.
+/// The `if` of a `let` that fails to parse past the parse error reported is not pointed at: only
+/// the first error is reported, and that `if` has no part in it.
 #[test]
-pub fn test_an_if_after_a_block_already_given_a_semicolon_is_pointed_at_where_it_is_written() {
+pub fn test_an_if_of_a_let_failing_past_the_reported_error_is_not_pointed_at() {
     let source = r##"
 module Main;
 
@@ -108,7 +108,7 @@ g : I64 -> I64 = |n| (
 
 main : IO () = println $ (f(3) + g(3)).to_string;
     "##;
-    assert_ifs_are_pointed_at(&source, &["5:13-5:15", "10:13-10:15"]);
+    assert_ifs_are_pointed_at(&source, &["5:13-5:15"]);
 }
 
 /// A `let` ended by `;` right before the closing token, whose bound expression is an `if` with no
@@ -283,32 +283,28 @@ main : IO () = println $ f(3).to_string;
     assert_ifs_are_pointed_at(&source, &["5:13-5:15", "7:13-7:15"]);
 }
 
-/// When one `let` left without its `;` ends with an `if` with no `else` and the cause for another
-/// `let` is not certain, no `if` is pointed at for either.
+/// Of two `let`s left without their `;` at the reported parse error, the one whose cause is not
+/// certain has no `if` pointed at, and the other still has its `if` pointed at.
 #[test]
-pub fn test_a_let_whose_cause_is_not_certain_points_at_no_if_for_any_let() {
+pub fn test_a_let_whose_cause_is_not_certain_leaves_the_if_of_the_other_pointed_at() {
     let source = r##"
 module Main;
 
 f : I64 -> I64 = |n| (
     let x = if n > 0 { 1 };
-    x + 2
-);
-
-g : I64 -> I64 = |n| (
     let y = let z = n; if z > 0 { 1 };
-    y + 2
+    x + y
 );
 
-main : IO () = println $ (f(3) + g(3)).to_string;
+main : IO () = println $ f(3).to_string;
     "##;
-    assert_no_if_is_pointed_at(&source);
+    assert_ifs_are_pointed_at(&source, &["5:13-5:15"]);
 }
 
-/// A `;` that an `eval` at the end of the block misses has no `if` pointed at, though the `let`
-/// before it ends with an `if` with no `else`: the `eval` misses its `;` either way.
+/// A `;` put in that ends an `eval` at the end of the block points at no `if`, and the `let` before
+/// the `eval`, whose `;` is put in next, still has its `if` pointed at.
 #[test]
-pub fn test_an_eval_missing_its_semicolon_before_the_closing_token_points_at_no_if() {
+pub fn test_a_semicolon_put_in_for_an_eval_leaves_the_if_of_the_let_pointed_at() {
     let source = r##"
 module Main;
 
@@ -322,7 +318,7 @@ main : IO () = (
     println $ m.to_string
 );
     "##;
-    assert_no_if_is_pointed_at(&source);
+    assert_ifs_are_pointed_at(&source, &["5:13-5:15"]);
 }
 
 /// Whether the `if` is pointed at does not depend on the layout between its `;` and its else branch:
