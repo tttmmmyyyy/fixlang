@@ -508,3 +508,52 @@ main : IO () = (
     );
     test_source_fail_excludes(source, Configuration::develop_mode(), "` is `#");
 }
+
+/// Where the use of a global value is itself what does not match, the type variables its type
+/// gives are explained as well.
+#[test]
+pub fn test_a_type_variable_from_the_type_of_a_global_value_that_does_not_match_is_explained() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let n = true.Std::Array::get_size;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` is `a` in the type of `Std::Array::get_size`.\n\n6:18-6:38 in ",
+    );
+}
+
+/// Where no value of an overloaded name matches, a type variable a value's type gives is explained
+/// under the number of that value's line.
+#[test]
+pub fn test_a_type_variable_from_the_type_of_a_global_value_is_explained_in_its_line_of_the_overloads(
+) {
+    let source = r##"
+module Main;
+
+get_size : I64 -> I64;
+get_size = |x| x;
+
+main : IO ();
+main = (
+    let n = true.get_size;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "- (1) `Std::Array::get_size` of type `Std::Array a -> Std::I64`: `Std::Array #2` and `Std::Bool` do not match.",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#2` in (1) is `a` in the type of `Std::Array::get_size`.\n\n9:18-9:26 in ",
+    );
+}
