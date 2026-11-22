@@ -623,7 +623,10 @@ fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Vec<u
     // The text put in. The spaces keep its `;` from joining a `;` beside it into a `;;`.
     const INSERTED: &str = " ; ";
     let InputLocation::Pos(error_at) = e.location else {
-        return vec![];
+        unreachable!(
+            "pest places a parse error at a position, but this one is at {:?}",
+            e.location
+        );
     };
     // Each `;` put in ends a `let`, an `eval` or an `if` in the form `if c { a }; b`, and the text
     // has at least as many of those words in it as there are of those expressions.
