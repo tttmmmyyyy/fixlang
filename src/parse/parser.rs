@@ -623,11 +623,8 @@ pub fn parse_renamed_source_file(
 fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Vec<usize> {
     // The text put in. The spaces keep its `;` from joining a `;` beside it into a `;;`.
     const INSERTED: &str = " ; ";
-    let InputLocation::Pos(error_at) = e.location else {
-        unreachable!(
-            "pest places a parse error at a position, but this one is at {:?}",
-            e.location
-        );
+    let Some(error_at) = semicolon_expected_before_a_closing_token(e, source_code) else {
+        return vec![];
     };
     // Each `;` put in ends a `let`, an `eval` or an `if` in the form `if c { a }; b`, and the text
     // has at least as many of those words in it as there are of those expressions.
