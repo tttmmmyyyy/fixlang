@@ -2993,8 +2993,17 @@ pub fn is_inference_tyvar(name: &str) -> bool {
     inference_tyvar_id(name).is_some()
 }
 
+/// The name of the type variable the inference creates as its `id`-th, which
+/// `inference_tyvar_id` reads back.
+///
+/// # Examples
+/// `inference_tyvar_name(3)` is `"#a3"`.
+pub fn inference_tyvar_name(id: u32) -> Name {
+    INFERENCE_TYVAR_PREFIX.to_string() + &id.to_string()
+}
+
 /// The number of a type variable the inference created, which counts the variables its context
-/// created before it.
+/// created before it, as `inference_tyvar_name` writes it.
 ///
 /// # Examples
 /// `inference_tyvar_id("#a3")` is `Some(3)`, and `inference_tyvar_id("a")` is `None`.

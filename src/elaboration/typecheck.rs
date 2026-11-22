@@ -15,15 +15,15 @@ use crate::{
         type_env::TypeEnv,
         typedecl::describe_field_names,
         types::{
-            inference_tyvar_id, is_generated_tyvar, is_opaque_tyvar, is_type_wildcard_tyvar,
-            kind_star, make_tyvar, type_arrow, type_from_tyvar, type_tyapp, type_tycon, AssocType,
-            Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
-            TypeNode, MAX_TYPE_DEPTH,
+            inference_tyvar_id, inference_tyvar_name, is_generated_tyvar, is_opaque_tyvar,
+            is_type_wildcard_tyvar, kind_star, make_tyvar, type_arrow, type_from_tyvar, type_tyapp,
+            type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo,
+            TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
         },
     },
     constants::{
         ERR_AMBIGUOUS_NAME, ERR_MISSING_STRUCT_FIELD, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME,
-        INFERENCE_TYVAR_PREFIX, WRAP_OPAQUE_TYVAR_PREFIX,
+        WRAP_OPAQUE_TYVAR_PREFIX,
     },
     elaboration::name_resolution::NameResolutionContext,
     elaboration::report_tyvar_names::ReportTyVarNames,
@@ -968,7 +968,7 @@ impl TypeCheckContext {
     pub fn new_tyvar_name(&mut self) -> String {
         let id = self.tyvar_id;
         self.tyvar_id += 1;
-        INFERENCE_TYVAR_PREFIX.to_string() + &id.to_string()
+        inference_tyvar_name(id)
     }
 
     /// A type variable of the given kind that no type of this context names yet.
