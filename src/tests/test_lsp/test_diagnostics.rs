@@ -375,6 +375,38 @@ mod tests {
         assert_eq!(diag["range"]["end"], json!({ "line": 3, "character": 47 }));
     }
 
+    /// A type variable that stands for a variable of a global value's type is explained in the
+    /// editor as well, by a related location at the expression that uses the value.
+    #[test]
+    fn test_a_type_variable_from_the_type_of_a_global_value_is_a_related_location() {
+        let (_temp_dir, project_dir) = setup_test_env("global_value_tyvar_source");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+        let diag = sole_diagnostic_containing(&diagnostics, "does not match the expected type");
+
+        let related = diag["relatedInformation"]
+            .as_array()
+            .expect("the report carries related locations")
+            .iter()
+            .find(|related| {
+                related["message"] == "`#3` is `m` in the type of `Std::Iterator::fold_m`."
+            })
+            .unwrap_or_else(|| panic!("no related location explains `#3`: {:?}", diag));
+        // `main.fix` writes `fold_m` on the 14th line, from the 30th column, which the protocol
+        // counts from zero.
+        assert_eq!(
+            related["location"]["range"]["start"],
+            json!({ "line": 13, "character": 29 })
+        );
+        assert!(
+            related["location"]["uri"]
+                .as_str()
+                .expect("the related location carries a URI")
+                .ends_with("/main.fix"),
+            "the related location is in `main.fix`, but the report is {:?}",
+            diag
+        );
+    }
+
     /// A completion request leaves the error of another file reported.
     ///
     /// A completion re-checks the program in error-tolerant mode, which reports no diagnostic

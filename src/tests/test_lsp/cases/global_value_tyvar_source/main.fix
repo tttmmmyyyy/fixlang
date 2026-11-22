@@ -1,0 +1,21 @@
+module Main;
+
+type H k v = box struct { ks : Array k, vs : Array v };
+
+new_h : I64 -> H k v;
+new_h = |_| H { ks : [], vs : [] };
+
+insert : k -> v -> H k v -> H k v;
+insert = |k, v, h| h.mod_ks(push_back(k)).mod_vs(push_back(v));
+
+main : IO ();
+main = (
+    let memo = new_h(10);
+    let memo = *range(2, 11).fold_m(memo, |n, memo|
+        range(n+1, 11).fold(memo, |m, memo|
+            let memo = memo.insert(n, m);
+            memo
+        )
+    );
+    println(memo.@ks.get_size.to_string)
+);
