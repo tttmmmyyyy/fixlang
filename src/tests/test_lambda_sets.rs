@@ -2037,7 +2037,11 @@ mod dump_tests {
             .filter_map(|line| {
                 let (head, args) = line.split_once("= struct_make(")?;
                 let args = args.trim_end().strip_suffix(')')?;
-                let arity = if args.is_empty() { 0 } else { args.split(", ").count() };
+                let arity = if args.is_empty() {
+                    0
+                } else {
+                    args.split(", ").count()
+                };
                 let (_, provenance) = head.trim_end().rsplit_once('[')?;
                 (arity == field_count)
                     .then(|| provenance != "unboxed]" && !provenance.starts_with('{'))
