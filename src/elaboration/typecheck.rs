@@ -1071,12 +1071,6 @@ impl TypeCheckContext {
     }
 
     /// The type of `scheme`, with the constraints it is qualified by recorded in this context.
-    ///
-    /// # Arguments
-    /// * `mode` — `Require` replaces each variable the scheme generalizes by a fresh
-    ///   type variable and leaves the constraints for the inference to deduce; `Assume` keeps the
-    ///   generalized variables as the scheme writes them, fixes them against replacement, and
-    ///   grants the constraints to later deductions.
     pub fn instantiate_scheme(
         &mut self,
         scheme: &Arc<Scheme>,
