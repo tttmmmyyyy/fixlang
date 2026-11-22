@@ -367,8 +367,9 @@ fn too_large_sets(
     (0..store.len()).map(|id| judge.is_too_large(id)).collect()
 }
 
-/// Whether the capture struct of each of `classes` is boxed. Where an array or a boxed struct or
-/// union stores the values of a representation of `heap_reprs`, and a value would take more than
+/// Whether the capture struct of each of `classes` is boxed. Where a heap object holds in place the
+/// values of a representation of `heap_reprs` — an array or a boxed struct or union storing them, or
+/// the object of a closure whose capture struct holds them — and a value would take more than
 /// `MAX_LS_STORED_CAPTURE_WORDS` words laid out in place, the capture structs of its classes that
 /// take more than a word are boxed. A boxed capture struct takes one word, so the value then takes
 /// at most the tag of a union and a word.
@@ -776,6 +777,8 @@ pub fn represent(analysis: &Analysis, spec: &Specialization, type_env: &TypeEnv)
             hash: String::new(),
         });
     }
+    // The classes of the elements of the sets of closures.
+    let mut closure_classes: Set<u32> = Set::default();
     for id in 0..set_count {
         match of_set[id] {
             Repr::Single(class) => {
@@ -800,18 +803,24 @@ pub fn represent(analysis: &Analysis, spec: &Specialization, type_env: &TypeEnv)
             Repr::Closure => {
                 for (lam, args) in store.lam_elems(id as SetId) {
                     if analysis.lambdas[lam as usize].is_lifted_in_a_set_of_closures() {
-                        add_class(lam, args);
+                        closure_classes.insert(add_class(lam, args));
                     }
                 }
             }
         }
     }
-    let heap_reprs: Set<Repr> = heap_sets(analysis, spec)
+    // The values a heap object holds in place: those an array or a boxed struct or union stores,
+    // and those the capture struct of a class of closures holds, which the closure's object holds.
+    let mut heap_reprs: Set<Repr> = heap_sets(analysis, spec)
         .into_iter()
         .zip(&of_set)
-        .filter(|(in_heap, repr)| *in_heap && **repr != Repr::Closure)
+        .filter(|(in_heap, _)| *in_heap)
         .map(|(_, repr)| *repr)
         .collect();
+    for c in &closure_classes {
+        heap_reprs.extend(held_reprs[*c as usize].iter().copied());
+    }
+    heap_reprs.remove(&Repr::Closure);
     let boxed = boxed_classes(
         &classes,
         &unions,

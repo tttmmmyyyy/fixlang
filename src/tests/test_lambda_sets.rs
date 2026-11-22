@@ -2156,6 +2156,43 @@ mod dump_tests {
         );
     }
 
+    /// A set the capture struct of a lambda of a set of closures holds in place is held in the
+    /// closure's object, so it is boxed past `MAX_LS_STORED_CAPTURE_WORDS` words as one an array
+    /// stores is: the lambda `wrap` returns captures a value of its own set, which is so represented
+    /// by closures, and captures `f`, whose capture struct is boxed.
+    #[test]
+    fn test_a_set_a_closure_holds_in_place_is_a_boxed_capture_struct_past_the_stored_words() {
+        let source = r#"
+    module Main;
+
+    // Wraps `base` `n` times in a lambda applying `f` first.
+    wrap : I64 -> (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64);
+    wrap = |n, f, base| if n == 0 { base } else { let g = wrap(n - 1, f, base); |x| g(f(x)) };
+
+    main : IO () = (
+        let n = Array::fill(1, 1).@(0);
+        let c1 = n + 1;
+        let c2 = n + 2;
+        let c3 = n + 3;
+        let c4 = n + 4;
+        let c5 = n + 5;
+        let f = |x| x + c1 + c2 + c3 + c4 + c5;
+        let gs = Array::from_map(3, |i| wrap(1, f, |x| x + i));
+        println(gs.to_iter.fold(0, |g, acc| g(acc)).to_string)
+    );
+    "#;
+        let dump = build_run_and_read_rc_ir(
+            source,
+            "max",
+            "63",
+            "an array of closures each capturing a lambda that captures five words",
+        );
+        assert!(
+            main_capture_struct_is_boxed(&dump, 5),
+            "the capture struct of `f` should be boxed"
+        );
+    }
+
     /// A set of three lambdas whose values an array stores, a union taking more than
     /// `MAX_LS_STORED_CAPTURE_WORDS` words, boxes the capture structs of its classes that take more
     /// than a word, and leaves the one taking a word unboxed: the fold over the array calls each
