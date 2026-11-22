@@ -556,12 +556,8 @@ pub struct InstantiationSite {
 pub struct TypeCheckContext {
     /// The number the next type variable created here is named after.
     tyvar_id: u32,
-    /// For each type variable the inference created, by its number (`inference_tyvar_id`), the
-    /// expression or pattern it arose at, so that a diagnostic naming the variable can point at it.
-    /// A type variable of a signature has no entry: a diagnostic shows it under the name the
-    /// signature gives it, with no location. The key is a number so that copying the context, which
-    /// the check of a name does for each of its candidates, allocates nothing per entry.
-    tyvar_source: Map<u32, TyVarSource>,
+    /// The expression or pattern each type variable the inference created arose at.
+    tyvar_sources: TyVarSources,
     /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
     /// What the inference has settled about the type variables so far.
@@ -646,7 +642,7 @@ impl TypeCheckContext {
         let assumed_eqs = trait_env.type_equalities();
         Self {
             tyvar_id: Default::default(),
-            tyvar_source: Default::default(),
+            tyvar_sources: TyVarSources::default(),
             scope: Default::default(),
             type_env,
             trait_env: Arc::new(trait_env),
@@ -683,37 +679,26 @@ impl TypeCheckContext {
         }
     }
 
-    /// This context, with the source `checked` records for each type variable `checked` created.
-    /// `checked` is a copy of this context that went on to check an expression, so a variable this
-    /// context already has keeps the source recorded here: it is the one that agrees with the types
-    /// this context prints, where `checked` may have unified the variable with another one and
-    /// taken that one's source.
-    fn with_sources_of_tyvars_created_in(&self, checked: &TypeCheckContext) -> TypeCheckContext {
-        let mut ctx = self.clone();
-        for (id, source) in &checked.tyvar_source {
-            if *id >= self.tyvar_id {
-                ctx.tyvar_source.insert(*id, source.clone());
-            }
-        }
-        ctx
+    /// The sources this context records, with the source `checked` records for each type variable
+    /// `checked` created. `checked` is a copy of this context that went on to check an expression,
+    /// so a variable this context already has keeps the source recorded here: it is the one that
+    /// agrees with the types this context prints, where `checked` may have unified the variable
+    /// with another one and taken that one's source.
+    fn tyvar_sources_with_those_created_in(&self, checked: &TypeCheckContext) -> TyVarSources {
+        assert!(
+            checked.tyvar_id >= self.tyvar_id,
+            "`checked` numbers its type variables from {}, below this context's {}",
+            checked.tyvar_id,
+            self.tyvar_id
+        );
+        self.tyvar_sources
+            .with_those_created_in(&checked.tyvar_sources, self.tyvar_id)
     }
 
     /// Records `source` as the expression or pattern the type variable named `tyvar_name` arose at.
     /// `tyvar_name` must name a type variable the inference created.
     fn insert_tyvar_source(&mut self, tyvar_name: Name, source: TyVarSource) {
-        let id = inference_tyvar_id(&tyvar_name).unwrap_or_else(|| {
-            panic!(
-                "source recorded for `{}`, a type variable the inference did not create",
-                tyvar_name
-            )
-        });
-        self.tyvar_source.insert(id, source);
-    }
-
-    /// The expression or pattern the type variable named `tyvar_name` arose at, where the inference
-    /// created the variable and recorded one.
-    fn tyvar_source_of(&self, tyvar_name: &str) -> Option<&TyVarSource> {
-        self.tyvar_source.get(&inference_tyvar_id(tyvar_name)?)
+        self.tyvar_sources.insert(&tyvar_name, source);
     }
 
     /// Fresh type variable wrapped as `TypeNode`, with `src` registered
@@ -982,8 +967,9 @@ impl TypeCheckContext {
     /// kept. Only a type variable the inference created takes the source.
     fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let src = self
-            .tyvar_source_of(&tv2)
-            .or_else(|| self.tyvar_source_of(&tv1))
+            .tyvar_sources
+            .get(&tv2)
+            .or_else(|| self.tyvar_sources.get(&tv1))
             .cloned();
         let Some(src) = src else {
             return;
@@ -1392,15 +1378,22 @@ impl TypeCheckContext {
                         } else {
                             format!("`{}`", fullname.to_string())
                         };
-                        let report_ctx = self.with_sources_of_tyvars_created_in(tc);
-                        report_ctx.create_mismatch_report(e, whole, tvs, &ei.source, |names| {
-                            format!(
-                                "{} of type `{}` does not match the expected type `{}`.",
-                                subject,
-                                names.scheme(scm),
-                                names.ty(&expected_type),
-                            )
-                        })
+                        let tyvar_sources = self.tyvar_sources_with_those_created_in(tc);
+                        Self::create_mismatch_report(
+                            &tyvar_sources,
+                            e,
+                            whole,
+                            tvs,
+                            &ei.source,
+                            |names| {
+                                format!(
+                                    "{} of type `{}` does not match the expected type `{}`.",
+                                    subject,
+                                    names.scheme(scm),
+                                    names.ty(&expected_type),
+                                )
+                            },
+                        )
                     } else {
                         self.create_no_candidate_matches_report(
                             &var.name,
@@ -1850,49 +1843,7 @@ impl TypeCheckContext {
         names: &ReportTyVarNames,
         ref_no: Option<usize>,
     ) -> Vec<(String, Span)> {
-        let mut seen = Set::default();
-        let mut msg_srcs = vec![];
-        for tv in tvs {
-            if !seen.insert(tv.name.clone()) {
-                continue;
-            }
-            if let Some(src) = self.tyvar_source_of(&tv.name) {
-                let name = names.name(&tv.name);
-                let prefix = if let Some(ref_no) = ref_no {
-                    format!("`{}` in ({})", name, ref_no)
-                } else {
-                    format!("`{}`", name)
-                };
-                // Where the span is multi-line, too long or empty, the sentence names the
-                // expression without quoting it. It is complete on its own, since the source
-                // pointer attached separately may not read as a continuation of the message text.
-                let snippet = short_span_snippet(&src.span);
-                let msg = match (&src.role, snippet) {
-                    (TyVarRole::ExpectedTypeOf, Some(snippet)) => {
-                        format!("{} is the type expected for `{}`.", prefix, snippet)
-                    }
-                    (TyVarRole::ExpectedTypeOf, None) => {
-                        format!("{} is the type expected for this expression.", prefix)
-                    }
-                    (TyVarRole::ElementTypeOf, Some(snippet)) => {
-                        format!("{} is the element type of `{}`.", prefix, snippet)
-                    }
-                    (TyVarRole::ElementTypeOf, None) => {
-                        format!("{} is the element type of this array.", prefix)
-                    }
-                    (TyVarRole::InstantiatedVarOf { tyvar, value }, _) => {
-                        format!(
-                            "{} is `{}` in the type of `{}`.",
-                            prefix,
-                            tyvar.name,
-                            value.to_string()
-                        )
-                    }
-                };
-                msg_srcs.push((msg, src.span.clone()));
-            }
-        }
-        msg_srcs
+        self.tyvar_sources.location_messages(tvs, names, ref_no)
     }
 
     /// Build the error reported at `source` where a unification failed with
@@ -1910,7 +1861,7 @@ impl TypeCheckContext {
     /// * `body` — writes the text after the headline from the names the
     ///   report gives the type variables.
     fn create_mismatch_report(
-        &self,
+        tyvar_sources: &TyVarSources,
         unif_err: &UnificationErr,
         whole: Option<(&Arc<TypeNode>, &Arc<TypeNode>)>,
         body_vars: Vec<Arc<TyVar>>,
@@ -1935,7 +1886,7 @@ impl TypeCheckContext {
             body
         };
         let mut err = Error::from_msg_srcs(msg, &[source]);
-        err.add_srcs(self.create_tyvar_location_messages(names.vars(), &names, None));
+        err.add_srcs(tyvar_sources.location_messages(names.vars(), &names, None));
         err
     }
 
@@ -1987,12 +1938,8 @@ impl TypeCheckContext {
                 names.scheme(scm),
                 names.rename_unification_error(e).headline(),
             ));
-            let report_ctx = self.with_sources_of_tyvars_created_in(tc);
-            srcs.append(&mut report_ctx.create_tyvar_location_messages(
-                &own_tvs,
-                &names,
-                Some(ref_no),
-            ));
+            let tyvar_sources = self.tyvar_sources_with_those_created_in(tc);
+            srcs.append(&mut tyvar_sources.location_messages(&own_tvs, &names, Some(ref_no)));
         }
         let mut err = Error::from_msg_srcs(lines.join("\n"), &[source]);
         err.add_srcs(srcs);
@@ -2016,7 +1963,8 @@ impl TypeCheckContext {
         let unif_err = self.substitution.substitute_unification_error(unif_err);
         let mut tvs = expected_ty.free_vars_vec();
         found_ty.free_vars_to_vec(&mut tvs);
-        self.create_mismatch_report(
+        Self::create_mismatch_report(
+            &self.tyvar_sources,
             &unif_err,
             Some((&expected_ty, &found_ty)),
             tvs,
@@ -2050,7 +1998,8 @@ impl TypeCheckContext {
         let unif_err = self.substitution.substitute_unification_error(unif_err);
         let mut tvs = pat_ty.free_vars_vec();
         lambda_ty.free_vars_to_vec(&mut tvs);
-        self.create_mismatch_report(
+        Self::create_mismatch_report(
+            &self.tyvar_sources,
             &unif_err,
             Some((&pat_ty, &param_ty)),
             tvs,
@@ -2608,7 +2557,7 @@ impl TypeCheckContext {
             kind_env: self.kind_env.clone(),
             // What unification writes, and the answer discards.
             substitution: Substitution::default(),
-            tyvar_source: Map::default(),
+            tyvar_sources: TyVarSources::default(),
             predicates: vec![],
             // What unification leaves alone: the large ones start empty, the
             // ones that cost a scalar or a reference count are carried.
@@ -3360,6 +3309,109 @@ enum TyVarRole {
         tyvar: Arc<TyVar>,
         value: Arc<FullName>,
     },
+}
+
+/// For each type variable the inference created, by its number (`inference_tyvar_id`), the
+/// expression or pattern it arose at, so that a diagnostic naming the variable can point at it. A
+/// type variable of a signature has no entry: a diagnostic shows it under the name the signature
+/// gives it, with no location.
+///
+/// The key is a number, and the record of an instantiated variable shares its parts, so that
+/// copying a context, which the check of a name does for each of its candidates, copies no name.
+#[derive(Clone, Default)]
+struct TyVarSources(Map<u32, TyVarSource>);
+
+impl TyVarSources {
+    /// Records `source` as the expression or pattern the type variable named `tyvar_name` arose at.
+    /// `tyvar_name` must name a type variable the inference created.
+    fn insert(&mut self, tyvar_name: &str, source: TyVarSource) {
+        let id = inference_tyvar_id(tyvar_name).unwrap_or_else(|| {
+            panic!(
+                "source recorded for `{}`, a type variable the inference did not create",
+                tyvar_name
+            )
+        });
+        self.0.insert(id, source);
+    }
+
+    /// The expression or pattern the type variable named `tyvar_name` arose at, where the inference
+    /// created the variable and a source was recorded for it.
+    fn get(&self, tyvar_name: &str) -> Option<&TyVarSource> {
+        self.0.get(&inference_tyvar_id(tyvar_name)?)
+    }
+
+    /// These sources, with the source `later` records for each type variable numbered
+    /// `first_new_id` or above.
+    fn with_those_created_in(&self, later: &TyVarSources, first_new_id: u32) -> TyVarSources {
+        let mut sources = self.clone();
+        for (id, source) in &later.0 {
+            if *id >= first_new_id {
+                sources.0.insert(*id, source.clone());
+            }
+        }
+        sources
+    }
+
+    /// Say where each of `tvs` came from: for every type variable whose source
+    /// expression is known, a sentence naming it paired with that expression's
+    /// span, to hang off an error as extra source pointers. The sentences follow
+    /// the order of `tvs`, at most one for each variable.
+    ///
+    /// # Arguments
+    /// * `names` — the names the error prints for the type variables.
+    /// * `ref_no` — when the error text refers to several types by number, the
+    ///   number of the one these variables belong to; it is printed alongside
+    ///   each variable's name.
+    fn location_messages(
+        &self,
+        tvs: &[Arc<TyVar>],
+        names: &ReportTyVarNames,
+        ref_no: Option<usize>,
+    ) -> Vec<(String, Span)> {
+        let mut seen = Set::default();
+        let mut msg_srcs = vec![];
+        for tv in tvs {
+            if !seen.insert(tv.name.clone()) {
+                continue;
+            }
+            if let Some(src) = self.get(&tv.name) {
+                let name = names.name(&tv.name);
+                let prefix = if let Some(ref_no) = ref_no {
+                    format!("`{}` in ({})", name, ref_no)
+                } else {
+                    format!("`{}`", name)
+                };
+                // Where the span is multi-line, too long or empty, the sentence names the
+                // expression without quoting it. It is complete on its own, since the source
+                // pointer attached separately may not read as a continuation of the message text.
+                let snippet = short_span_snippet(&src.span);
+                let msg = match (&src.role, snippet) {
+                    (TyVarRole::ExpectedTypeOf, Some(snippet)) => {
+                        format!("{} is the type expected for `{}`.", prefix, snippet)
+                    }
+                    (TyVarRole::ExpectedTypeOf, None) => {
+                        format!("{} is the type expected for this expression.", prefix)
+                    }
+                    (TyVarRole::ElementTypeOf, Some(snippet)) => {
+                        format!("{} is the element type of `{}`.", prefix, snippet)
+                    }
+                    (TyVarRole::ElementTypeOf, None) => {
+                        format!("{} is the element type of this array.", prefix)
+                    }
+                    (TyVarRole::InstantiatedVarOf { tyvar, value }, _) => {
+                        format!(
+                            "{} is `{}` in the type of `{}`.",
+                            prefix,
+                            tyvar.name,
+                            value.to_string()
+                        )
+                    }
+                };
+                msg_srcs.push((msg, src.span.clone()));
+            }
+        }
+        msg_srcs
+    }
 }
 
 /// The trimmed source text `span` covers, where that text stands on one line and stays inside a
