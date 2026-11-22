@@ -529,7 +529,16 @@ impl<'e> SlotLayout<'e> {
         let in_heap = match info.variant {
             TyConVariant::Array => true,
             TyConVariant::Struct | TyConVariant::Union => in_heap || !info.is_unbox,
-            _ => return,
+            // A function pointer type `#Func{n}` names the types of its arguments and result, and
+            // holds no value of them.
+            TyConVariant::Primitive => return,
+            TyConVariant::Arrow
+            | TyConVariant::DynamicObject
+            | TyConVariant::ArrayStorage
+            | TyConVariant::Opaque => unreachable!(
+                "the type `{}` of a value has slots under a type constructor holding no field",
+                ty.ty.to_string()
+            ),
         };
         if !seen.insert((ty.ty.clone(), ty.slots.clone(), in_heap)) {
             return;

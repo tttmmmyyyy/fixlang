@@ -432,7 +432,8 @@ fn boxed_classes(
                 Repr::Single(c) => self.class_words(c),
                 Repr::Union(u) => {
                     let members = &self.unions[u as usize].members;
-                    UNION_TAG_WORDS + members.iter().map(|c| self.class_words(*c)).max().unwrap_or(0)
+                    let payload = members.iter().map(|c| self.class_words(*c)).max();
+                    UNION_TAG_WORDS + payload.expect("a union representing a set has no member")
                 }
             }
         }
@@ -511,14 +512,15 @@ fn in_place_words(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> usize {
         return 0;
     }
     let info = type_env.tycon_info(&ty.expect_toplevel_tycon());
-    let field_words = || {
-        ty.field_types(type_env)
-            .into_iter()
-            .map(|field| in_place_words(&field, type_env))
-    };
     match info.variant {
-        TyConVariant::Struct if info.is_unbox => field_words().sum(),
-        TyConVariant::Union if info.is_unbox => UNION_TAG_WORDS + field_words().max().unwrap_or(0),
+        TyConVariant::Struct if info.is_unbox => ty
+            .field_types(type_env)
+            .iter()
+            .map(|field| in_place_words(field, type_env))
+            .sum(),
+        TyConVariant::Union if info.is_unbox => {
+            UNION_TAG_WORDS + max_variant_words(&ty.field_types(type_env), type_env)
+        }
         _ => object_words(&ty_to_object_ty(ty, &vec![], type_env), type_env),
     }
 }
@@ -536,17 +538,11 @@ fn object_words(object_ty: &ObjectType, type_env: &TypeEnv) -> usize {
             ObjectFieldType::LambdaFunction(_)
             | ObjectFieldType::Ptr
             | ObjectFieldType::F32
-            | ObjectFieldType::F64
-            | ObjectFieldType::UnionTag => 1,
+            | ObjectFieldType::F64 => 1,
+            ObjectFieldType::UnionTag => UNION_TAG_WORDS,
             ObjectFieldType::Integer { bits, .. } => bits.div_ceil(64) as usize,
-            ObjectFieldType::SubObject(ty, _) => {
-                object_words(&ty_to_object_ty(ty, &vec![], type_env), type_env)
-            }
-            ObjectFieldType::UnionBuf(tys) => tys
-                .iter()
-                .map(|ty| object_words(&ty_to_object_ty(ty, &vec![], type_env), type_env))
-                .max()
-                .unwrap_or(0),
+            ObjectFieldType::SubObject(ty, _) => in_place_words(ty, type_env),
+            ObjectFieldType::UnionBuf(tys) => max_variant_words(tys, type_env),
             ObjectFieldType::ControlBlock
             | ObjectFieldType::TraverseFunction
             | ObjectFieldType::ArrayStorageBuf(_) => unreachable!(
@@ -555,6 +551,16 @@ fn object_words(object_ty: &ObjectType, type_env: &TypeEnv) -> usize {
             ),
         })
         .sum()
+}
+
+/// The words the largest of the variants `variants` of a union takes laid out in place
+/// (`in_place_words`).
+fn max_variant_words(variants: &[Arc<TypeNode>], type_env: &TypeEnv) -> usize {
+    variants
+        .iter()
+        .map(|ty| in_place_words(ty, type_env))
+        .max()
+        .expect("a union declares no variant")
 }
 
 /// Whether an array or a boxed struct or union stores the values of each set of `spec`: whether a
