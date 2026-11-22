@@ -11,7 +11,7 @@ use crate::constants::{
     TraverserWorkType, GENERATED_NAME_PREFIX, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
     INFERENCE_TYVAR_PREFIX, PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL,
     TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U128_NAME,
-    U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+    U16_NAME, U32_NAME, U64_NAME, U8_NAME, WRAP_OPAQUE_TYVAR_PREFIX,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
@@ -2985,6 +2985,12 @@ pub fn is_type_wildcard_tyvar(name: &str) -> bool {
 /// `GENERATED_NAME_PREFIX`.
 pub fn is_generated_tyvar(name: &str) -> bool {
     name.starts_with(GENERATED_NAME_PREFIX)
+}
+
+/// Whether a type variable name is one that stands for the concrete type behind an opaque type,
+/// which carries `WRAP_OPAQUE_TYVAR_PREFIX` in front of the opaque type's name.
+pub fn is_wrap_opaque_tyvar(name: &str) -> bool {
+    name.starts_with(WRAP_OPAQUE_TYVAR_PREFIX)
 }
 
 /// Whether a type variable name is one the inference created: `INFERENCE_TYVAR_PREFIX` followed by

@@ -16,9 +16,9 @@ use crate::{
         typedecl::describe_field_names,
         types::{
             inference_tyvar_id, inference_tyvar_name, is_generated_tyvar, is_opaque_tyvar,
-            is_type_wildcard_tyvar, kind_star, make_tyvar, type_arrow, type_from_tyvar, type_tyapp,
-            type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo,
-            TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
+            is_type_wildcard_tyvar, is_wrap_opaque_tyvar, kind_star, make_tyvar, type_arrow,
+            type_from_tyvar, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution,
+            Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
         },
     },
     constants::{
@@ -1094,9 +1094,9 @@ impl TypeCheckContext {
                         type_from_tyvar(new_tv.clone()),
                     ));
                     assert!(merge_ok);
-                    // Record opaque-type gen_vars (prefixed with WRAP_OPAQUE_TYVAR_PREFIX)
-                    // so their concrete types can be extracted after type-checking.
-                    if tv.name.starts_with(WRAP_OPAQUE_TYVAR_PREFIX) {
+                    // Record the variables that stand for opaque types, so that their concrete
+                    // types can be read off after type checking.
+                    if is_wrap_opaque_tyvar(&tv.name) {
                         assert!(
                             !self.opaque_instantiations.contains_key(&tv.name),
                             "Duplicate opaque type variable name: {}",
