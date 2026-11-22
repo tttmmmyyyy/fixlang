@@ -530,15 +530,16 @@ impl Substitution {
 /// constraints.
 pub enum InstantiationMode {
     /// Each variable the scheme generalizes is replaced by a fresh type variable, and each
-    /// constraint becomes one the type checking has to deduce. `site`, when given, is where an expression
-    /// uses the value whose type the scheme is; each fresh variable is recorded as arising there.
+    /// constraint becomes one the type checking has to deduce. `site`, when given, is where an
+    /// expression uses the value that has this scheme; diagnostics point each fresh variable there.
     Require { site: Option<InstantiationSite> },
-    /// Each constraint becomes one that later deductions may use.
+    /// Each variable the scheme generalizes stays as the scheme writes it and is fixed against
+    /// replacement, and each constraint becomes one that later deductions may use.
     Assume,
 }
 
-/// Where an expression uses a value, for the type variables the instantiation of the value's type
-/// scheme creates to point at.
+/// Where an expression uses a global value. Diagnostics point the type variables made by
+/// instantiating the value's type scheme at it.
 pub struct InstantiationSite {
     /// The value the expression uses.
     value: FullName,
@@ -1931,7 +1932,7 @@ impl TypeCheckContext {
     ///
     /// # Arguments
     /// * `failures` — for each value, the context its check ended in, its full name, its type and
-    ///   its error under the substitution of that check. The context is what explains the type
+    ///   its error under the substitution of that check. The context holds the sources of the type
     ///   variables that check created.
     fn create_no_candidate_matches_report(
         &self,
