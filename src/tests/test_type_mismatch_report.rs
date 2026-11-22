@@ -613,3 +613,38 @@ main = println(f(0));
         "`#2` is the type expected for `y`.\n\n8:23-8:24 in ",
     );
 }
+
+/// Verifies that where no value of an overloaded name matches and two of the values have type
+/// variables of their own, each line's variable is explained by the value of that line, even though
+/// the two checks name their variables alike.
+#[test]
+pub fn test_type_variables_of_two_overloaded_values_are_each_explained_in_their_own_line() {
+    let source = r##"
+module Main;
+
+namespace A {
+    conv : Array a -> a;
+    conv = |xs| xs.@(0);
+}
+
+namespace B {
+    conv : Option b -> b;
+    conv = |o| o.as_some;
+}
+
+main : IO () = (
+    let n : I64 = true.conv;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` in (1) is `a` in the type of `Main::A::conv`.\n\n15:24-15:28 in ",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` in (2) is `b` in the type of `Main::B::conv`.\n\n15:24-15:28 in ",
+    );
+}
