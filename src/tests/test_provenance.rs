@@ -501,6 +501,22 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that the routing finds an argument's object held after the call through the boxed
+    /// container it was read out of: the element read out of `rows` and the field read out of
+    /// `table` are named nowhere after their calls, but `rows` and `table` are, and each goes on
+    /// holding what was read out of it, so both calls are routed to the borrow version. The element
+    /// read out of `last`, which nothing reads afterwards, ends at its call, which keeps the own
+    /// version.
+    #[test]
+    fn test_routing_reads_the_container_a_value_was_read_out_of() {
+        assert_tally_routing(
+            "routing_read_out_of_a_held_container",
+            (2, 1),
+            "the calls handed a value read out of a container read after them should route to the \
+             borrow version, and the call whose container ends there should stay on the own version",
+        );
+    }
+
     /// Verifies that the routing finds an argument's object held after the call through the match
     /// binding it flows out of: `env` is whichever value the `if` takes, and `env` is read after the
     /// call, so the array read out of it outlives the call on either branch and the call is routed

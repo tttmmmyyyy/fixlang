@@ -274,7 +274,7 @@ pub(crate) fn origin(
 fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
     let here = (var.clone(), path.to_vec());
     match alias_step(vars, type_env, var, path) {
-        AliasStep::Stops => Origin::Exactly(here),
+        AliasStep::Stops | AliasStep::ReadOut(_) => Origin::Exactly(here),
         AliasStep::Projects((source, source_path)) => origin(vars, type_env, &source, &source_path),
         AliasStep::Gathers(gathered) => {
             // The leaves beneath name no object only for a value that holds no reference: either the
@@ -304,9 +304,14 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// one binding back. `origin` follows these edges to the object a leaf belongs to, and every name it
 /// passes on the way holds the same reference.
 pub(crate) enum AliasStep {
-    /// The value is its own object: a parameter or capture, a producer, a global, or a value read
-    /// out of a boxed container, which the read retains.
+    /// The value is its own object: a parameter or capture, a producer, or a global.
     Stops,
+    /// The value is its own object, read out of the boxed container this variable names, which the
+    /// read retains: a field of a boxed struct, the payload of a boxed union's variant, or the
+    /// result of a `Builtin` op that reads it out of an operand (`BuiltinOp::result_held_by_operand`).
+    /// A container's contents do not change while a name refers to it, so the container goes on
+    /// holding the object for as long as it lives.
+    ReadOut(FullName),
     /// The value is the value at this path of another variable: a move-bind, a field of an unboxed
     /// container, the payload of an unboxed union's variant or of a catch-all, or a pure projection
     /// of one operand of a `Builtin` op.
@@ -350,9 +355,21 @@ pub(crate) fn alias_step(
         Some(Binding::Builtin(op, args, result_ty)) => {
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
             let decl = op.result_prov(result_ty, &arg_tys, type_env);
+            if let Some(j) = op.result_held_by_operand(&arg_tys, type_env) {
+                assert!(
+                    decl.leaf_origins_at(path)
+                        .and_then(as_arg_projection)
+                        .is_none(),
+                    "`{}` reads its result out of operand {} and also declares it a projection of an \
+                     operand",
+                    op.name(),
+                    j
+                );
+                return AliasStep::ReadOut(args[j].name.clone());
+            }
             // A result leaf that is a single `Arg(j, p)` is a pure projection of argument `j`'s leaf
-            // `p` — an alias; anything else (a fresh allocation, a boxed-container read, a join of
-            // several sources) is a producer, stopping here. A `Builtin` op is never partially
+            // `p` — an alias; anything else (a fresh allocation, a join of several sources) is a
+            // producer, stopping here. A `Builtin` op is never partially
             // applied, so a well-formed `result_prov` names only real argument indices (`args[j]`
             // else panics). A path whose own record does not name an object is answered by the
             // leaves beneath it (`gather_leaves_under`): a reference-counting unit path may name an
@@ -364,8 +381,7 @@ pub(crate) fn alias_step(
         }
         Some(Binding::Field(container, idx)) => {
             if container.ty.is_box(type_env) {
-                // Reading a field of a boxed struct retains it: a producer.
-                AliasStep::Stops
+                AliasStep::ReadOut(container.name.clone())
             } else {
                 let mut container_path = vec![*idx];
                 container_path.extend_from_slice(path);
@@ -376,13 +392,13 @@ pub(crate) fn alias_step(
             // A catch-all binds the whole scrutinee: the same object.
             None => AliasStep::Projects((scrut.name.clone(), path.to_vec())),
             // An unboxed union's payload is the scrutinee's variant slot — an alias; a boxed union's
-            // payload is read out (retained) — a producer.
+            // payload is read out of it, which the read retains.
             Some(tag) if !scrut.ty.is_box(type_env) => {
                 let mut scrut_path = vec![*tag];
                 scrut_path.extend_from_slice(path);
                 AliasStep::Projects((scrut.name.clone(), scrut_path))
             }
-            Some(_) => AliasStep::Stops,
+            Some(_) => AliasStep::ReadOut(scrut.name.clone()),
         },
     }
 }

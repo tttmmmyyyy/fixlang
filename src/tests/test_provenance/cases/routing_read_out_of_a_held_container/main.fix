@@ -1,0 +1,30 @@
+module Main;
+
+// Read-only recursion: `arr` is only read, so it is inferred Borrow and `tally` gets a borrow
+// version.
+tally : Array I64 -> I64 -> I64;
+tally = |arr, i| (
+    if i == arr.@size { 0 } else { arr.@(i) + tally(arr, i + 1) }
+);
+
+// A boxed struct holding an array, so that a call can be handed the array read out of it.
+type Table = box struct { cells : Array I64 };
+
+main : IO ();
+main = (
+    pure();;
+    let rows = Array::fill(3, Array::fill(4, 1));
+    let table = Table { cells : Array::fill(5, 2) };
+    // `rows` is read after the call, so it goes on holding the element handed to the call, and
+    // routing to the borrow version removes the retain made for it.
+    let a = tally(rows.@(0), 0);
+    let b = rows.@size;
+    // `table` is read after the call, so it goes on holding the field handed to the call.
+    let c = tally(table.@cells, 0);
+    let d = table.@cells.@size;
+    // Nothing reads `last` after the call, so the element handed to it ends there and the call
+    // keeps the own version.
+    let last = Array::fill(2, Array::fill(6, 3));
+    let e = tally(last.@(1), 0);
+    println $ (a + b + c + d + e).to_string
+);

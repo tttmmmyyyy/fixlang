@@ -967,9 +967,10 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     /// Every name on the alias chain from `value` back to its object holds the reference `value`
     /// holds (`alias_step`): the container a field was destructured out of, the match binding an
     /// arm result flows into, the variable a move-bind renamed. A use of any of them after the call
-    /// keeps the object alive past it. Where the value may be one of several objects — a match
-    /// binding, or an op result whose leaves come from several operands — each of them has to be
-    /// held, unless a use of the value itself holds whichever it is.
+    /// keeps the object alive past it. So does a use of the boxed container the value was read out
+    /// of (`AliasStep::ReadOut`), which goes on holding the object. Where the value may be one of
+    /// several objects — a match binding, or an op result whose leaves come from several operands
+    /// — each of them has to be held, unless a use of the value itself holds whichever it is.
     ///
     /// # Arguments
     /// * `held` - the answers given so far in this query. A chain of match bindings, each rebuilding
@@ -983,6 +984,7 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         let answer = after.uses(var)
             || match alias_step(self.vars, self.type_env(), var, path) {
                 AliasStep::Stops => false,
+                AliasStep::ReadOut(container) => self.held_after(&(container, vec![]), after, held),
                 AliasStep::Projects(source) => self.held_after(&source, after, held),
                 AliasStep::Gathers(gathered) => {
                     // A leaf produced here belongs to this value alone, and a value with no leaf

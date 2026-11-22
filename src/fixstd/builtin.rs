@@ -3138,6 +3138,15 @@ impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
         i == 0
     }
 
+    fn result_held_by_operand(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Option<usize> {
+        // The element is read out of the array, operand 0, which keeps holding it.
+        Some(0)
+    }
+
     fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -5657,6 +5666,16 @@ impl BuiltinOp for StructGetOp {
         i == 0
     }
 
+    fn result_held_by_operand(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Option<usize> {
+        // A field getter reads a boxed struct (`field_read`), operand 0, which keeps holding the
+        // field.
+        Some(0)
+    }
+
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -6114,6 +6133,15 @@ impl BuiltinOp for CaptureProjectOp {
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
+    }
+
+    fn result_held_by_operand(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Option<usize> {
+        // The captured value is read out of the capture object, operand 0, which keeps holding it.
+        Some(0)
     }
 
     fn result_locality(
@@ -7864,6 +7892,21 @@ impl BuiltinOp for UnionAsOp {
     fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
         // `as` takes exactly the union, so `arg_tys[0]` is it; its variant `field_idx` is the payload.
         i == 0 && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
+    }
+
+    fn result_held_by_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<usize> {
+        // `as` takes exactly the union, so `arg_tys[0]` is it. A boxed union keeps holding the
+        // payload read out of it; an unboxed union's payload is a projection of it, which
+        // `result_prov` declares.
+        if arg_tys[0].is_box(type_env) {
+            Some(0)
+        } else {
+            None
+        }
     }
 
     fn result_prov(
