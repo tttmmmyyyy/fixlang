@@ -2024,8 +2024,8 @@ mod dump_tests {
     /// Folds over an array filled with `f` of `wide_capture_source`.
     const FOLD_OVER_AN_ARRAY_OF_F: &str = "Array::fill(3, f).to_iter.fold(0, |g, acc| g(acc))";
 
-    /// Whether the dump builds the capture struct of `Main` built from `field_count` values boxed. The
-    /// dump writes after a value the boxed objects it holds and where they come from: a boxed value
+    /// Whether the capture struct of `Main` with `field_count` fields that the dump builds is boxed.
+    /// The dump writes after a value the boxed objects it holds and where they come from: a boxed value
     /// as one source (`[fresh]`), an unboxed value as `[unboxed]` when it holds no boxed object and
     /// as its fields' sources in braces otherwise. Panics when the dump builds no such capture
     /// struct, or builds one both boxed and unboxed.

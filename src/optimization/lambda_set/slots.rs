@@ -505,8 +505,8 @@ impl<'e> SlotLayout<'e> {
     /// a boxed struct or union: each function reached from it through fields, variants and array
     /// elements, with an array element or a field or variant of a boxed type on the way. `in_heap`
     /// says the value itself is stored so. `seen` holds the types walked so far, with their slots
-    /// and whether their fields are stored so, which walks a recursive type once. `solver` gives the new variables of a
-    /// place the slots of `ty` leave untracked.
+    /// and whether their fields are stored so, so that a recursive type is walked once. `solver`
+    /// gives the new variables of a place the slots of `ty` leave untracked.
     pub fn collect_held_in_heap(
         &self,
         ty: &AType,
