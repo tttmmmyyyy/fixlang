@@ -420,26 +420,7 @@ impl TyConInfo {
     /// where the declaration was read from one, and the `document` field otherwise. Documentation
     /// with no text in it is answered as `None`.
     pub fn get_document(&self) -> Option<String> {
-        // Try to get document from the source code.
-        let docs = self.source.as_ref().and_then(|src| src.get_document().ok());
-
-        // If the documentation is empty, treat it as None.
-        let docs = match docs {
-            Some(docs) if docs.is_empty() => None,
-            _ => docs,
-        };
-
-        // If the document is not available in the source code, use the document field.
-        let docs = match docs {
-            Some(_) => docs,
-            None => self.document.clone(),
-        };
-
-        // Again, if the documentation is empty, treat it as None.
-        match docs {
-            Some(docs) if docs.is_empty() => None,
-            _ => docs,
-        }
+        Span::document_of_declaration(&self.source, &self.document)
     }
 }
 
