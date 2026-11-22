@@ -46,7 +46,6 @@ impl CaptureStruct {
     /// * `owner` - the global name of the function this capture struct is built for. Together with
     ///   `prefix`, it tells one capture struct from another.
     /// * `fields` - the captured names paired with their types, in the order the struct holds them.
-    /// * `is_unbox` - whether the struct is unboxed.
     pub fn new(
         prefix: &str,
         owner: &FullName,

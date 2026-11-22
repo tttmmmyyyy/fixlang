@@ -8,12 +8,9 @@ use super::{
     specialize::Specialization,
 };
 use crate::{
-    ast::{
-        type_env::TypeEnv,
-        types::{TyConVariant, TypeNode},
-    },
+    ast::{type_env::TypeEnv, types::TypeNode},
     constants::{
-        LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_STORED_CAPTURE_WORDS,
+        LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_STORED_VALUE_WORDS,
         MAX_LS_UNION_VARIANTS,
     },
     graph::Graph,
@@ -367,17 +364,19 @@ fn too_large_sets(
     (0..store.len()).map(|id| judge.is_too_large(id)).collect()
 }
 
-/// Whether the capture struct of each of `classes` is boxed. A value of a set represented by a
-/// capture struct or a union that an array or a boxed struct or union stores (`heap_reprs`) and that
-/// would take more than `MAX_LS_STORED_CAPTURE_WORDS` words laid out in place boxes the capture
-/// structs of its classes that take more than a word. A boxed capture struct takes one word, so the
-/// value then takes at most the tag of a union and a word.
+/// Whether the capture struct of each of `classes` is boxed. Where a heap object holds in place the
+/// values of a representation of `heap_reprs` — an array or a boxed struct or union storing them, or
+/// the object of a closure whose capture struct holds them — and a value would take more than
+/// `MAX_LS_STORED_VALUE_WORDS` words laid out in place, the capture structs of its classes that
+/// take more than a word are boxed. A boxed capture struct takes one word, so the value then takes
+/// at most the tag of a union and a word.
 ///
 /// A class's capture struct lays out the values its lambda captures (`capture_words`), and in place
 /// the values of the sets it holds (`held_reprs`), so the representations are judged from the inside
 /// out: a held representation is judged before one holding it, and is counted as the words it takes
 /// once judged. The capture structs of one class are the same wherever its values are, so a class
-/// boxed for one representation is boxed in every other.
+/// boxed for one representation is boxed in every other, and the capture struct of a union's member
+/// is judged as a representation of its own before the union is.
 fn boxed_classes(
     classes: &[LamClass],
     unions: &[UnionRepr],
@@ -387,10 +386,17 @@ fn boxed_classes(
 ) -> Vec<bool> {
     /// What `boxed_classes` reads, with what it has decided so far.
     struct Judge<'j> {
+        /// The classes, indexed as `Repr::Single` and `UnionRepr::members` name them.
         classes: &'j [LamClass],
+        /// The unions, indexed as `Repr::Union` names them.
         unions: &'j [UnionRepr],
+        /// For each class, the representations of the sets whose values its capture struct holds
+        /// in place.
         held_reprs: &'j [Vec<Repr>],
+        /// For each lambda, the words its captured values take laid out in place, besides the
+        /// functions it holds in place.
         capture_words: &'j [usize],
+        /// The representations whose values an array or a boxed struct or union stores.
         heap_reprs: &'j Set<Repr>,
         /// Whether each class is boxed, as decided so far.
         boxed: Vec<bool>,
@@ -409,11 +415,11 @@ fn boxed_classes(
 
         /// The words the capture struct of the class `c` lays out, held in place unboxed.
         fn unboxed_words(&self, c: u32) -> usize {
-            let held: usize = self.held_reprs[c as usize]
+            let held_words: usize = self.held_reprs[c as usize]
                 .iter()
                 .map(|h| self.words(*h))
                 .sum();
-            self.capture_words[self.classes[c as usize].lam as usize] + held
+            self.capture_words[self.classes[c as usize].lam as usize] + held_words
         }
 
         /// The words the capture struct of the class `c` takes held in place.
@@ -432,12 +438,8 @@ fn boxed_classes(
                 Repr::Single(c) => self.class_words(c),
                 Repr::Union(u) => {
                     let members = &self.unions[u as usize].members;
-                    UNION_TAG_WORDS
-                        + members
-                            .iter()
-                            .map(|c| self.class_words(*c))
-                            .max()
-                            .unwrap_or(0)
+                    let payload = members.iter().map(|c| self.class_words(*c)).max();
+                    UNION_TAG_WORDS + payload.expect("a union representing a set has no member")
                 }
             }
         }
@@ -451,8 +453,13 @@ fn boxed_classes(
                 for held in self.held_reprs[c as usize].clone() {
                     self.judge(held);
                 }
+                // A member of a union is the capture struct of a set of its own too, which may box
+                // it, so that set is judged before the union counts the member's words.
+                if repr != Repr::Single(c) {
+                    self.judge(Repr::Single(c));
+                }
             }
-            if self.heap_reprs.contains(&repr) && self.words(repr) > MAX_LS_STORED_CAPTURE_WORDS {
+            if self.heap_reprs.contains(&repr) && self.words(repr) > MAX_LS_STORED_VALUE_WORDS {
                 for c in self.classes_of(repr) {
                     if self.unboxed_words(c) > 1 {
                         self.boxed[c as usize] = true;
@@ -509,27 +516,18 @@ fn capture_words(analysis: &Analysis, type_env: &TypeEnv) -> Vec<usize> {
 
 /// The words a value of `ty` takes laid out in place, besides the functions it holds in place: those
 /// reached from it through fields of unboxed structs and unions alone. A function in a variant of an
-/// unboxed union is so counted beside the union rather than in its payload, which counts the value
-/// at least as large as it is.
+/// unboxed union is counted on top of the union, outside its largest variant, so the count is never
+/// below the words the value takes.
 fn in_place_words(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> usize {
     if ty.is_arrow() {
         return 0;
     }
-    let info = type_env.tycon_info(&ty.expect_toplevel_tycon());
-    let field_words = || {
-        ty.field_types(type_env)
-            .into_iter()
-            .map(|field| in_place_words(&field, type_env))
-    };
-    match info.variant {
-        TyConVariant::Struct if info.is_unbox => field_words().sum(),
-        TyConVariant::Union if info.is_unbox => UNION_TAG_WORDS + field_words().max().unwrap_or(0),
-        _ => object_words(&ty_to_object_ty(ty, &vec![], type_env), type_env),
-    }
+    object_words(&ty_to_object_ty(ty, &vec![], type_env), type_env)
 }
 
-/// The words a value of the object type `object_ty` takes laid out in place, each scalar counted as
-/// the words it spans: one, a pointer, for a boxed object.
+/// The words a value of the object type `object_ty` takes laid out in place, besides the functions
+/// it holds in place (`in_place_words`), each scalar counted as the words it spans: one, a pointer,
+/// for a boxed object.
 fn object_words(object_ty: &ObjectType, type_env: &TypeEnv) -> usize {
     if !object_ty.is_unbox {
         return 1;
@@ -541,17 +539,11 @@ fn object_words(object_ty: &ObjectType, type_env: &TypeEnv) -> usize {
             ObjectFieldType::LambdaFunction(_)
             | ObjectFieldType::Ptr
             | ObjectFieldType::F32
-            | ObjectFieldType::F64
-            | ObjectFieldType::UnionTag => 1,
+            | ObjectFieldType::F64 => 1,
+            ObjectFieldType::UnionTag => UNION_TAG_WORDS,
             ObjectFieldType::Integer { bits, .. } => bits.div_ceil(64) as usize,
-            ObjectFieldType::SubObject(ty, _) => {
-                object_words(&ty_to_object_ty(ty, &vec![], type_env), type_env)
-            }
-            ObjectFieldType::UnionBuf(tys) => tys
-                .iter()
-                .map(|ty| object_words(&ty_to_object_ty(ty, &vec![], type_env), type_env))
-                .max()
-                .unwrap_or(0),
+            ObjectFieldType::SubObject(ty, _) => in_place_words(ty, type_env),
+            ObjectFieldType::UnionBuf(tys) => max_variant_words(tys, type_env),
             ObjectFieldType::ControlBlock
             | ObjectFieldType::TraverseFunction
             | ObjectFieldType::ArrayStorageBuf(_) => unreachable!(
@@ -560,6 +552,16 @@ fn object_words(object_ty: &ObjectType, type_env: &TypeEnv) -> usize {
             ),
         })
         .sum()
+}
+
+/// The words the largest of the variants `variants` of a union takes laid out in place
+/// (`in_place_words`).
+fn max_variant_words(variants: &[Arc<TypeNode>], type_env: &TypeEnv) -> usize {
+    variants
+        .iter()
+        .map(|ty| in_place_words(ty, type_env))
+        .max()
+        .expect("a union declares no variant")
 }
 
 /// Whether an array or a boxed struct or union stores the values of each set of `spec`: whether a
@@ -698,7 +700,8 @@ pub fn represent(analysis: &Analysis, spec: &Specialization, type_env: &TypeEnv)
     let mut classes: Vec<LamClass> = vec![];
     let mut class_of_reprs: Map<(LamId, Vec<Repr>), u32> = Map::default();
     let mut class_of_elem: Map<(LamId, Vec<SetId>), u32> = Map::default();
-    // How each set whose values the capture struct of each class holds in place is represented.
+    // For each class, the representations of the sets whose values its capture struct holds in
+    // place.
     let mut held_reprs: Vec<Vec<Repr>> = vec![];
     let mut add_class = |lam: LamId, args: &[SetId]| -> u32 {
         let builder = builders.of(lam, args);
@@ -767,6 +770,8 @@ pub fn represent(analysis: &Analysis, spec: &Specialization, type_env: &TypeEnv)
             hash: String::new(),
         });
     }
+    // The classes of the elements of the sets of closures.
+    let mut closure_classes: Set<u32> = Set::default();
     for id in 0..set_count {
         match of_set[id] {
             Repr::Single(class) => {
@@ -791,18 +796,24 @@ pub fn represent(analysis: &Analysis, spec: &Specialization, type_env: &TypeEnv)
             Repr::Closure => {
                 for (lam, args) in store.lam_elems(id as SetId) {
                     if analysis.lambdas[lam as usize].is_lifted_in_a_set_of_closures() {
-                        add_class(lam, args);
+                        closure_classes.insert(add_class(lam, args));
                     }
                 }
             }
         }
     }
-    let heap_reprs: Set<Repr> = heap_sets(analysis, spec)
+    // The values a heap object holds in place: those an array or a boxed struct or union stores,
+    // and those the capture struct of a class of closures holds, which the closure's object holds.
+    let mut heap_reprs: Set<Repr> = heap_sets(analysis, spec)
         .into_iter()
         .zip(&of_set)
-        .filter(|(in_heap, repr)| *in_heap && **repr != Repr::Closure)
+        .filter(|(in_heap, _)| *in_heap)
         .map(|(_, repr)| *repr)
         .collect();
+    for c in &closure_classes {
+        heap_reprs.extend(held_reprs[*c as usize].iter().copied());
+    }
+    heap_reprs.remove(&Repr::Closure);
     let boxed = boxed_classes(
         &classes,
         &unions,

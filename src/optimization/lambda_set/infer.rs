@@ -365,17 +365,20 @@ fn infer_component(
         sites,
         ..
     } = inferencer;
-    let mut held_in_heap = vec![];
-    let mut seen = Set::default();
-    for node in node_types.iter().flatten() {
-        layout.collect_held_in_heap(
-            &node.ty,
-            false,
-            &mut analysis.solver,
-            &mut seen,
-            &mut held_in_heap,
-        );
-    }
+    let held_in_heap = {
+        let mut held_in_heap = vec![];
+        let mut seen = Set::default();
+        for node in node_types.iter().flatten() {
+            layout.collect_held_in_heap(
+                &node.ty,
+                false,
+                &mut analysis.solver,
+                &mut seen,
+                &mut held_in_heap,
+            );
+        }
+        held_in_heap
+    };
     generalize(
         analysis,
         symbols,

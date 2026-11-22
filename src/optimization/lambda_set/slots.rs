@@ -477,7 +477,8 @@ impl<'e> SlotLayout<'e> {
     /// itself where it is a function, and otherwise each function reached from it through fields
     /// of unboxed structs and unions alone. A function whose set is represented by a capture struct,
     /// or by a union of capture structs, is laid out where it is held, so these are the slots whose
-    /// capture structs a value of `ty` contains. `solver` gives the new variables of a place the
+    /// capture structs a value of `ty` contains, each in place or, where its class is boxed
+    /// (`represent::boxed_classes`), behind a pointer. `solver` gives the new variables of a place the
     /// slots of `ty` leave untracked.
     pub fn collect_held_in_place(&self, ty: &AType, solver: &mut Solver, out: &mut Vec<SetVar>) {
         let tc = ty.ty.expect_toplevel_tycon();
@@ -505,8 +506,8 @@ impl<'e> SlotLayout<'e> {
     /// a boxed struct or union: each function reached from it through fields, variants and array
     /// elements, with an array element or a field or variant of a boxed type on the way. `in_heap`
     /// says the value itself is stored so. `seen` holds the types walked so far, with their slots
-    /// and `in_heap`, so that a recursive type is walked once. `solver` gives the new variables of a
-    /// place the slots of `ty` leave untracked.
+    /// and whether their fields are stored so, so that a recursive type is walked once. `solver`
+    /// gives the new variables of a place the slots of `ty` leave untracked.
     pub fn collect_held_in_heap(
         &self,
         ty: &AType,
@@ -526,17 +527,26 @@ impl<'e> SlotLayout<'e> {
             return;
         }
         let info = self.type_env.tycon_info(&self.layout_tycon(&tc));
-        let in_heap = match info.variant {
+        let fields_in_heap = match info.variant {
             TyConVariant::Array => true,
             TyConVariant::Struct | TyConVariant::Union => in_heap || !info.is_unbox,
-            _ => return,
+            // A function pointer type `#Func{n}` names the types of its arguments and result, and
+            // holds no value of them.
+            TyConVariant::Primitive => return,
+            TyConVariant::Arrow
+            | TyConVariant::DynamicObject
+            | TyConVariant::ArrayStorage
+            | TyConVariant::Opaque => unreachable!(
+                "the type `{}` of a value has slots under a type constructor holding no field",
+                ty.ty.to_string()
+            ),
         };
-        if !seen.insert((ty.ty.clone(), ty.slots.clone(), in_heap)) {
+        if !seen.insert((ty.ty.clone(), ty.slots.clone(), fields_in_heap)) {
             return;
         }
         for i in 0..info.fields.len() {
             let field = self.field(ty, i, solver);
-            self.collect_held_in_heap(&field, in_heap, solver, seen, out);
+            self.collect_held_in_heap(&field, fields_in_heap, solver, seen, out);
         }
     }
 

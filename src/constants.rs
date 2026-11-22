@@ -234,7 +234,7 @@ pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 6;
 /// place. An array filled with one function capturing eight arrays would take 24 words per element
 /// with an unboxed capture struct, and one word with a boxed one, whose captured values the elements
 /// share.
-pub const MAX_LS_STORED_CAPTURE_WORDS: usize = 4;
+pub const MAX_LS_STORED_VALUE_WORDS: usize = 4;
 /// How many classes the elements of a lambda set represented by a union may make (lambda set
 /// specialization), which is how many variants that union may have. A set past it is represented
 /// by closures.
