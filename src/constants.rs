@@ -164,8 +164,9 @@ pub const FIX_CAP_PREFIX: &str = "#FixCap";
 /// The prefix, followed by a counter, of the parameter through which a function lifted from an
 /// application of `Std::fix` receives its capture struct.
 pub const FIX_CAP_PARAM_PREFIX: &str = "#fixcap";
-/// The first character of every name the compiler generates, of a value, a type or a type variable.
-/// No name the source writes starts with it.
+/// The first character of a name the compiler generates where no name the source writes may clash
+/// with it, such as `#a3` for a type variable the inference creates. No name the source writes
+/// starts with it.
 pub const GENERATED_NAME_PREFIX: char = '#';
 /// The prefix of the type variable standing for the concrete type behind an opaque type. The rest of
 /// the name is the name of the opaque type's TyCon, which the type checker reads back off it.
