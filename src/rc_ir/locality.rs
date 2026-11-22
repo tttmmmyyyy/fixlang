@@ -629,6 +629,22 @@ impl<'a> Walk<'a> {
                 let arg_shapes: Vec<ExtShape> = args.iter().map(|a| self.shape_of(a)).collect();
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 let declared = op.result_locality(&result.ty, &arg_tys, self.type_env);
+                // An op that reads its result out of an operand (`borrow_ify` lends that result
+                // while the operand lives on) declares the result taken out of that operand.
+                if let Some(j) = op.result_held_by_operand(&arg_tys, self.type_env) {
+                    assert_eq!(
+                        declared,
+                        ExtShape::uniform(
+                            &result.ty,
+                            self.type_env,
+                            LeafCond::take_out_of(&LeafCond::input_leaf(j, vec![])),
+                        ),
+                        "`{}` reads its result out of operand {}, but its locality does not take \
+                         the result out of it",
+                        op.name(),
+                        j
+                    );
+                }
                 let result_shape = declared.substitute(&arg_shapes);
                 let annotated = self.annotate_op(op, &arg_tys, &arg_shapes, &result_shape);
                 (result_shape, annotated.map(Rewritten::Op))
