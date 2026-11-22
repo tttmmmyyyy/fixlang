@@ -174,3 +174,75 @@ main = (
         ": The matched value has non-union type `Std::I64`, but it is matched on a variant pattern `some(_: _)`.",
     );
 }
+
+/// A type alias given fewer arguments than it takes, in an expression's annotation holding a `_`
+/// type wildcard.
+#[test]
+pub fn test_an_alias_not_fully_applied_quotes_a_type_wildcard_as_an_underscore() {
+    let source = r##"
+module Main;
+
+type Hoge q r = q -> r;
+
+main : IO ();
+main = (
+    let y = |x| x : Hoge _;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": Cannot resolve type alias `Main::Hoge` in `Main::Hoge _` because it is not fully applied.",
+    );
+}
+
+/// Type aliases that expand into each other, reached from an expression's annotation holding a `_`
+/// type wildcard.
+#[test]
+pub fn test_a_circular_alias_quotes_a_type_wildcard_as_an_underscore() {
+    let source = r##"
+module Main;
+
+type Hoge q = Fuga q;
+type Fuga r = Hoge r;
+
+main : IO ();
+main = (
+    let y = 1 : Hoge _;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": Circular type aliasing is found in `Main::Hoge _`.",
+    );
+}
+
+/// An associated type given a `_` type wildcard of a kind its parameter does not take.
+#[test]
+pub fn test_a_kind_mismatch_in_an_associated_type_quotes_a_type_wildcard_as_an_underscore() {
+    let source = r##"
+module Main;
+
+trait a : MyTrait {
+    type [f : *->*] MyAssoc a f;
+}
+
+impl I64 : MyTrait {
+    type MyAssoc I64 f = f I64;
+}
+
+main : IO ();
+main = (
+    let y = 1 : MyAssoc I64 _;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": Kind mismatch in `Main::MyTrait::MyAssoc Std::I64 _`. Expected `*->*`, found `*`.",
+    );
+}

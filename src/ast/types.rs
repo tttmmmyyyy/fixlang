@@ -3148,4 +3148,23 @@ mod tests {
         set.insert(other_name.clone());
         assert_eq!(set.len(), 2);
     }
+
+    /// Two distinct types holding type wildcards are written as two distinct strings by
+    /// `to_string`, and both are quoted alike by `to_string_as_written`.
+    #[test]
+    fn test_to_string_tells_apart_types_that_differ_in_their_wildcards() {
+        let wildcard = |n: u32| {
+            super::type_tyvar_star(&format!("{}{}", crate::constants::TYPE_WILDCARD_VAR_PREFIX, n))
+        };
+        let two_wildcards = crate::fixstd::builtin::make_tuple_ty(vec![wildcard(0), wildcard(1)]);
+        let one_wildcard_twice = crate::fixstd::builtin::make_tuple_ty(vec![wildcard(0), wildcard(0)]);
+
+        assert_ne!(
+            two_wildcards.to_string(),
+            one_wildcard_twice.to_string(),
+            "`(_0, _1)` and `(_0, _0)` were written alike"
+        );
+        assert_eq!(two_wildcards.to_string_as_written(), "(_, _)");
+        assert_eq!(one_wildcard_twice.to_string_as_written(), "(_, _)");
+    }
 }
