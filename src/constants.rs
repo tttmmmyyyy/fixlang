@@ -252,7 +252,8 @@ const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
 ///   function far down the chain grow exponentially with the length of the chain above it, while
 ///   the references on the way grow linearly, so the copies pass the budget within a few steps.
 ///
-/// The budget bounds the copies the rewrite makes; `specialize` lists every copy.
+/// A component asked for past its budget is collapsed (`specialize`): its copies are given closures
+/// for the functions its bodies depend on, so they share one body and ask for no further copies.
 pub const LS_COPY_BUDGET_BASE: usize = 64;
 /// The index of the function pointer among a closure's fields.
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;

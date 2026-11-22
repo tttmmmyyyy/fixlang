@@ -1042,7 +1042,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     .iter()
                     .map(|v| self.set_of(walk.instance, *v))
                     .collect();
-                self.spec.instance_of[&(site.component, args)]
+                self.spec.copy_reached(self.analysis, site.component, args)
             }
         };
         let copy = self.copy_of_instance[target];

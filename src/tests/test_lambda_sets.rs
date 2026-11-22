@@ -988,6 +988,37 @@ fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bo
     );
 }
 
+/// A depth of the chain of `branching_chain_source` at which a copy for each way a function is
+/// asked for would make some 2^24 copies.
+const LONG_BRANCHING_CHAIN_DEPTH: usize = 24;
+
+/// What `branching_chain_source(LONG_BRANCHING_CHAIN_DEPTH)` prints.
+const LONG_BRANCHING_CHAIN_OUTPUT: &str = "17458065";
+
+/// The chain of `branching_chain_source(LONG_BRANCHING_CHAIN_DEPTH)` builds in fewer than
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions (18 billion on x86-64) and computes its value.
+/// The functions far down the chain are collapsed once they go past the copy budget
+/// (`LS_COPY_BUDGET_BASE`), so the copies `specialize` lists stop doubling at each step.
+/// Where the machine does not let the test count instructions, the test checks the answer alone.
+#[test]
+fn test_a_long_chain_of_functions_each_calling_the_next_with_two_lambdas_lists_its_copies_in_bounded_work(
+) {
+    let description = format!(
+        "a chain of {} functions each calling the next with two lambdas",
+        LONG_BRANCHING_CHAIN_DEPTH
+    );
+    let printed = build_within_instructions_and_run(
+        &branching_chain_source(LONG_BRANCHING_CHAIN_DEPTH),
+        "max",
+        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
+        &description,
+    );
+    assert_eq!(
+        printed, LONG_BRANCHING_CHAIN_OUTPUT,
+        "the chain computed a wrong value"
+    );
+}
+
 /// What `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
 const RETURNING_BRANCHING_CHAIN_OUTPUT: &str = "2175390";
 
