@@ -3031,7 +3031,9 @@ impl BuiltinOp for ArrayUnsafeEmptyOp {
     }
 
     /// The array comes back with no element.
-    fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.no_flow(&flow.result());
+    }
 
     fn result_prov(
         &self,
@@ -5450,8 +5452,10 @@ impl BuiltinOp for ArrayGetSizeOp {
         vec![&mut self.arr_name]
     }
 
-    /// Only the size is read.
-    fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
+    /// Only the size is read, and the elements stay in the array.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.no_flow(&flow.operand(0));
+    }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
@@ -5518,8 +5522,10 @@ impl BuiltinOp for ArrayGetCapacityOp {
         vec![&mut self.arr_name]
     }
 
-    /// Only the capacity is read.
-    fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
+    /// Only the capacity is read, and the elements stay in the array.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.no_flow(&flow.operand(0));
+    }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
@@ -5646,10 +5652,12 @@ impl BuiltinOp for StructGetOp {
         vec![&mut self.var_name]
     }
 
-    /// The value read is the field's.
+    /// The value read is the field's, and the other fields stay in the struct.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
-        let field = flow.field(&flow.operand(0), self.field_index());
+        let s = flow.operand(0);
+        let field = flow.field(&s, self.field_index());
         flow.same(&field, &flow.result());
+        flow.no_flow(&s);
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
@@ -7667,10 +7675,12 @@ impl BuiltinOp for MakeUnionOp {
         vec![&mut self.field_name]
     }
 
-    /// The payload becomes the variant's.
+    /// The payload becomes the variant's, and the other variants hold nothing.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
-        let payload = flow.field(&flow.result(), self.field_idx);
+        let result = flow.result();
+        let payload = flow.field(&result, self.field_idx);
         flow.same(&payload, &flow.operand(0));
+        flow.no_flow(&result);
     }
 
     fn result_prov(
@@ -7855,10 +7865,12 @@ impl BuiltinOp for UnionAsOp {
         vec![&mut self.union_arg_name]
     }
 
-    /// The value read is the variant's payload.
+    /// The value read is the variant's payload, and the union keeps what it holds.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
-        let payload = flow.field(&flow.operand(0), self.field_idx);
+        let u = flow.operand(0);
+        let payload = flow.field(&u, self.field_idx);
         flow.same(&payload, &flow.result());
+        flow.no_flow(&u);
     }
 
     fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
@@ -8016,8 +8028,10 @@ impl BuiltinOp for UnionIsOp {
         vec![&mut self.union_arg_name]
     }
 
-    /// Only the tag is read.
-    fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
+    /// Only the tag is read, and the payload stays in the union.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.no_flow(&flow.operand(0));
+    }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
@@ -8253,7 +8267,9 @@ impl BuiltinOp for UndefinedInternalOp {
     }
 
     /// The op halts the program, so no value comes out of it.
-    fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.no_flow(&flow.result());
+    }
 
     fn result_prov(
         &self,

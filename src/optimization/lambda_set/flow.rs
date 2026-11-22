@@ -2,16 +2,22 @@
 
 use super::{
     slots::{AType, SlotLayout},
-    solver::{DynamicKind, Member, Solver},
+    solver::{DynamicKind, Member, SetVar, Solver},
 };
+use crate::misc::Set;
 
 /// The operands and the result of one builtin operation, for its `BuiltinOp::lambda_set_flow` to
 /// say how the functions they hold flow between them.
 ///
 /// A rule declares a flow by making two places the same (`same`), and declares a place whose
 /// values are closures the operation builds or calls at run time by making it Dynamic
-/// (`make_own_dynamic`, `make_all_dynamic`). A place the rule says nothing about holds nothing the
-/// operation put there, which is right for an operation that moves no function into it.
+/// (`make_own_dynamic`, `make_all_dynamic`). The places no function flows through — the functions
+/// of an operand the operation leaves where they are or drops, the places of the result it puts no
+/// function in — the rule declares with `no_flow`.
+///
+/// A rule accounts for every slot of every operand and of the result in one of these ways, and
+/// `unaccounted` names a slot it left out. A slot left out is the mark of a flow the rule forgot,
+/// which would leave the functions flowing there out of the set they reach.
 pub struct BuiltinFlow<'a, 'e> {
     /// The slots of the program's types.
     layout: &'a SlotLayout<'e>,
@@ -23,6 +29,8 @@ pub struct BuiltinFlow<'a, 'e> {
     result: AType,
     /// The name of the operation, recorded in the places it makes Dynamic.
     op_name: String,
+    /// The slots the rule has accounted for so far.
+    accounted: Set<SetVar>,
 }
 
 impl<'a, 'e> BuiltinFlow<'a, 'e> {
@@ -41,6 +49,7 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
             operands,
             result,
             op_name,
+            accounted: Set::default(),
         }
     }
 
@@ -69,6 +78,15 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
     /// out of the other.
     pub fn same(&mut self, a: &AType, b: &AType) {
         self.solver.unify(a, b);
+        self.account(a);
+        self.account(b);
+    }
+
+    /// Declares that no function flows through the slots of `ty` beyond the flows `same` declares
+    /// there: the operation leaves the functions an operand holds there where they are or drops
+    /// them, or puts no function in the result there.
+    pub fn no_flow(&mut self, ty: &AType) {
+        self.account(ty);
     }
 
     /// Declares the own slots of `ty` (for a function, the closure itself, leaving what it takes
@@ -77,6 +95,7 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
         let kind = DynamicKind::Builtin(self.op_name.clone());
         for v in self.layout.own_slots(ty) {
             self.solver.make_dynamic(*v, kind.clone());
+            self.accounted.insert(*v);
         }
     }
 
@@ -101,5 +120,39 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
             self.solver.make_all_dynamic(operand, &kind);
         }
         self.solver.make_all_dynamic(&self.result, &kind);
+        let all: Vec<SetVar> = self
+            .operands
+            .iter()
+            .chain([&self.result])
+            .flat_map(|ty| ty.slots.iter().copied())
+            .collect();
+        self.accounted.extend(all);
+    }
+
+    /// Records that the rule has accounted for every slot of `ty`.
+    fn account(&mut self, ty: &AType) {
+        self.accounted.extend(ty.slots.iter().copied());
+    }
+
+    /// A slot of an operand or of the result that the rule has not accounted for, named as the
+    /// place it is at and the type there; `None` where the rule accounted for every slot.
+    pub fn unaccounted(&self) -> Option<String> {
+        let places = self
+            .operands
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| (format!("operand {}", i), ty))
+            .chain([("the result".to_string(), &self.result)]);
+        for (place, ty) in places {
+            if let Some(slot) = ty.slots.iter().position(|v| !self.accounted.contains(v)) {
+                return Some(format!(
+                    "slot {} of {}, of type `{}`",
+                    slot,
+                    place,
+                    ty.ty.to_string()
+                ));
+            }
+        }
+        None
     }
 }

@@ -48,11 +48,12 @@ use std::{fs, path::PathBuf};
 /// The bodies of the lifted lambdas are moved into their callers on up to `num_threads` threads.
 /// With `dump_step`, writes the sets and the copies to a file under `.fixlang` named after it; a
 /// failure to write it ends the process with the error printed. With `develop_mode`, checks that
+/// the flow rule of each builtin operation accounts for every slot it reads and writes, and that
 /// the types of the rewritten program agree where its expressions meet.
 pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, develop_mode: bool) {
     let rewritten = {
         let layout = SlotLayout::new(&prg.type_env);
-        let mut analysis = infer(prg, &layout);
+        let mut analysis = infer(prg, &layout, develop_mode);
         let spec = specialize(&mut analysis);
         if let Some(step) = dump_step {
             let text = dump::render(&mut analysis, &spec, &layout);
@@ -120,7 +121,7 @@ mod tests {
         /// Infers the lambda sets of `prg` and the copies they ask for.
         fn new(prg: &'p Program) -> Self {
             let layout = SlotLayout::new(&prg.type_env);
-            let mut analysis = infer(prg, &layout);
+            let mut analysis = infer(prg, &layout, true);
             let spec = specialize(&mut analysis);
             Inferred {
                 prg,
