@@ -350,3 +350,31 @@ main : IO () = println $ f(3).to_string;
         );
     }
 }
+
+/// The `if` of the `let` is pointed at when the `;` put in before it ends an `eval` or an `if` in the
+/// form `if c { a }; b`, though the text holds no other `let`.
+#[test]
+pub fn test_the_if_of_the_only_let_is_pointed_at_after_a_semicolon_put_in_for_an_eval_or_an_if() {
+    let after_eval = r##"
+module Main;
+
+f : I64 -> I64 = |n| (
+    let x = if n > 0 { 1 };
+    eval x
+);
+
+main : IO () = println $ f(3).to_string;
+    "##;
+    assert_ifs_are_pointed_at(&after_eval, &["5:13-5:15"]);
+    let after_if = r##"
+module Main;
+
+f : I64 -> I64 = |n| (
+    let x = if n > 0 { 1 };
+    if x > 9 { 0 }
+);
+
+main : IO () = println $ f(3).to_string;
+    "##;
+    assert_ifs_are_pointed_at(&after_if, &["5:13-5:15"]);
+}
