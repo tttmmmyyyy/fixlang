@@ -10,7 +10,7 @@ use super::{
 use crate::{
     ast::{
         type_env::TypeEnv,
-        types::{TyConVariant, TypeNode},
+        types::TypeNode,
     },
     constants::{
         LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_STORED_CAPTURE_WORDS,
@@ -519,22 +519,12 @@ fn in_place_words(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> usize {
     if ty.is_arrow() {
         return 0;
     }
-    let info = type_env.tycon_info(&ty.expect_toplevel_tycon());
-    match info.variant {
-        TyConVariant::Struct if info.is_unbox => ty
-            .field_types(type_env)
-            .iter()
-            .map(|field| in_place_words(field, type_env))
-            .sum(),
-        TyConVariant::Union if info.is_unbox => {
-            UNION_TAG_WORDS + max_variant_words(&ty.field_types(type_env), type_env)
-        }
-        _ => object_words(&ty_to_object_ty(ty, &vec![], type_env), type_env),
-    }
+    object_words(&ty_to_object_ty(ty, &vec![], type_env), type_env)
 }
 
-/// The words a value of the object type `object_ty` takes laid out in place, each scalar counted as
-/// the words it spans: one, a pointer, for a boxed object.
+/// The words a value of the object type `object_ty` takes laid out in place, besides the functions
+/// it holds in place (`in_place_words`), each scalar counted as the words it spans: one, a pointer,
+/// for a boxed object.
 fn object_words(object_ty: &ObjectType, type_env: &TypeEnv) -> usize {
     if !object_ty.is_unbox {
         return 1;
