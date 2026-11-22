@@ -724,7 +724,7 @@ impl Pattern {
                 match t {
                     Some(t) => {
                         ret += ": ";
-                        ret += &t.to_string();
+                        ret += &t.to_string_as_written();
                     }
                     None => {}
                 }
@@ -866,10 +866,11 @@ impl Pattern {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::PatternNode;
     use crate::ast::expr::var_local;
     use crate::ast::types::tycon;
     use crate::fixstd::builtin::make_tuple_name_abs;
+    use std::sync::Arc;
 
     /// A tuple pattern of the field `index` alone, with `_` for the rest: the pattern a tuple's
     /// getter destructures with.

@@ -76,14 +76,8 @@ impl Predicate {
         Ok(())
     }
 
-    pub fn to_string_normalize(&self) -> String {
-        format!(
-            "{} : {}",
-            self.ty.to_string_normalize(),
-            self.trait_id.to_string()
-        )
-    }
-
+    /// This constraint written in source syntax, as `ty : Trait`, under the names its own type
+    /// variables carry.
     pub fn to_string(&self) -> String {
         format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
     }
@@ -99,7 +93,7 @@ impl Predicate {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Kind mismatch in `{}`. Expect: {}, found: {}.",
-                    self.to_string_normalize(),
+                    self.to_string(),
                     expected.to_string(),
                     found.to_string()
                 ),

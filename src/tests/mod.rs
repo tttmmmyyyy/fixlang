@@ -112,6 +112,7 @@ mod test_threaded_setting;
 mod test_trait_alias;
 mod test_trait_implementable_type;
 mod test_trait_member_scheme;
+mod test_type_in_diagnostic;
 mod test_type_mismatch_report;
 mod test_type_node_identity;
 mod test_type_sign_in_trait_impl;

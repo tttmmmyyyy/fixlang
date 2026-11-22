@@ -420,26 +420,7 @@ impl TyConInfo {
     /// where the declaration was read from one, and the `document` field otherwise. Documentation
     /// with no text in it is answered as `None`.
     pub fn get_document(&self) -> Option<String> {
-        // Try to get document from the source code.
-        let docs = self.source.as_ref().and_then(|src| src.get_document().ok());
-
-        // If the documentation is empty, treat it as None.
-        let docs = match docs {
-            Some(docs) if docs.is_empty() => None,
-            _ => docs,
-        };
-
-        // If the document is not available in the source code, use the document field.
-        let docs = match docs {
-            Some(_) => docs,
-            None => self.document.clone(),
-        };
-
-        // Again, if the documentation is empty, treat it as None.
-        match docs {
-            Some(docs) if docs.is_empty() => None,
-            _ => docs,
-        }
+        Span::document_of_declaration(&self.source, &self.document)
     }
 }
 
@@ -1256,33 +1237,53 @@ impl TypeNode {
         env: &TypeEnv,
     ) -> Result<Arc<TypeNode>, Errors> {
         let self_src = self.get_source().clone();
-        let ty = self.resolve_type_aliases_internal(env, vec![], &self_src)?;
+        let ty = self.resolve_type_aliases_internal(env, &mut vec![], &self_src)?;
         Ok(ty)
     }
 
     /// One step of the `resolve_type_aliases` walk.
     ///
     /// # Arguments
-    /// * `type_name_path` — the types the walk has expanded on the way to this one, written out
-    ///   with normalized variable names; a type met twice is an alias leading back to itself.
+    /// * `type_name_path` — the types the walk has expanded on the way to this one, each with its
+    ///   normalized string. A type whose normalized string is met twice is an alias leading back
+    ///   to itself, and the report quotes it as written where the walk first met it. The step
+    ///   pushes this type for the steps below it and pops it before returning, so the path is
+    ///   left as it was given.
     /// * `entry_type_src` — where the type the walk started from was written, which a report about
     ///   such an alias points at.
     fn resolve_type_aliases_internal(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
-        mut type_name_path: Vec<String>,
+        type_name_path: &mut Vec<(String, Arc<TypeNode>)>,
         entry_type_src: &Option<Span>,
     ) -> Result<Arc<TypeNode>, Errors> {
         // Check circular aliasing.
         let type_name = self.to_string_normalize();
-        if type_name_path.contains(&type_name) {
+        if let Some((_, first_met)) = type_name_path.iter().find(|(name, _)| *name == type_name) {
             return Err(Errors::from_msg_srcs(
-                format!("Circular type aliasing is found in `{}`.", type_name),
+                format!(
+                    "Circular type aliasing is found in `{}`.",
+                    first_met.to_string_as_written()
+                ),
                 &[entry_type_src],
             ));
         }
-        type_name_path.push(type_name);
+        type_name_path.push((type_name, self.clone()));
+        let resolved =
+            self.resolve_type_aliases_after_cycle_check(env, type_name_path, entry_type_src);
+        type_name_path.pop();
+        resolved
+    }
 
+    /// Expands the type alias at the head of this type, or, when the head is not an alias,
+    /// resolves the aliases in the types this one is built from. The caller has checked this type
+    /// for a cycle and pushed it onto `type_name_path`.
+    fn resolve_type_aliases_after_cycle_check(
+        self: &Arc<TypeNode>,
+        env: &TypeEnv,
+        type_name_path: &mut Vec<(String, Arc<TypeNode>)>,
+        entry_type_src: &Option<Span>,
+    ) -> Result<Arc<TypeNode>, Errors> {
         // First, treat the case where top-level type constructor is a type alias.
         // As an example, consider type alias `type Lazy a = () -> a`. Then `Lazy Bool` should be resolved to `() -> Bool`.
         let app_seq = self.flatten_type_application();
@@ -1295,7 +1296,7 @@ impl TypeNode {
                         format!(
                             "Cannot resolve type alias `{}` in `{}` because it is not fully applied.",
                             tc.to_string(),
-                            self.to_string_normalize()
+                            self.to_string_as_written()
                         ),
                         &[toplevel_ty.get_source()],
                     ));
@@ -1330,7 +1331,7 @@ impl TypeNode {
             Type::TyApp(fun_ty, arg_ty) => Ok(self
                 .set_tyapp_fun(fun_ty.resolve_type_aliases_internal(
                     env,
-                    type_name_path.clone(),
+                    type_name_path,
                     entry_type_src,
                 )?)
                 .set_tyapp_arg(arg_ty.resolve_type_aliases_internal(
@@ -1340,7 +1341,7 @@ impl TypeNode {
                 )?)),
             Type::AssocTy(_, args) => {
                 let args = collect_results(args.iter().map(|arg| {
-                    arg.resolve_type_aliases_internal(env, type_name_path.clone(), entry_type_src)
+                    arg.resolve_type_aliases_internal(env, type_name_path, entry_type_src)
                 }))?;
                 Ok(self.set_assocty_args(args))
             }
@@ -1578,21 +1579,13 @@ impl TypeNode {
             arg: &Arc<TypeNode>,
             arg_kind: &Arc<Kind>,
         ) -> Errors {
-            let type_strs = TypeNode::to_string_normalize_many(&[
-                application.clone(),
-                fun.clone(),
-                arg.clone(),
-            ]);
-            let application_str = &type_strs[0];
-            let fun_str = &type_strs[1];
-            let arg_str = &type_strs[2];
             Errors::from_msg_srcs(
                 format!(
                     "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
-                    application_str,
-                    fun_str,
+                    application.to_string_as_written(),
+                    fun.to_string_as_written(),
                     fun_kind.to_string(),
-                    arg_str,
+                    arg.to_string_as_written(),
                     arg_kind.to_string()
                 ),
                 &[application.get_source()],
@@ -1625,7 +1618,7 @@ impl TypeNode {
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "Kind mismatch in `{}`. Expected `{}`, found `{}`.",
-                                self.to_string_normalize(),
+                                self.to_string_as_written(),
                                 expected.to_string(),
                                 found.to_string()
                             ),
@@ -1883,46 +1876,48 @@ impl TypeNode {
     /// of appearance, so that two types differing only in the names of their variables are written
     /// alike.
     pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
-        TypeNode::to_string_normalize_many(&[self.clone()])
-            .pop()
-            .unwrap()
-    }
-
-    /// The types written in source syntax under one renaming of their type variables to `a`, `b`,
-    /// ... in order of appearance across the whole list, so that a variable two of them share is
-    /// written with one name in both.
-    pub fn to_string_normalize_many(tys: &[Arc<TypeNode>]) -> Vec<String> {
-        // Collect free variables keeping the order of appearance.
-        let mut free_vars = vec![];
-        for ty in tys {
-            ty.free_vars_to_vec(&mut free_vars);
-        }
-
-        // Create substitution that normalizes the names of type variables.
-        let mut s = Substitution::default();
         let mut next_tyvar_no = 0;
-        let mut appeared: Set<Name> = Set::default();
-        for fv in free_vars {
-            if appeared.contains(&fv.name) {
-                continue;
-            }
-            appeared.insert(fv.name.clone());
+        self.to_string_with_tyvars_renamed(|_| {
             let new_name = number_to_varname(next_tyvar_no);
-            let merge_ok = s.merge(&Substitution::single(
-                &fv.name,
-                type_tyvar(&new_name, &fv.kind),
-            ));
-            assert!(merge_ok, "`{}` is renamed twice.", fv.name);
             next_tyvar_no += 1;
-        }
-
-        // Substitute and stringify all types.
-        tys.iter()
-            .map(|ty| s.substitute_type(ty).to_string())
-            .collect()
+            Some(new_name)
+        })
     }
 
-    /// This type written in source syntax, under the names its own type variables carry.
+    /// This type as a diagnostic quotes it: written in source syntax under the names its own type
+    /// variables carry, with each `_` type wildcard written `_`.
+    ///
+    /// Every wildcard prints as `_`, so two distinct types can give one string. Where a string has
+    /// to tell types apart, use `to_string`.
+    ///
+    /// # Examples
+    /// The annotation `Array _ _` is quoted `Std::Array _ _`.
+    pub fn to_string_as_written(self: &Arc<TypeNode>) -> String {
+        self.to_string_with_tyvars_renamed(|tv| {
+            is_type_wildcard_tyvar(&tv.name).then(|| "_".to_string())
+        })
+    }
+
+    /// This type written by `to_string`, with each free type variable renamed to the name
+    /// `new_name` gives it, or kept where `new_name` gives none. `new_name` sees each variable
+    /// once, in order of first appearance.
+    fn to_string_with_tyvars_renamed(
+        self: &Arc<TypeNode>,
+        mut new_name: impl FnMut(&TyVar) -> Option<Name>,
+    ) -> String {
+        let mut renaming = Substitution::default();
+        for tv in self.free_vars_vec() {
+            if let Some(name) = new_name(&tv) {
+                let merge_ok =
+                    renaming.merge(&Substitution::single(&tv.name, type_tyvar(&name, &tv.kind)));
+                assert!(merge_ok, "`{}` is renamed twice", tv.name);
+            }
+        }
+        renaming.substitute_type(self).to_string()
+    }
+
+    /// This type written in source syntax, under the names its own type variables carry. Two
+    /// distinct types give two distinct strings.
     ///
     /// # Examples
     /// A saturated tuple is written `(a, b)`, a saturated arrow `a -> b`, and an argument that is
@@ -3056,8 +3051,9 @@ pub struct OpaqueTyConResolution {
 
 #[cfg(test)]
 mod tests {
-    use super::{kind_arrow, kind_star, make_tyvar, type_tyapp, TypeNode};
-    use crate::fixstd::builtin::{make_array_ty, make_i64_ty};
+    use super::{kind_arrow, kind_star, make_tyvar, type_tyapp, type_tyvar_star, TypeNode};
+    use crate::constants::TYPE_WILDCARD_VAR_PREFIX;
+    use crate::fixstd::builtin::{make_array_ty, make_i64_ty, make_tuple_ty};
     use crate::misc::Set;
     use crate::parse::sourcefile::{SourceFile, Span};
     use std::path::PathBuf;
@@ -3128,5 +3124,22 @@ mod tests {
         set.insert(higher.clone());
         set.insert(other_name.clone());
         assert_eq!(set.len(), 2);
+    }
+
+    /// Two distinct types holding type wildcards are written as two distinct strings by
+    /// `to_string`, and both are quoted alike by `to_string_as_written`.
+    #[test]
+    fn test_to_string_tells_apart_types_that_differ_in_their_wildcards() {
+        let wildcard = |n: u32| type_tyvar_star(&format!("{}{}", TYPE_WILDCARD_VAR_PREFIX, n));
+        let two_wildcards = make_tuple_ty(vec![wildcard(0), wildcard(1)]);
+        let one_wildcard_twice = make_tuple_ty(vec![wildcard(0), wildcard(0)]);
+
+        assert_ne!(
+            two_wildcards.to_string(),
+            one_wildcard_twice.to_string(),
+            "`(#typewildcard0, #typewildcard1)` and `(#typewildcard0, #typewildcard0)` were written alike"
+        );
+        assert_eq!(two_wildcards.to_string_as_written(), "(_, _)");
+        assert_eq!(one_wildcard_twice.to_string_as_written(), "(_, _)");
     }
 }

@@ -11971,6 +11971,73 @@ pub fn test_type_wildcard_applied_without_kind_is_error() {
     test_source_fail(&source, Configuration::develop_mode(), "Kind mismatch");
 }
 
+/// A `_` type wildcard written outside the type annotation of an expression or a pattern is an
+/// error at the `_`: in a signature, a trait member's type, an `impl`'s head, a struct field and a
+/// type alias.
+#[test]
+pub fn test_type_wildcard_outside_an_annotation_is_error() {
+    let message = ": A type wildcard `_` stands for a type to be inferred, and is written only in the type annotation of an expression or a pattern.";
+    for (decl, span) in [
+        ("f : Array _ -> I64;\nf = |x| 0;", "4:11-4:12"),
+        ("trait a : Tr { g : a -> Array _ -> I64; }", "4:31-4:32"),
+        (
+            "trait a : Tr { g : a -> I64; }\nimpl Array _ : Tr { g = |x| 0; }",
+            "5:12-5:13",
+        ),
+        ("type S = struct { x : Array (_ : *) };", "4:29-4:36"),
+        ("type A = Array _;", "4:16-4:17"),
+    ] {
+        let source = format!(
+            "\nmodule Main;\n\n{}\n\nmain : IO ();\nmain = pure();\n",
+            decl
+        );
+        test_source_fail(
+            &source,
+            Configuration::develop_mode(),
+            &format!("{}\nHINT: To leave a type unnamed in a signature or an `impl`, write a type variable such as `a`; in a type definition, also declare it as a parameter, as in `type S a = ...`.\n\n{} in ", message, span),
+        );
+    }
+}
+
+/// A `_` type wildcard in an annotation inside an `impl` member that has no signature of its own
+/// is inferred like any other: only the named type variables there have to be ones the `impl`'s
+/// type names.
+#[test]
+pub fn test_type_wildcard_in_an_impl_member_without_a_signature() {
+    let source = r##"
+module Main;
+
+trait a : Tr { g : a -> I64; }
+impl Array a : Tr { g = |x| (x : Array _).@size; }
+
+main : IO ();
+main = assert_eq(|_|"", [1, 2].g, 2);
+"##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A `_` type wildcard in a signature that follows a type annotation holding a `_` is an error: an
+/// annotation allows `_` only up to its own end.
+#[test]
+pub fn test_type_wildcard_after_an_annotation_is_error() {
+    let source = r##"
+module Main;
+
+x : I64 = 1 : _;
+
+f : Array _ -> I64;
+f = |a| 0;
+
+main : IO ();
+main = println((f([1]) + x).to_string);
+"##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        ": A type wildcard `_` stands for a type to be inferred, and is written only in the type annotation of an expression or a pattern.",
+    );
+}
+
 /// A type annotation inside a definition that names the type variables of the definition's own
 /// signature, one of them of a higher kind: `let reader : ReaderT e m e = ...` in a value of type
 /// `[m : Monad] e -> m e` annotates with the `e` and the `m` the signature bound.

@@ -482,9 +482,10 @@ pub const BIND_RESULT_VAR_PREFIX: &str = "#bind_result";
 /// wildcards (e.g. `#typewildcard0`). Each `_` in a type annotation gets a
 /// distinct name so that, for example, the two wildcards in `(_, _)` stay
 /// independent; the leading `#` keeps these names disjoint from any type
-/// variable a user can write. `validate_type_annotation` replaces each
-/// such name with a fresh inference variable, so it never surfaces to the
-/// user.
+/// variable a user can write. A wildcard stands only in the type annotation
+/// of an expression or a pattern, and `validate_type_annotation` replaces
+/// each such name with a fresh inference variable once it has checked the
+/// annotation's kinds. `TypeNode::to_string_as_written` writes the name as `_`.
 pub const TYPE_WILDCARD_VAR_PREFIX: &str = "#typewildcard";
 
 // Formatting
