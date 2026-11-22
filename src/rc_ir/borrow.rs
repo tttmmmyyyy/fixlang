@@ -47,6 +47,7 @@
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{Type, TypeNode};
+use crate::fixstd::builtin::StructGetOp;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
@@ -54,12 +55,10 @@ use crate::rc_ir::ast::{
     OwnershipShape, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
-use crate::fixstd::builtin::StructGetOp;
 use crate::rc_ir::ownership::{
     acted_references, alias_step, all_owned_units, collect_consumes,
-    collect_consumes_outside_call_arguments, origin,
-    rc_units, rhs_consumes, truncate_to_unit, unit_step, units_under, AliasStep, References,
-    UnitStep, VarTable,
+    collect_consumes_outside_call_arguments, origin, rc_units, rhs_consumes, truncate_to_unit,
+    unit_step, units_under, AliasStep, References, UnitStep, VarTable,
 };
 use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneKey, CloneRegistry};
 use std::iter;
@@ -891,29 +890,31 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                 containers.remove(root);
             }
         }
-        // The objects each variable's units belong to, which a use of the variable holds.
-        let objects: Map<FullName, Vec<VarPath>> = self
+        // The objects each unit of each variable may belong to.
+        let objects: Map<FullName, Vec<Vec<VarPath>>> = self
             .vars
             .var_tys
             .iter()
-            .chain(&self.vars.param_tys)
             .map(|(v, ty)| {
                 let objects = rc_units(ty, type_env)
                     .iter()
-                    .flat_map(|unit| {
+                    .map(|unit| {
                         origin(self.vars, type_env, v, unit)
                             .candidates()
                             .into_iter()
                             .cloned()
-                            .collect::<Vec<VarPath>>()
+                            .collect()
                     })
                     .collect();
                 (v.clone(), objects)
             })
             .collect();
+        let mut order = Map::default();
+        number_bindings(body, &self.vars.param_tys, &mut order);
         let lending = Lending {
             ctx: self,
             objects: &objects,
+            order: &order,
         };
         loop {
             let mut failing: Set<FullName> = Set::default();
@@ -1327,12 +1328,15 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
 }
 
 /// What `RewriteCtx::lent_reads` reads to tell where a container is held: the version being
-/// rewritten, and the objects each of its variables' units belong to.
+/// rewritten, the objects each of its variables' units belong to, and the order of its bindings.
 struct Lending<'l, 'a, 'v> {
     /// The version being rewritten.
     ctx: &'l RewriteCtx<'a, 'v>,
-    /// The objects each variable's units belong to (`origin`), which a use of the variable holds.
-    objects: &'l Map<FullName, Vec<VarPath>>,
+    /// The objects each unit of each variable may belong to (`origin`): one, or several where the
+    /// unit takes one of them by the path the code took.
+    objects: &'l Map<FullName, Vec<Vec<VarPath>>>,
+    /// The position of each variable's binding in the body (`number_bindings`).
+    order: &'l Map<FullName, usize>,
 }
 
 impl Lending<'_, '_, '_> {
@@ -1401,9 +1405,9 @@ impl Lending<'_, '_, '_> {
             // A global holds no value read out of a container.
             return;
         };
-        for (root, _) in objects {
+        for (root, _) in objects.iter().flatten() {
             if let Some(container) = containers.get(root) {
-                if !self.container_held(container, after, containers) {
+                if !self.container_held(container, self.order[root], after, containers) {
                     failing.insert(root.clone());
                 }
             }
@@ -1411,14 +1415,15 @@ impl Lending<'_, '_, '_> {
     }
 
     /// Whether the container named `container` is held at a point that `after` follows, holding the
-    /// objects of a value read out of it. A container this version holds throughout is
-    /// (`RewriteCtx::held_throughout`). A container of `containers`, itself to be lent, holds the
-    /// value only that way: its own uses are what its container is held for. Any other container is
-    /// held where the code after the point holds each object the container may be: where it names a
-    /// variable whose units belong to that object, a reference-count node of one included.
+    /// objects of a value read out of it by the binding at position `read` (`number_bindings`). A
+    /// container this version holds throughout is (`RewriteCtx::held_throughout`). A container of
+    /// `containers`, itself to be lent, holds the value only that way: its own uses are what its
+    /// container is held for. Any other container is held where the code after the point holds each
+    /// object the container may be (`object_held_after`).
     fn container_held(
         &self,
         container: &FullName,
+        read: usize,
         after: Option<&After>,
         containers: &Map<FullName, FullName>,
     ) -> bool {
@@ -1431,35 +1436,81 @@ impl Lending<'_, '_, '_> {
         let Some(after) = after else {
             return false;
         };
-        let objects = &self.objects[container];
+        let objects: Vec<&VarPath> = self.objects[container].iter().flatten().collect();
         !objects.is_empty()
             && objects
-                .iter()
-                .all(|object| self.object_held_after(object, after))
+                .into_iter()
+                .all(|object| self.object_held_after(object, read, after))
     }
 
-    /// Whether the code `after` names a variable one of whose units belongs to `object`.
-    fn object_held_after(&self, object: &VarPath, after: &After) -> bool {
-        self.names_object(object, after.k)
+    /// Whether the code `after` names a variable that holds, with the object unchanged since the
+    /// binding at position `read`, a unit belonging to `object` whichever path the code took: one
+    /// whose only object is `object` (`holds_unchanged`).
+    ///
+    /// Such a variable holds the reference the container held at the read, so a use of it after the
+    /// point is a use of that reference, which nothing consumed in between. An update of the
+    /// container's object made in place consumes the reference, unless a retain made the object
+    /// shared first, which keeps the object unchanged. A variable holding the object through such an
+    /// update, whose result is the object updated in place, is not read.
+    fn object_held_after(&self, object: &VarPath, read: usize, after: &After) -> bool {
+        self.names_object(object, read, after.k)
             || after
                 .enclosing
-                .is_some_and(|outer| self.object_held_after(object, outer))
+                .is_some_and(|outer| self.object_held_after(object, read, outer))
+    }
+
+    /// Whether the variable named `name` holds the references its units hold with no object updated
+    /// in place since the binding at position `read`: it was bound before that binding, or its
+    /// value is made of variables that do (`VarTable::sources_without_update`). `memo` holds the
+    /// answers given so far in this query, as a match binding reaches the variables before it along
+    /// many paths.
+    fn holds_unchanged(
+        &self,
+        name: &FullName,
+        read: usize,
+        memo: &mut Map<FullName, bool>,
+    ) -> bool {
+        if self.order.get(name).is_some_and(|at| *at < read) {
+            return true;
+        }
+        if let Some(answer) = memo.get(name) {
+            return *answer;
+        }
+        let type_env = self.ctx.type_env();
+        let answer = match self.ctx.vars.sources_without_update(name, type_env) {
+            Some(sources) => sources.into_iter().all(|source| {
+                source.ty.is_fully_unboxed(type_env)
+                    || self.holds_unchanged(&source.name, read, memo)
+            }),
+            None => false,
+        };
+        memo.insert(name.clone(), answer);
+        answer
     }
 
     /// Whether `node`, its continuation or the arms of its matches name a variable one of whose
-    /// units belongs to `object`: as a value, or in a reference-count node of that unit.
-    fn names_object(&self, object: &VarPath, node: &RcExprNode) -> bool {
+    /// units belongs to `object` alone, holding it unchanged since the binding at position `read`
+    /// (`holds_unchanged`): as a value, or in a reference-count node of that unit.
+    fn names_object(&self, object: &VarPath, read: usize, node: &RcExprNode) -> bool {
+        let unchanged = |v: &RcVar| self.holds_unchanged(&v.name, read, &mut Map::default());
+        let sole = |candidates: &[VarPath]| candidates == std::slice::from_ref(object);
         let holds = |v: &RcVar| {
             self.objects
                 .get(&v.name)
-                .is_some_and(|objects| objects.contains(object))
+                .is_some_and(|units| units.iter().any(|unit| sole(unit)))
+                && unchanged(v)
         };
         grow_stack(|| match node.expr.as_ref() {
             RcExpr::Retain(v, path, _, k) | RcExpr::Release(v, path, _, k) => {
-                origin(self.ctx.vars, self.ctx.type_env(), &v.name, path)
-                    .candidates()
-                    .contains(&object)
-                    || self.names_object(object, k)
+                (unchanged(v)
+                    && sole(
+                        &origin(self.ctx.vars, self.ctx.type_env(), &v.name, path)
+                            .candidates()
+                            .into_iter()
+                            .cloned()
+                            .collect::<Vec<VarPath>>(),
+                    ))
+                    || self.names_object(object, read, k)
             }
             RcExpr::Let(_, rhs, k) => {
                 let in_rhs = match rhs {
@@ -1468,17 +1519,67 @@ impl Lending<'_, '_, '_> {
                     RcRhs::Closure(_, caps) => caps.iter().any(holds),
                     RcRhs::Builtin(_, args) => args.iter().any(holds),
                     RcRhs::Match(scrut, arms) => {
-                        holds(scrut) || arms.iter().any(|arm| self.names_object(object, &arm.body))
+                        holds(scrut)
+                            || arms
+                                .iter()
+                                .any(|arm| self.names_object(object, read, &arm.body))
                     }
                 };
-                in_rhs || self.names_object(object, k)
+                in_rhs || self.names_object(object, read, k)
             }
             RcExpr::Destructure(v, _, _, k) | RcExpr::Eval(v, k) => {
-                holds(v) || self.names_object(object, k)
+                holds(v) || self.names_object(object, read, k)
             }
             RcExpr::Ret(v) => holds(v),
         })
     }
+}
+
+/// Numbers each variable `node` binds by the position of its binding, counting on from the
+/// positions `order` holds, and gives each of `params` position 0. A binding's position is past
+/// that of every variable bound before it on the way to it: the bindings of a match's arms precede
+/// the match's own, which binds the value the arms end in.
+fn number_bindings(
+    node: &RcExprNode,
+    params: &Map<FullName, Arc<TypeNode>>,
+    order: &mut Map<FullName, usize>,
+) {
+    for p in params.keys() {
+        order.insert(p.clone(), 0);
+    }
+    number_bindings_in(node, order);
+}
+
+/// `number_bindings` over `node` and its continuation.
+fn number_bindings_in(node: &RcExprNode, order: &mut Map<FullName, usize>) {
+    let bind = |name: &FullName, order: &mut Map<FullName, usize>| {
+        let at = order.len() + 1;
+        order.insert(name.clone(), at);
+    };
+    grow_stack(|| match node.expr.as_ref() {
+        RcExpr::Let(x, RcRhs::Match(_, arms), k) => {
+            for arm in arms {
+                bind(&arm.payload.name, order);
+                number_bindings_in(&arm.body, order);
+            }
+            bind(&x.name, order);
+            number_bindings_in(k, order);
+        }
+        RcExpr::Let(x, _, k) => {
+            bind(&x.name, order);
+            number_bindings_in(k, order);
+        }
+        RcExpr::Destructure(_, fields, _, k) => {
+            for (_, field) in fields {
+                bind(&field.name, order);
+            }
+            number_bindings_in(k, order);
+        }
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Eval(_, k) => {
+            number_bindings_in(k, order)
+        }
+        RcExpr::Ret(_) => {}
+    })
 }
 
 /// The code that runs after a point of a body: the continuation there, then the continuation of

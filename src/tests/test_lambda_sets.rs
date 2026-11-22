@@ -2024,17 +2024,20 @@ mod dump_tests {
     /// Folds over an array filled with `f` of `wide_capture_source`.
     const FOLD_OVER_AN_ARRAY_OF_F: &str = "Array::fill(3, f).to_iter.fold(0, |g, acc| g(acc))";
 
-    /// Whether the dump builds the capture struct of `f` of `wide_capture_source(words, ..)`, a
-    /// capture struct built from `words` values, boxed. Panics when the dump builds no such capture
-    /// struct, or builds one both boxed and unboxed.
+    /// Whether the dump builds boxed the capture struct of a lambda of `main` built from `words`
+    /// values, as `f` of `wide_capture_source(words, ..)` is. Panics when the dump builds no such
+    /// capture struct, or builds one both boxed and unboxed.
     fn wide_capture_struct_is_boxed(dump: &str, words: usize) -> bool {
         let unboxed: Set<bool> = dump
             .lines()
-            .filter(|line| line.contains(LS_CAP_PREFIX))
             .filter_map(|line| {
                 let (head, args) = line.split_once("= struct_make(")?;
+                let (_, ty) = head.split_once(" : ")?;
                 let args = args.trim_end().strip_suffix(')')?;
-                (args.split(", ").count() == words).then(|| head.contains("[unboxed]"))
+                let tycon = ty.split_whitespace().next()?;
+                (tycon.starts_with(&format!("Main::{}@main", LS_CAP_PREFIX))
+                    && args.split(", ").count() == words)
+                    .then(|| head.contains("[unboxed]"))
             })
             .collect();
         assert_eq!(
@@ -2122,6 +2125,38 @@ mod dump_tests {
         assert_calls_by_name(&dump, "Main::sum_up");
         assert!(
             wide_capture_struct_is_boxed(&dump, words),
+            "the capture struct should be boxed"
+        );
+    }
+
+    /// A lambda capturing two arrays, stored in an array, read out of it and called once, and
+    /// updating in place the array it captured, which it asserts unique.
+    const UNIQUE_CAPTURE_SOURCE: &str = r#"
+    module Main;
+
+    main : IO () = (
+        let n = *get_args.map(|args| args.@size);
+        let a0 = Array::fill(n, 0);
+        let a1 = Array::fill(n + 1, 1);
+        let f = |i| a0.assert_unique_array(|_| "the array the lambda captured").set(0, i).@(0) + a1.@size;
+        let fs = Array::fill(1, f);
+        println((fs.@(0))(7).to_string)
+    );
+    "#;
+
+    /// A value read out of a boxed capture struct at the struct's last use holds a reference of its
+    /// own, so once the struct is freed the value is unique again: the lambda called once updates
+    /// the array it captured in place.
+    #[test]
+    fn test_a_value_read_out_of_a_boxed_capture_struct_at_its_last_use_is_unique() {
+        let dump = build_run_and_read_rc_ir(
+            UNIQUE_CAPTURE_SOURCE,
+            "max",
+            "9",
+            "a lambda stored in an array updating the array it captured",
+        );
+        assert!(
+            wide_capture_struct_is_boxed(&dump, 2),
             "the capture struct should be boxed"
         );
     }

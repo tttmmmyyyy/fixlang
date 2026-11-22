@@ -87,9 +87,13 @@ mod integration_tests {
 
     /// Assert that every application of `op` involving `value` carries the state tag `expected` (the
     /// empty string for an operation that must keep the runtime dispatch), and that there is at least
-    /// one such application to judge.
+    /// one such application to judge. An application lending its result (tagged `@lent`) counts no
+    /// reference, so it has no state to judge.
     fn assert_op_state(dump: &str, op: &str, value: &str, expected: &str) {
-        let lines = op_lines(dump, op, value);
+        let lines: Vec<&str> = op_lines(dump, op, value)
+            .into_iter()
+            .filter(|line| !line.contains(" @lent"))
+            .collect();
         assert!(
             !lines.is_empty(),
             "no `{}` involving `{}` in the RC IR dump, so this case asserts nothing:\n{}",

@@ -98,6 +98,34 @@ impl VarTable {
         vars
     }
 
+    /// The variables whose references the value of `name` is made of with no object updated in
+    /// place: the variable a move-bind renames, the unboxed container a field is destructured out
+    /// of, the unboxed union a payload comes from (or the scrutinee a catch-all binds), the arm
+    /// results a match binding joins, and the operands of an op that branches on no operand's
+    /// uniqueness (`BuiltinOp::unique_check_operand`), which is the mark of an op updating an object
+    /// in place. `None` for any other variable: a parameter or capture, a producer, a value read out
+    /// of a boxed container, and the result of an op that may update an operand in place.
+    pub(crate) fn sources_without_update(
+        &self,
+        name: &FullName,
+        type_env: &TypeEnv,
+    ) -> Option<Vec<&RcVar>> {
+        match self.bindings.get(name)? {
+            Binding::Move(y) => Some(vec![y]),
+            Binding::Field(container, _) if !container.ty.is_box(type_env) => Some(vec![container]),
+            Binding::Payload(scrut, None) => Some(vec![scrut]),
+            Binding::Payload(scrut, Some(_)) if !scrut.ty.is_box(type_env) => Some(vec![scrut]),
+            Binding::Join(arm_results) => Some(arm_results.iter().collect()),
+            Binding::Builtin(op, args, _) => {
+                let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+                op.unique_check_operand(&arg_tys, type_env)
+                    .is_none()
+                    .then(|| args.iter().collect())
+            }
+            Binding::Param | Binding::Producer | Binding::Field(..) | Binding::Payload(..) => None,
+        }
+    }
+
     /// An empty table, which a constructor fills.
     fn empty() -> VarTable {
         VarTable {
