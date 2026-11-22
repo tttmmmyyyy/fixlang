@@ -8,12 +8,9 @@ use super::{
     specialize::Specialization,
 };
 use crate::{
-    ast::{
-        type_env::TypeEnv,
-        types::TypeNode,
-    },
+    ast::{type_env::TypeEnv, types::TypeNode},
     constants::{
-        LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_STORED_CAPTURE_WORDS,
+        LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_STORED_VALUE_WORDS,
         MAX_LS_UNION_VARIANTS,
     },
     graph::Graph,
@@ -370,7 +367,7 @@ fn too_large_sets(
 /// Whether the capture struct of each of `classes` is boxed. Where a heap object holds in place the
 /// values of a representation of `heap_reprs` — an array or a boxed struct or union storing them, or
 /// the object of a closure whose capture struct holds them — and a value would take more than
-/// `MAX_LS_STORED_CAPTURE_WORDS` words laid out in place, the capture structs of its classes that
+/// `MAX_LS_STORED_VALUE_WORDS` words laid out in place, the capture structs of its classes that
 /// take more than a word are boxed. A boxed capture struct takes one word, so the value then takes
 /// at most the tag of a union and a word.
 ///
@@ -378,7 +375,8 @@ fn too_large_sets(
 /// the values of the sets it holds (`held_reprs`), so the representations are judged from the inside
 /// out: a held representation is judged before one holding it, and is counted as the words it takes
 /// once judged. The capture structs of one class are the same wherever its values are, so a class
-/// boxed for one representation is boxed in every other.
+/// boxed for one representation is boxed in every other, and the capture struct of a union's member
+/// is judged as a representation of its own before the union is.
 fn boxed_classes(
     classes: &[LamClass],
     unions: &[UnionRepr],
@@ -455,8 +453,13 @@ fn boxed_classes(
                 for held in self.held_reprs[c as usize].clone() {
                     self.judge(held);
                 }
+                // A member of a union is the capture struct of a set of its own too, which may box
+                // it, so that set is judged before the union counts the member's words.
+                if repr != Repr::Single(c) {
+                    self.judge(Repr::Single(c));
+                }
             }
-            if self.heap_reprs.contains(&repr) && self.words(repr) > MAX_LS_STORED_CAPTURE_WORDS {
+            if self.heap_reprs.contains(&repr) && self.words(repr) > MAX_LS_STORED_VALUE_WORDS {
                 for c in self.classes_of(repr) {
                     if self.unboxed_words(c) > 1 {
                         self.boxed[c as usize] = true;
