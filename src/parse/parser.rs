@@ -617,8 +617,8 @@ pub fn parse_renamed_source_file(
 /// this again at each such error that follows, until the whole text parses: one token can close
 /// several `let`s and `eval`s left without their `;`, and the text after `e` can hold more of them.
 /// When the text holds a parse error of another kind, no `if` is reported. Each `;` put in at the
-/// position of `e` ends a `let`, an `eval` or an `if` in the form `if c { a }; b`, and leaves a hole
-/// after it. A `let` or an `eval` has an `if` to report: of the expressions on the right end of the
+/// position of `e` ends a construct that reads a `;`, and leaves a hole after it. A `let` or an
+/// `eval` has an `if` to report: of the expressions on the right end of the
 /// expression the `;` ends, the first that reads a `;`. An `if` whose else branch follows `else`
 /// reads none. When that first expression is a `let` or an `eval`, either of the two `;` could be the
 /// one meant for the outer `let` or `eval`, and the outer one has no `if` to report.
