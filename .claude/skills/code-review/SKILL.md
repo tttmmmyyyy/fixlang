@@ -313,7 +313,7 @@ Every other aspect works *within* the design the author chose — tidying the co
 
 1. **Is the goal worth what it costs?** The implementation now shows what the goal costs to reach, so this is the first point at which benefit and complexity can be weighed against each other.
 2. **Is this the best end state for the goal?** The best end state is the cleanest code base that meets the goal, existing code reshaped wherever that helps — the smallness of the diff counts for nothing.
-3. **Can the design's correctness be proved in a few paragraphs of prose?** A design that rests on a small, explicit theory can be checked by anyone who reads the argument. A design assembled from conditions added one counterexample at a time can be checked by nobody, and the next counterexample is usually already in it.
+3. **Can the design's correctness be proved in a few paragraphs of clean prose?** A design that rests on a small, explicit theory can be checked by anyone who reads the argument. A design assembled from conditions added one counterexample at a time can be checked by nobody, and the next counterexample is usually already in it. A proof that holds but is tangled marks the code as fragile all the same.
 4. **Does the implementation show the chosen design fighting the goal?** Some design flaws are invisible on the whiteboard and only become legible once the code is on the page — the shape of the implementation is itself evidence about the design.
 
 The author reads the report top-down and takes the first answer that applies: a rejected goal makes the design moot, and a better end state makes a local repair of the current one moot.
@@ -352,6 +352,8 @@ Compare the two by what can be counted: the concepts a reader must hold (types, 
 
 Take the mechanism the change adds — an analysis, a transformation, an optimization, an invariant other code relies on — and write the argument that it is correct: a few paragraphs of plain prose, running from premises the code base states to the property the goal needs. Writing it is the test. A design that admits such an argument is one a reader can check, and one a later change can be checked against.
 
+**The shape of the argument counts as much as its existence.** A clean argument rests on a few premises, states one invariant, and reaches the goal in a short chain of steps, each using one fact. A tangled one needs many premises, splits into cases woven through each other, or reaches into code the mechanism does not own to patch up what that code might do. Tangle in the proof is tangle in the design: the next change will break one of the threads, and nobody reading the code will see which. So an argument that goes through but is tangled is a finding like one that does not go through, and the alternative to name is the design whose argument is clean — often one that moves the fact the proof keeps reaching for into the place that owns it.
+
 - **Name the premises.** Each step rests on a fact about the rest of the system: an invariant of the IR, a guarantee another pass makes, the contract of a function or an op. A premise the code checks — an assertion, a validator, a type — is solid. A premise kept only by convention — a comment, the habit of another module, a declaration elsewhere that happens to be right — is where the next counterexample will come from. List those.
 - **Match the steps to the code.** A condition in the code that no step of the argument uses is either dead or guarding a case the argument missed. A step the argument needs and no code enforces is a bug or a missing check.
 - **Look past the mechanism.** The argument covers everything that runs on what the mechanism decided: a later pass that moves or deletes the nodes it relied on keeps the property only if its own argument says so.
@@ -361,8 +363,9 @@ The signs of a design with no such argument:
 - Conditions added one per counterexample, each arriving with its own reproduction in the history.
 - A predicate whose meaning can be stated only by listing its cases.
 - A second model of a fact the code base already models. The argument would have to show the two agree, and nothing keeps them agreeing.
+- A correctness that depends on code that runs later and does not know the mechanism exists: the argument then needs a premise about each such pass.
 
-When the argument cannot be written, or needs a premise kept only by convention, flag it: give the argument as far as it goes, the step where it stops, and a design whose argument goes through — often one that rests on a model the code base already has. When the argument goes through, give its outline in the report in a few lines, with its premises; the author cites it in the pull request, and the next reviewer checks against it.
+When the argument cannot be written, is tangled, or needs a premise kept only by convention, flag it: give the argument as far as it goes, the step where it stops, and a design whose argument goes through — often one that rests on a model the code base already has. When the argument goes through, give its outline in the report in a few lines, with its premises; the author cites it in the pull request, and the next reviewer checks against it.
 
 ### What the implementation reveals about the design
 
