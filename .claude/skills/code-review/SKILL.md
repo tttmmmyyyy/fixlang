@@ -51,7 +51,7 @@ What an aspect notices outside the hunks reaches the orchestrator as a finding, 
 Run these aspects in this order, each in its own subagent. The **flag-only** aspects (they leave the tree as they found it; they report findings, and `test-sufficiency` hands back test bodies and their runs with them) run first; then the **editing** aspects (they modify files, and each is committed on its own — see the Procedure):
 
 1. **no-personal-info** — scan every changed file for the user's personal data (real name, personal email, phone, address, secrets) embedded in checked-in files, and flag it. Runs first as a gate: a finding stops the review before anything is committed.
-2. **design-fit** — with the implementation now visible, weigh whether the goal is worth the complexity it adds, whether the change reaches the best end state for it, and whether the chosen design fights it; flag what it finds (this aspect never redesigns).
+2. **design-fit** — with the implementation now visible, weigh whether the goal is worth the complexity it adds, whether the change reaches the best end state for it, whether its correctness can be argued in prose, and whether the chosen design fights it; flag what it finds (this aspect never redesigns).
 3. **refactor-scope** — check whether the change bent itself out of shape to leave existing code untouched; flag the scars a declined refactor left behind (this aspect never refactors).
 4. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; write the test each gap wants, run it green and red, and hand it back for the orchestrator to judge (this aspect leaves the tree as it found it).
 5. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
@@ -309,11 +309,12 @@ For trait members, "outside its own declaration lines" means: outside both the `
 
 ## Aspect: design-fit
 
-Every other aspect works *within* the design the author chose — tidying the code, the imports, the comments. This one steps outside it and asks three questions the author could not fully answer before writing the code, in order from the largest decision to the smallest:
+Every other aspect works *within* the design the author chose — tidying the code, the imports, the comments. This one steps outside it and asks four questions the author could not fully answer before writing the code, in order from the largest decision to the smallest:
 
 1. **Is the goal worth what it costs?** The implementation now shows what the goal costs to reach, so this is the first point at which benefit and complexity can be weighed against each other.
 2. **Is this the best end state for the goal?** The best end state is the cleanest code base that meets the goal, existing code reshaped wherever that helps — the smallness of the diff counts for nothing.
-3. **Does the implementation show the chosen design fighting the goal?** Some design flaws are invisible on the whiteboard and only become legible once the code is on the page — the shape of the implementation is itself evidence about the design.
+3. **Can the design's correctness be proved in a few paragraphs of prose?** A design that rests on a small, explicit theory can be checked by anyone who reads the argument. A design assembled from conditions added one counterexample at a time can be checked by nobody, and the next counterexample is usually already in it.
+4. **Does the implementation show the chosen design fighting the goal?** Some design flaws are invisible on the whiteboard and only become legible once the code is on the page — the shape of the implementation is itself evidence about the design.
 
 The author reads the report top-down and takes the first answer that applies: a rejected goal makes the design moot, and a better end state makes a local repair of the current one moot.
 
@@ -347,6 +348,22 @@ Compare the two by what can be counted: the concepts a reader must hold (types, 
 
 `refactor-scope` looks at the same code bottom-up, from the seam between the new code and the old, for the specific scars a declined refactor leaves. This question is top-down: it starts from the goal and may arrive at a design the current one is nowhere near, such as a different data structure or a different place in the pipeline for the work to happen.
 
+### Can its correctness be proved in prose?
+
+Take the mechanism the change adds — an analysis, a transformation, an optimization, an invariant other code relies on — and write the argument that it is correct: a few paragraphs of plain prose, running from premises the code base states to the property the goal needs. Writing it is the test. A design that admits such an argument is one a reader can check, and one a later change can be checked against.
+
+- **Name the premises.** Each step rests on a fact about the rest of the system: an invariant of the IR, a guarantee another pass makes, the contract of a function or an op. A premise the code checks — an assertion, a validator, a type — is solid. A premise kept only by convention — a comment, the habit of another module, a declaration elsewhere that happens to be right — is where the next counterexample will come from. List those.
+- **Match the steps to the code.** A condition in the code that no step of the argument uses is either dead or guarding a case the argument missed. A step the argument needs and no code enforces is a bug or a missing check.
+- **Look past the mechanism.** The argument covers everything that runs on what the mechanism decided: a later pass that moves or deletes the nodes it relied on keeps the property only if its own argument says so.
+
+The signs of a design with no such argument:
+
+- Conditions added one per counterexample, each arriving with its own reproduction in the history.
+- A predicate whose meaning can be stated only by listing its cases.
+- A second model of a fact the code base already models. The argument would have to show the two agree, and nothing keeps them agreeing.
+
+When the argument cannot be written, or needs a premise kept only by convention, flag it: give the argument as far as it goes, the step where it stops, and a design whose argument goes through — often one that rests on a model the code base already has. When the argument goes through, give its outline in the report in a few lines, with its premises; the author cites it in the pull request, and the next reviewer checks against it.
+
 ### What the implementation reveals about the design
 
 Look for concrete evidence, in the code as written, that the chosen design fights the goal:
@@ -361,13 +378,13 @@ Look for concrete evidence, in the code as written, that the chosen design fight
 ### Discipline
 
 - **Flag only, never redesign.** No edits.
-- **Evidence, not taste.** Raise a finding only on evidence: the benefit and the cost laid side by side, two end states compared on a count, or a pattern in the implementation from the list above. "You could also structure it as X," with nothing measured against the current shape, is noise — skip it.
+- **Evidence, not taste.** Raise a finding only on evidence: the benefit and the cost laid side by side, two end states compared on a count, a correctness argument and the step where it stops, or a pattern in the implementation from the list above. "You could also structure it as X," with nothing measured against the current shape, is noise — skip it.
 - **The size of the rework is no argument for the current design.** A better end state is flagged however much it would take to reach. State that cost so the author can plan for it, and leave the decision to them.
 - **Name the alternative and its cost.** A finding must state: the goal, the current design, the evidence, the alternative — the rejected or narrowed goal, or the better end state — and what reaching it would cost. A flag with no proposed direction is not actionable.
 
 ### Report
 
-- **Flagged for review**: the goal as you understood it; then the findings in the order of the three questions — the worth of the goal, the end state, the evidence in the implementation — each with its evidence and the alternative with its rough cost.
+- **Flagged for review**: the goal as you understood it; then the findings in the order of the four questions — the worth of the goal, the end state, the correctness argument, the evidence in the implementation — each with its evidence and the alternative with its rough cost.
 - If the goal is worth its cost and the design fits it well, say so in one line and flag nothing. A clean result here is the common case, not a failure to find something.
 
 ---
