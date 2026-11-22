@@ -509,8 +509,8 @@ main : IO () = (
     test_source_fail_excludes(source, Configuration::develop_mode(), "` is `#");
 }
 
-/// Where the use of a global value is itself what does not match, the type variables its type
-/// gives are explained as well.
+/// Verifies that where the type of a global value an expression uses does not match the expected
+/// type, the error explains the type variables of the value's type.
 #[test]
 pub fn test_a_type_variable_from_the_type_of_a_global_value_that_does_not_match_is_explained() {
     let source = r##"
@@ -529,8 +529,8 @@ main = (
     );
 }
 
-/// Where no value of an overloaded name matches, a type variable a value's type gives is explained
-/// under the number of that value's line.
+/// Verifies that where no value of an overloaded name matches, the error explains a type variable
+/// of a value's type with the number of that value's line, as in `in (1)`.
 #[test]
 pub fn test_a_type_variable_from_the_type_of_a_global_value_is_explained_in_its_line_of_the_overloads(
 ) {
