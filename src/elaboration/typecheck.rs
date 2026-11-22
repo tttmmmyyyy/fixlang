@@ -1344,13 +1344,14 @@ impl TypeCheckContext {
                         .filter_map(|cand| cand.as_ref().err())
                         .map(|(tc, fullname, scm, e)| {
                             (
+                                tc,
                                 fullname,
                                 tc.substitution.substitute_scheme(scm),
                                 tc.substitution.substitute_unification_error(e),
                             )
                         })
                         .collect::<Vec<_>>();
-                    let mut error = if let [(fullname, scm, e)] = failures.as_slice() {
+                    let mut error = if let [(tc, fullname, scm, e)] = failures.as_slice() {
                         // A value with no type variable of its own, mismatched with the expected
                         // type as a whole, is reported by the sentence naming the two types.
                         let whole = scm.gen_vars.is_empty().then(|| (&scm.ty, &expected_type));
@@ -1371,7 +1372,7 @@ impl TypeCheckContext {
                         } else {
                             format!("`{}`", fullname.to_string())
                         };
-                        self.create_mismatch_report(e, whole, tvs, &ei.source, |names| {
+                        tc.create_mismatch_report(e, whole, tvs, &ei.source, |names| {
                             format!(
                                 "{} of type `{}` does not match the expected type `{}`.",
                                 subject,
@@ -1928,13 +1929,14 @@ impl TypeCheckContext {
     /// to the source of one carries the line's number.
     ///
     /// # Arguments
-    /// * `failures` — each value's full name, its type and its error,
-    ///   under the substitution of the check of that value.
+    /// * `failures` — for each value, the context its check ended in, its full name, its type and
+    ///   its error under the substitution of that check. The context is what explains the type
+    ///   variables that check created.
     fn create_no_candidate_matches_report(
         &self,
         name: &FullName,
         expected_ty: &Arc<TypeNode>,
-        failures: &[(&FullName, Arc<Scheme>, UnificationErr)],
+        failures: &[(&TypeCheckContext, &FullName, Arc<Scheme>, UnificationErr)],
         source: &Option<Span>,
     ) -> Error {
         let expected_tvs = expected_ty.free_vars_vec();
@@ -1951,7 +1953,7 @@ impl TypeCheckContext {
             names.ty(expected_ty),
         )];
         let mut srcs = self.create_tyvar_location_messages(&expected_tvs, &names, None);
-        for (ref_no, (fullname, scm, e)) in (1..).zip(failures) {
+        for (ref_no, (tc, fullname, scm, e)) in (1..).zip(failures) {
             let mut own_tvs = vec![];
             scm.free_vars_to_vec(&mut own_tvs);
             e.free_vars_to_vec(&mut own_tvs);
@@ -1964,7 +1966,7 @@ impl TypeCheckContext {
                 names.scheme(scm),
                 names.rename_unification_error(e).headline(),
             ));
-            srcs.append(&mut self.create_tyvar_location_messages(&own_tvs, &names, Some(ref_no)));
+            srcs.append(&mut tc.create_tyvar_location_messages(&own_tvs, &names, Some(ref_no)));
         }
         let mut err = Error::from_msg_srcs(lines.join("\n"), &[source]);
         err.add_srcs(srcs);
