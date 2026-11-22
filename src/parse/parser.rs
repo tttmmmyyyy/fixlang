@@ -614,11 +614,12 @@ pub fn parse_renamed_source_file(
 ///
 /// To find that `if`, this puts a `;` where `e` expected one and parses `source_code` again. It does
 /// this again at each such error that follows, until the whole text parses: one token can close
-/// several `let`s left without their `;`, and the text after `e` can hold more of them. The `;`s
-/// put in at the position of `e` each end a `let` whose body is a hole, and the `if` of such a `let`
-/// is the first expression on the right end of its bound expression that reads a `;`. An `if` whose
-/// else branch follows `else` reads none. When that first expression is a `let` or an `eval`, either
-/// of the two `;` could be the one meant for the outer `let`, and that `let` has no `if` to report.
+/// several `let`s left without their `;`, and the text after `e` can hold more of them. Each `;` put
+/// in at the position of `e` ends a `let`, an `eval` or an `if` in the form `if c { a }; b`, and
+/// leaves a hole after it. Only a `let` has an `if` to report: the first expression on the right end
+/// of its bound expression that reads a `;`. An `if` whose else branch follows `else` reads none.
+/// When that first expression is a `let` or an `eval`, either of the two `;` could be the one meant
+/// for the outer `let`, and that `let` has no `if` to report.
 fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Vec<usize> {
     // The text put in. The spaces keep its `;` from joining a `;` beside it into a `;;`.
     const INSERTED: &str = " ; ";
