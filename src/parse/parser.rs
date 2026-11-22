@@ -729,7 +729,9 @@ fn reads_a_semicolon_before_its_else_branch(expr_if: &Pair<Rule>) -> bool {
 fn bound_expression_ended_at(let_or_eval: Pair<Rule>, at: usize) -> Option<Pair<Rule>> {
     let mut previous = None;
     for pair in let_or_eval.into_inner() {
-        if matches!(pair.as_rule(), Rule::in_of_let | Rule::semicolon) && pair.as_span().start() == at {
+        if matches!(pair.as_rule(), Rule::in_of_let | Rule::semicolon)
+            && pair.as_span().start() == at
+        {
             return previous;
         }
         previous = Some(pair);
