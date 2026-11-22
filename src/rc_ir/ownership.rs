@@ -102,9 +102,14 @@ impl VarTable {
     /// place: the variable a move-bind renames, the unboxed container a field is destructured out
     /// of, the unboxed union a payload comes from (or the scrutinee a catch-all binds), the arm
     /// results a match binding joins, and the operands of an op that branches on no operand's
-    /// uniqueness (`BuiltinOp::unique_check_operand`), which is the mark of an op updating an object
-    /// in place. `None` for any other variable: a parameter or capture, a producer, a value read out
-    /// of a boxed container, and the result of an op that may update an operand in place.
+    /// uniqueness (`BuiltinOp::unique_check_operand`). `None` for any other variable: a parameter or
+    /// capture, a producer, a value read out of a boxed container, and the result of an op that
+    /// updates an operand in place where it is unique.
+    ///
+    /// An op that updates an operand in place with no check of its own, because the code checked the
+    /// operand unique before it (`StructPunchOp` and `StructPlugInOp` without `force_unique`), declares
+    /// its result fresh (`BuiltinOp::result_prov`), so no unit of its result belongs to the operand's
+    /// object, and a reader asking which variables hold that object does not reach it.
     pub(crate) fn sources_without_update(
         &self,
         name: &FullName,
