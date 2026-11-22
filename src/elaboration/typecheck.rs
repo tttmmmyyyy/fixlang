@@ -15,10 +15,10 @@ use crate::{
         type_env::TypeEnv,
         typedecl::describe_field_names,
         types::{
-            is_generated_tyvar, is_inference_tyvar, is_opaque_tyvar, is_type_wildcard_tyvar,
-            kind_star, make_tyvar, type_arrow, type_from_tyvar, type_tyapp, type_tycon, AssocType,
-            Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
-            TypeNode, MAX_TYPE_DEPTH,
+            inference_tyvar_id, is_generated_tyvar, is_inference_tyvar, is_opaque_tyvar,
+            is_type_wildcard_tyvar, kind_star, make_tyvar, type_arrow, type_from_tyvar, type_tyapp,
+            type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo,
+            TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
         },
     },
     constants::{
@@ -678,6 +678,21 @@ impl TypeCheckContext {
                 },
             );
         }
+    }
+
+    /// This context, with the source `checked` records for each type variable `checked` created.
+    /// `checked` is a copy of this context that went on to check an expression, so a variable this
+    /// context already has keeps the source recorded here: it is the one that agrees with the types
+    /// this context prints, where `checked` may have unified the variable with another one and
+    /// taken that one's source.
+    fn with_sources_of_tyvars_created_in(&self, checked: &TypeCheckContext) -> TypeCheckContext {
+        let mut ctx = self.clone();
+        for (name, source) in &checked.tyvar_source {
+            if inference_tyvar_id(name).is_some_and(|id| id >= self.tyvar_id) {
+                ctx.tyvar_source.insert(name.clone(), source.clone());
+            }
+        }
+        ctx
     }
 
     /// Records `source` as the expression or pattern the type variable named `tyvar_name` arose at.
@@ -1368,7 +1383,8 @@ impl TypeCheckContext {
                         } else {
                             format!("`{}`", fullname.to_string())
                         };
-                        tc.create_mismatch_report(e, whole, tvs, &ei.source, |names| {
+                        let report_ctx = self.with_sources_of_tyvars_created_in(tc);
+                        report_ctx.create_mismatch_report(e, whole, tvs, &ei.source, |names| {
                             format!(
                                 "{} of type `{}` does not match the expected type `{}`.",
                                 subject,
@@ -1925,9 +1941,9 @@ impl TypeCheckContext {
     /// to the source of one carries the line's number.
     ///
     /// # Arguments
-    /// * `failures` — for each value, the context its check ended in, its full name, its type and
-    ///   its error under the substitution of that check. The context holds the sources of the type
-    ///   variables that check created.
+    /// * `failures` — for each value, the context its check ended in, a copy of this context, with
+    ///   the value's full name, its type and its error under the substitution of that check. The
+    ///   context holds the sources of the type variables that check created.
     fn create_no_candidate_matches_report(
         &self,
         name: &FullName,
@@ -1962,7 +1978,12 @@ impl TypeCheckContext {
                 names.scheme(scm),
                 names.rename_unification_error(e).headline(),
             ));
-            srcs.append(&mut tc.create_tyvar_location_messages(&own_tvs, &names, Some(ref_no)));
+            let report_ctx = self.with_sources_of_tyvars_created_in(tc);
+            srcs.append(&mut report_ctx.create_tyvar_location_messages(
+                &own_tvs,
+                &names,
+                Some(ref_no),
+            ));
         }
         let mut err = Error::from_msg_srcs(lines.join("\n"), &[source]);
         err.add_srcs(srcs);
