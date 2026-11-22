@@ -204,10 +204,10 @@ pub trait BuiltinOp: DynClone + Send + Sync {
 
     /// This op reading its result out of the operand `result_held_by_operand` names without
     /// retaining it: the result is lent, holding no reference of its own while that operand goes on
-    /// holding its objects. `borrow_ify` asks this only of an op it lends a result of, each of which
-    /// overrides it.
-    fn lending(&self) -> Box<dyn BuiltinOp> {
-        unreachable!("lending called on an op whose result borrow_ify does not lend")
+    /// holding its objects. Default: the op has no such form, and `borrow_ify` lends none of its
+    /// results.
+    fn lending(&self) -> Option<Box<dyn BuiltinOp>> {
+        None
     }
 
     /// Whether `lending` was applied. The RC IR dump renders it.

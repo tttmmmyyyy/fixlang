@@ -834,7 +834,8 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
 
     /// The values read out of a boxed container that this version lends rather than retains: the
     /// fields a `Destructure` reads out of a boxed struct, and the results of the ops reading them out
-    /// of an operand they borrow (`BuiltinOp::result_held_by_operand`). A lent value holds no
+    /// of an operand they borrow (`BuiltinOp::result_held_by_operand`) that have a lending form
+    /// (`BuiltinOp::lending`). A lent value holds no
     /// reference of its own, so the code holds its container for as long as it uses the value, and
     /// takes a reference of the value where it hands one over. A value is lent where
     ///
@@ -862,7 +863,7 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
             RcExpr::Let(x, RcRhs::Builtin(op, args), _) if !x.ty.is_fully_unboxed(type_env) => {
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 if let Some(j) = op.result_held_by_operand(&arg_tys, type_env) {
-                    if op.borrows_operand(j, &arg_tys, type_env) {
+                    if op.borrows_operand(j, &arg_tys, type_env) && op.lending().is_some() {
                         containers.insert(x.name.clone(), args[j].name.clone());
                     }
                 }
@@ -1033,7 +1034,12 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                 RcExprNode::new(
                     RcExpr::Let(
                         x.clone(),
-                        RcRhs::Builtin(op.lending(), args.clone()),
+                        RcRhs::Builtin(
+                            op.lending().expect(
+                                "`lent_reads` lends the results of ops that have a lending form",
+                            ),
+                            args.clone(),
+                        ),
                         self.rewrite_in(k, enclosing),
                     ),
                     node.source.clone(),
@@ -1416,8 +1422,9 @@ impl Lending<'_, '_, '_> {
 
     /// Whether the container named `container` is held at a point that `after` follows, holding the
     /// objects of a value read out of it by the binding at position `read` (`number_bindings`). A
-    /// container this version holds throughout is (`RewriteCtx::held_throughout`). A container of
-    /// `containers`, itself to be lent, holds the value only that way: its own uses are what its
+    /// container this version holds throughout is (`RewriteCtx::held_throughout`). A container that
+    /// is, or may be the object of, a value of `containers`, itself to be lent, holds the value only
+    /// that way: such a container holds no reference of its own, and its own uses are what its
     /// container is held for. Any other container is held where the code after the point holds each
     /// object the container may be (`object_held_after`).
     fn container_held(
@@ -1430,13 +1437,17 @@ impl Lending<'_, '_, '_> {
         if self.ctx.held_throughout(container, containers) {
             return true;
         }
-        if containers.contains_key(container) {
+        let objects: Vec<&VarPath> = self.objects[container].iter().flatten().collect();
+        if containers.contains_key(container)
+            || objects
+                .iter()
+                .any(|(root, _)| containers.contains_key(root))
+        {
             return false;
         }
         let Some(after) = after else {
             return false;
         };
-        let objects: Vec<&VarPath> = self.objects[container].iter().flatten().collect();
         !objects.is_empty()
             && objects
                 .into_iter()

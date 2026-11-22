@@ -3175,10 +3175,10 @@ impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
         self.assume_local
     }
 
-    fn lending(&self) -> Box<dyn BuiltinOp> {
+    fn lending(&self) -> Option<Box<dyn BuiltinOp>> {
         let mut c = self.clone();
         c.lend = true;
-        Box::new(c)
+        Some(Box::new(c))
     }
 
     fn lends(&self) -> bool {
@@ -5745,10 +5745,10 @@ impl BuiltinOp for StructGetOp {
         self.assume_local
     }
 
-    fn lending(&self) -> Box<dyn BuiltinOp> {
+    fn lending(&self) -> Option<Box<dyn BuiltinOp>> {
         let mut c = self.clone();
         c.lend = true;
-        Box::new(c)
+        Some(Box::new(c))
     }
 
     fn lends(&self) -> bool {
