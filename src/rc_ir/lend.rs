@@ -34,8 +34,7 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::borrow::{rewrite_bodies, BodyModel};
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
-    all_owned_units, collect_consumes_outside_call_arguments, rc_units, truncate_to_unit,
-    units_under,
+    all_owned_units, collect_consumes_outside_call_arguments, rc_units, units_under,
 };
 use std::sync::Arc;
 
@@ -316,12 +315,16 @@ impl Walk<'_, '_> {
                 self.walk(k, count)
             }
             RcExpr::Retain(v, path, _, k) => {
-                let certain = self
-                    .leaves_under(v, path)
-                    .filter(|leaf| {
-                        self.model.leaf_objects(&v.name, leaf) == std::slice::from_ref(&self.object)
-                    })
-                    .count() as i64;
+                // A retain of a union retains the leaves of the variant it holds, which may not be
+                // the leaf that is the object, so only a unit of one leaf is certain to retain it.
+                let leaves: Vec<FieldPath> = self.leaves_under(v, path).collect();
+                let certain = match leaves.as_slice() {
+                    [leaf] => {
+                        (self.model.leaf_objects(&v.name, leaf)
+                            == std::slice::from_ref(&self.object)) as i64
+                    }
+                    _ => 0,
+                };
                 self.walk(k, count.map(|c| c.moved(certain)))
             }
             RcExpr::Release(v, path, _, k) => {
@@ -402,17 +405,34 @@ impl Lender<'_, '_> {
                     source.clone(),
                 )
             }
-            RcExpr::Let(x, rhs @ RcRhs::App(..), k) => {
-                let retains: Vec<(RcVar, FieldPath)> = self
-                    .model
-                    .rhs_consumed_leaves(rhs, &x.ty)
-                    .into_iter()
-                    .filter_map(|(name, leaf)| {
-                        let arg = rhs_operand(rhs, &name);
-                        let unit = truncate_to_unit(&arg.ty, &leaf, self.model.type_env);
-                        self.counts_lent(arg, &unit).then(|| (arg.clone(), unit))
-                    })
-                    .collect();
+            RcExpr::Let(x, rhs @ RcRhs::App(callee, args), k) => {
+                // A unit takes one retain per owning position it is passed at, however many leaves
+                // it has, so each consumed leaf is counted once per position it is consumed at.
+                let mut consumed: Map<VarPath, usize> = Map::default();
+                for leaf in self.model.rhs_consumed_leaves(rhs, &x.ty) {
+                    *consumed.entry(leaf).or_default() += 1;
+                }
+                let mut operands: Vec<&RcVar> = vec![];
+                for v in std::iter::once(callee).chain(args) {
+                    if !operands.iter().any(|seen| seen.name == v.name) {
+                        operands.push(v);
+                    }
+                }
+                let mut retains: Vec<(RcVar, FieldPath)> = vec![];
+                for v in operands {
+                    for unit in rc_units(&v.ty, self.model.type_env) {
+                        if !self.counts_lent(v, &unit) {
+                            continue;
+                        }
+                        let positions = boxed_leaf_paths(&v.ty, self.model.type_env)
+                            .into_iter()
+                            .filter(|leaf| leaf.starts_with(&unit))
+                            .map(|leaf| consumed.get(&(v.name.clone(), leaf)).copied().unwrap_or(0))
+                            .max()
+                            .unwrap_or(0);
+                        retains.extend(std::iter::repeat_n((v.clone(), unit.clone()), positions));
+                    }
+                }
                 let call = RcExprNode::new(
                     RcExpr::Let(x.clone(), rhs.clone(), self.rewrite(k)),
                     source.clone(),
@@ -481,15 +501,4 @@ impl Lender<'_, '_> {
             .iter()
             .any(|root| self.lent.contains(root))
     }
-}
-
-/// The operand of the call `rhs` named `name`.
-fn rhs_operand<'r>(rhs: &'r RcRhs, name: &FullName) -> &'r RcVar {
-    let RcRhs::App(callee, args) = rhs else {
-        unreachable!("only a call's operands are retained before it")
-    };
-    std::iter::once(callee)
-        .chain(args)
-        .find(|v| v.name == *name)
-        .expect("a call consumes only its operands")
 }
