@@ -557,3 +557,59 @@ main = (
         "`#2` in (1) is `a` in the type of `Std::Array::get_size`.\n\n9:18-9:26 in ",
     );
 }
+
+/// Verifies that two type variables of the expected type that the failed check of a value unified
+/// with each other still point at their own expressions, since the report prints them apart.
+#[test]
+pub fn test_type_variables_the_failed_check_unified_point_at_their_own_expressions() {
+    let source = r##"
+module Main;
+
+same2 : (Option a, Option a) -> I64;
+same2 = |_| 0;
+
+main : IO ();
+main = (
+    let s : String = (Option::none(), Option::none()).same2;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` is `a` in the type of `Std::Option::none`.\n\n9:23-9:35 in ",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#2` is `a` in the type of `Std::Option::none`.\n\n9:39-9:51 in ",
+    );
+}
+
+/// Verifies that the type variables of the expected type of a value whose check failed keep the
+/// sources the outer context records for them, where the check unified one with another.
+#[test]
+pub fn test_type_variables_the_failed_check_unified_keep_the_sources_of_the_outer_context() {
+    let source = r##"
+module Main;
+
+same3 : (a, a) -> I64;
+same3 = |_| 0;
+
+f : I64 -> String;
+f = |n| ( let g = |x, y| ( let s : String = (x, y).same3; s ); g(1, 2) );
+
+main : IO ();
+main = println(f(0));
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` is the type expected for `x`.\n\n8:20-8:21 in ",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#2` is the type expected for `y`.\n\n8:23-8:24 in ",
+    );
+}
