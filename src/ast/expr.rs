@@ -1538,7 +1538,7 @@ impl Expr {
                 .stringify()
                 .brace_if_multiline()
                 .append_to_last_line(" : ")
-                .append_to_last_line(&t.to_string()),
+                .append_to_last_line(&t.to_string_as_written()),
             Expr::MakeStruct(tc, fields) => {
                 let mut field_lines: Vec<Text> = vec![];
                 for (name, _, expr) in fields {
