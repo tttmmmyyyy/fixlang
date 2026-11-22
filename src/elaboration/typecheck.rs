@@ -1092,8 +1092,8 @@ impl TypeCheckContext {
                 let mut sub = Substitution::default();
                 for tv in &scheme.gen_vars {
                     let new_tv = self.new_tyvar_by(tv);
-                    // A diagnostic names the variable by the name the type gives it, so a
-                    // variable the compiler named has no source to point at.
+                    // The diagnostic quotes the variable by the name the type gives it, so a
+                    // variable the compiler named, which the source never writes, is left out.
                     if let Some(site) = &site {
                         if !is_generated_tyvar(&tv.name) {
                             self.insert_tyvar_source(

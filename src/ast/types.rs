@@ -8,10 +8,10 @@ use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::type_env::TypeEnv;
 use crate::ast::typedecl::Field;
 use crate::constants::{
-    TraverserWorkType, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME, INFERENCE_TYVAR_PREFIX,
-    PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
-    TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U128_NAME, U16_NAME, U32_NAME, U64_NAME,
-    U8_NAME,
+    TraverserWorkType, GENERATED_NAME_PREFIX, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
+    INFERENCE_TYVAR_PREFIX, PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL,
+    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U128_NAME,
+    U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
@@ -2981,10 +2981,10 @@ pub fn is_type_wildcard_tyvar(name: &str) -> bool {
     name.starts_with(TYPE_WILDCARD_VAR_PREFIX)
 }
 
-/// Whether the compiler generated this type variable name. Such a name starts with `#`, which no
-/// type variable the source writes starts with.
+/// Whether the compiler generated this type variable name, which starts with
+/// `GENERATED_NAME_PREFIX`.
 pub fn is_generated_tyvar(name: &str) -> bool {
-    name.starts_with('#')
+    name.starts_with(GENERATED_NAME_PREFIX)
 }
 
 /// Whether a type variable name is one the inference created: `INFERENCE_TYVAR_PREFIX` followed by
