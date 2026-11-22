@@ -409,11 +409,11 @@ fn boxed_classes(
 
         /// The words the capture struct of the class `c` lays out, held in place unboxed.
         fn unboxed_words(&self, c: u32) -> usize {
-            let held: usize = self.held_reprs[c as usize]
+            let held_words: usize = self.held_reprs[c as usize]
                 .iter()
                 .map(|h| self.words(*h))
                 .sum();
-            self.capture_words[self.classes[c as usize].lam as usize] + held
+            self.capture_words[self.classes[c as usize].lam as usize] + held_words
         }
 
         /// The words the capture struct of the class `c` takes held in place.

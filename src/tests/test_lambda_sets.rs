@@ -1995,7 +1995,7 @@ mod dump_tests {
         let lets: Vec<String> = (1..=words)
             .map(|i| format!("let c{} = n + {};", i, i))
             .collect();
-        let sum: Vec<String> = (1..=words).map(|i| format!(" + c{}", i)).collect();
+        let addends: Vec<String> = (1..=words).map(|i| format!(" + c{}", i)).collect();
         format!(
             r#"
     module Main;
@@ -2011,7 +2011,7 @@ mod dump_tests {
     "#,
             decls,
             lets.join("\n        "),
-            sum.join(""),
+            addends.join(""),
             use_f
         )
     }
@@ -2024,12 +2024,12 @@ mod dump_tests {
     /// Folds over an array filled with `f` of `wide_capture_source`.
     const FOLD_OVER_AN_ARRAY_OF_F: &str = "Array::fill(3, f).to_iter.fold(0, |g, acc| g(acc))";
 
-    /// Whether the dump builds the capture struct of `Main` built from `fields` values boxed. The
+    /// Whether the dump builds the capture struct of `Main` built from `field_count` values boxed. The
     /// dump writes after a value the boxed objects it holds and where they come from: a boxed value
     /// as one source (`[fresh]`), an unboxed value as `[unboxed]` when it holds no boxed object and
     /// as its fields' sources in braces otherwise. Panics when the dump builds no such capture
     /// struct, or builds one both boxed and unboxed.
-    fn main_capture_struct_is_boxed(dump: &str, fields: usize) -> bool {
+    fn main_capture_struct_is_boxed(dump: &str, field_count: usize) -> bool {
         let boxed: Set<bool> = dump
             .lines()
             .filter(|line| line.contains(&format!(": Main::{}@", LS_CAP_PREFIX)))
@@ -2039,7 +2039,7 @@ mod dump_tests {
                 let args = args.trim_end().strip_suffix(')')?;
                 let arity = if args.is_empty() { 0 } else { args.split(", ").count() };
                 let (_, provenance) = head.trim_end().rsplit_once('[')?;
-                (arity == fields)
+                (arity == field_count)
                     .then(|| provenance != "unboxed]" && !provenance.starts_with('{'))
             })
             .collect();
@@ -2047,7 +2047,7 @@ mod dump_tests {
             boxed.len(),
             1,
             "the dump should build the capture struct of {} values, boxed or unboxed:\n{}",
-            fields,
+            field_count,
             dump
         );
         boxed.contains(&true)

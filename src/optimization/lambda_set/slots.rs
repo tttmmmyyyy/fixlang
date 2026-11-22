@@ -505,7 +505,7 @@ impl<'e> SlotLayout<'e> {
     /// a boxed struct or union: each function reached from it through fields, variants and array
     /// elements, with an array element or a field or variant of a boxed type on the way. `in_heap`
     /// says the value itself is stored so. `seen` holds the types walked so far, with their slots
-    /// and `in_heap`, so that a recursive type is walked once. `solver` gives the new variables of a
+    /// and whether their fields are stored so, which walks a recursive type once. `solver` gives the new variables of a
     /// place the slots of `ty` leave untracked.
     pub fn collect_held_in_heap(
         &self,
@@ -526,7 +526,7 @@ impl<'e> SlotLayout<'e> {
             return;
         }
         let info = self.type_env.tycon_info(&self.layout_tycon(&tc));
-        let in_heap = match info.variant {
+        let fields_in_heap = match info.variant {
             TyConVariant::Array => true,
             TyConVariant::Struct | TyConVariant::Union => in_heap || !info.is_unbox,
             // A function pointer type `#Func{n}` names the types of its arguments and result, and
@@ -540,12 +540,12 @@ impl<'e> SlotLayout<'e> {
                 ty.ty.to_string()
             ),
         };
-        if !seen.insert((ty.ty.clone(), ty.slots.clone(), in_heap)) {
+        if !seen.insert((ty.ty.clone(), ty.slots.clone(), fields_in_heap)) {
             return;
         }
         for i in 0..info.fields.len() {
             let field = self.field(ty, i, solver);
-            self.collect_held_in_heap(&field, in_heap, solver, seen, out);
+            self.collect_held_in_heap(&field, fields_in_heap, solver, seen, out);
         }
     }
 
