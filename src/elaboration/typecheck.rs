@@ -1077,7 +1077,7 @@ impl TypeCheckContext {
                     if let Some(site) = &site {
                         if !is_generated_tyvar(&tv.name) {
                             self.tyvar_sources.insert(
-                                &new_tv.name.clone(),
+                                &new_tv.name,
                                 TyVarSource {
                                     span: site.span.clone(),
                                     role: TyVarRole::InstantiatedVarOf {
@@ -1666,7 +1666,7 @@ impl TypeCheckContext {
                     self.add_tyvar_source(elem_tv.name.clone(), first.source.clone());
                 } else if let Some(span) = ei.source.clone() {
                     self.tyvar_sources.insert(
-                        &elem_tv.name.clone(),
+                        &elem_tv.name,
                         TyVarSource {
                             span,
                             role: TyVarRole::ElementTypeOf,
