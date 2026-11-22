@@ -107,7 +107,7 @@ fn report_hole(node: &Arc<ExprNode>, tc: &TypeCheckContext) -> Errors {
     // the user can see where the indeterminacy started.
     err.add_srcs(
         tc.tyvar_sources()
-            .location_messages(names.vars(), &names, None),
+            .create_location_messages(names.vars(), &names, None),
     );
     Errors::from_err(err)
 }

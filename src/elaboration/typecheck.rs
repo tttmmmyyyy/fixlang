@@ -1354,7 +1354,7 @@ impl TypeCheckContext {
                         } else {
                             format!("`{}`", fullname.to_string())
                         };
-                        tyvar_sources.mismatch_report(e, whole, tvs, &ei.source, |names| {
+                        tyvar_sources.create_mismatch_report(e, whole, tvs, &ei.source, |names| {
                             format!(
                                 "{} of type `{}` does not match the expected type `{}`.",
                                 subject,
@@ -1836,7 +1836,7 @@ impl TypeCheckContext {
         )];
         let mut srcs = self
             .tyvar_sources
-            .location_messages(&expected_tvs, &names, None);
+            .create_location_messages(&expected_tvs, &names, None);
         for (ref_no, (tyvar_sources, fullname, scm, e)) in (1..).zip(failures) {
             let mut own_tvs = vec![];
             scm.free_vars_to_vec(&mut own_tvs);
@@ -1850,7 +1850,11 @@ impl TypeCheckContext {
                 names.scheme(scm),
                 names.rename_unification_error(e).headline(),
             ));
-            srcs.append(&mut tyvar_sources.location_messages(&own_tvs, &names, Some(ref_no)));
+            srcs.append(&mut tyvar_sources.create_location_messages(
+                &own_tvs,
+                &names,
+                Some(ref_no),
+            ));
         }
         let mut err = Error::from_msg_srcs(lines.join("\n"), &[source]);
         err.add_srcs(srcs);
@@ -1874,7 +1878,7 @@ impl TypeCheckContext {
         let unif_err = self.substitution.substitute_unification_error(unif_err);
         let mut tvs = expected_ty.free_vars_vec();
         found_ty.free_vars_to_vec(&mut tvs);
-        self.tyvar_sources.mismatch_report(
+        self.tyvar_sources.create_mismatch_report(
             &unif_err,
             Some((&expected_ty, &found_ty)),
             tvs,
@@ -1908,7 +1912,7 @@ impl TypeCheckContext {
         let unif_err = self.substitution.substitute_unification_error(unif_err);
         let mut tvs = pat_ty.free_vars_vec();
         lambda_ty.free_vars_to_vec(&mut tvs);
-        self.tyvar_sources.mismatch_report(
+        self.tyvar_sources.create_mismatch_report(
             &unif_err,
             Some((&pat_ty, &param_ty)),
             tvs,
@@ -2091,7 +2095,7 @@ impl TypeCheckContext {
             );
             error.add_srcs(
                 tc.tyvar_sources
-                    .location_messages(names.vars(), &names, None),
+                    .create_location_messages(names.vars(), &names, None),
             );
             error
         }
@@ -2758,7 +2762,7 @@ impl TypeCheckContext {
         );
         err.add_srcs(
             self.tyvar_sources
-                .location_messages(&[fv.clone()], &names, None),
+                .create_location_messages(&[fv.clone()], &names, None),
         );
         Some(Errors::from_err(err))
     }
@@ -3291,7 +3295,7 @@ impl TyVarSources {
     /// * `ref_no` — when the error text refers to several types by number, the
     ///   number of the one these variables belong to; it is printed alongside
     ///   each variable's name.
-    pub fn location_messages(
+    pub fn create_location_messages(
         &self,
         tvs: &[Arc<TyVar>],
         names: &ReportTyVarNames,
@@ -3356,7 +3360,7 @@ impl TyVarSources {
     ///   prints them, apart from those a scheme it prints generalizes.
     /// * `body` — writes the text after the headline from the names the
     ///   report gives the type variables.
-    fn mismatch_report(
+    fn create_mismatch_report(
         &self,
         unif_err: &UnificationErr,
         whole: Option<(&Arc<TypeNode>, &Arc<TypeNode>)>,
@@ -3382,7 +3386,7 @@ impl TyVarSources {
             body
         };
         let mut err = Error::from_msg_srcs(msg, &[source]);
-        err.add_srcs(self.location_messages(names.vars(), &names, None));
+        err.add_srcs(self.create_location_messages(names.vars(), &names, None));
         err
     }
 }
