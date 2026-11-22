@@ -2024,27 +2024,33 @@ mod dump_tests {
     /// Folds over an array filled with `f` of `wide_capture_source`.
     const FOLD_OVER_AN_ARRAY_OF_F: &str = "Array::fill(3, f).to_iter.fold(0, |g, acc| g(acc))";
 
-    /// Whether the dump builds the capture struct of `f` of `wide_capture_source(words, ..)`, a
-    /// capture struct built from `words` values, boxed. Panics when the dump builds no such capture
+    /// Whether the dump builds the capture struct of `Main` built from `fields` values boxed. The
+    /// dump writes after a value the boxed objects it holds and where they come from: a boxed value
+    /// as one source (`[fresh]`), an unboxed value as `[unboxed]` when it holds no boxed object and
+    /// as its fields' sources in braces otherwise. Panics when the dump builds no such capture
     /// struct, or builds one both boxed and unboxed.
-    fn wide_capture_struct_is_boxed(dump: &str, words: usize) -> bool {
-        let unboxed: Set<bool> = dump
+    fn main_capture_struct_is_boxed(dump: &str, fields: usize) -> bool {
+        let boxed: Set<bool> = dump
             .lines()
-            .filter(|line| line.contains(LS_CAP_PREFIX))
+            .filter(|line| line.contains(&format!(": Main::{}@", LS_CAP_PREFIX)))
+            .filter(|line| !line.contains("(as #decapture"))
             .filter_map(|line| {
                 let (head, args) = line.split_once("= struct_make(")?;
                 let args = args.trim_end().strip_suffix(')')?;
-                (args.split(", ").count() == words).then(|| head.contains("[unboxed]"))
+                let arity = if args.is_empty() { 0 } else { args.split(", ").count() };
+                let (_, provenance) = head.trim_end().rsplit_once('[')?;
+                (arity == fields)
+                    .then(|| provenance != "unboxed]" && !provenance.starts_with('{'))
             })
             .collect();
         assert_eq!(
-            unboxed.len(),
+            boxed.len(),
             1,
             "the dump should build the capture struct of {} values, boxed or unboxed:\n{}",
-            words,
+            fields,
             dump
         );
-        !unboxed.contains(&true)
+        boxed.contains(&true)
     }
 
     /// A set whose values an array stores is represented by an unboxed capture struct while its
@@ -2061,7 +2067,7 @@ mod dump_tests {
         );
         assert_calls_by_name(&dump, "Std::Iterator::fold");
         assert!(
-            !wide_capture_struct_is_boxed(&dump, words),
+            !main_capture_struct_is_boxed(&dump, words),
             "the capture struct should be unboxed"
         );
 
@@ -2075,7 +2081,7 @@ mod dump_tests {
         );
         assert_calls_by_name(&dump, "Std::Iterator::fold");
         assert!(
-            wide_capture_struct_is_boxed(&dump, words),
+            main_capture_struct_is_boxed(&dump, words),
             "the capture struct should be boxed"
         );
     }
@@ -2108,7 +2114,7 @@ mod dump_tests {
         );
         assert_calls_by_name(&dump, "Main::sum_up");
         assert!(
-            !wide_capture_struct_is_boxed(&dump, words),
+            !main_capture_struct_is_boxed(&dump, words),
             "the capture struct should be unboxed"
         );
 
@@ -2121,7 +2127,7 @@ mod dump_tests {
         );
         assert_calls_by_name(&dump, "Main::sum_up");
         assert!(
-            wide_capture_struct_is_boxed(&dump, words),
+            main_capture_struct_is_boxed(&dump, words),
             "the capture struct should be boxed"
         );
     }
@@ -2141,8 +2147,122 @@ mod dump_tests {
         );
         assert_calls_by_name(&dump, "Std::Iterator::fold");
         assert!(
-            !wide_capture_struct_is_boxed(&dump, words),
+            !main_capture_struct_is_boxed(&dump, words),
             "the capture struct should be unboxed"
+        );
+    }
+
+    /// A set of three lambdas whose values an array stores, a union taking more than
+    /// `MAX_LS_STORED_CAPTURE_WORDS` words, boxes the capture structs of its classes that take more
+    /// than a word, and leaves the one taking a word unboxed: the fold over the array calls each
+    /// lambda by name.
+    #[test]
+    fn test_a_set_an_array_stores_boxes_the_classes_wider_than_a_word() {
+        let source = r#"
+    module Main;
+
+    main : IO () = (
+        let n = Array::fill(1, 1).@(0);
+        let c1 = n + 1;
+        let c2 = n + 2;
+        let c3 = n + 3;
+        let c4 = n + 4;
+        let c5 = n + 5;
+        let f = |x| x + c1 + c2 + c3 + c4 + c5;
+        let g = |x| x + c1 + c2;
+        let h = |x| x + c3;
+        println([f, g, h].to_iter.fold(0, |k, acc| k(acc)).to_string)
+    );
+    "#;
+        let dump = build_run_and_read_rc_ir(
+            source,
+            "max",
+            "29",
+            "a fold over an array of three lambdas capturing five, two and one words",
+        );
+        assert_calls_by_name(&dump, "Std::Iterator::fold");
+        assert!(
+            main_capture_struct_is_boxed(&dump, 5),
+            "the capture struct of five words should be boxed"
+        );
+        assert!(
+            main_capture_struct_is_boxed(&dump, 2),
+            "the capture struct of two words should be boxed"
+        );
+        assert!(
+            !main_capture_struct_is_boxed(&dump, 1),
+            "the capture struct of one word should be unboxed"
+        );
+    }
+
+    /// A lambda `h` that an array stores and that captures, beside two integers, a lambda `f` whose
+    /// capture struct is boxed counts `f` as the word it takes boxed: `h` takes three words, within
+    /// `MAX_LS_STORED_CAPTURE_WORDS`, and its capture struct stays unboxed.
+    #[test]
+    fn test_a_set_an_array_stores_counts_a_held_boxed_capture_struct_as_a_word() {
+        let source = r#"
+    module Main;
+
+    main : IO () = (
+        let n = Array::fill(1, 1).@(0);
+        let c1 = n + 1;
+        let c2 = n + 2;
+        let c3 = n + 3;
+        let c4 = n + 4;
+        let c5 = n + 5;
+        let f = |x| x + c1 + c2 + c3 + c4 + c5;
+        let d1 = n + 6;
+        let d2 = n + 7;
+        let h = |x| f(x) + d1 + d2;
+        let s = Array::fill(3, f).to_iter.fold(0, |k, acc| k(acc));
+        let t = Array::fill(3, h).to_iter.fold(0, |k, acc| k(acc));
+        println((s + t).to_string)
+    );
+    "#;
+        let dump = build_run_and_read_rc_ir(
+            source,
+            "max",
+            "165",
+            "folds over an array of a lambda capturing five words and over an array of a lambda \
+             capturing it and two words",
+        );
+        assert_calls_by_name(&dump, "Std::Iterator::fold");
+        assert!(
+            main_capture_struct_is_boxed(&dump, 5),
+            "the capture struct of `f` should be boxed"
+        );
+        assert!(
+            !main_capture_struct_is_boxed(&dump, 3),
+            "the capture struct of `h` should be unboxed"
+        );
+    }
+
+    /// The words a capture struct takes are those of the values it captures laid out in place, which
+    /// an array spans three of: a lambda capturing two arrays takes six words, past
+    /// `MAX_LS_STORED_CAPTURE_WORDS`, and an array of it holds it boxed.
+    #[test]
+    fn test_a_set_an_array_stores_counts_the_words_of_its_captured_values() {
+        let source = r#"
+    module Main;
+
+    main : IO () = (
+        let n = Array::fill(1, 1).@(0);
+        let a = Array::fill(n, n + 1);
+        let b = Array::fill(n, n + 2);
+        let f = |x| x + a.@(0) + b.@(0);
+        println(Array::fill(3, f).to_iter.fold(0, |k, acc| k(acc)).to_string)
+    );
+    "#;
+        let dump = build_run_and_read_rc_ir(
+            source,
+            "max",
+            "15",
+            "a fold over an array of a lambda capturing two arrays",
+        );
+        assert_calls_by_name(&dump, "Std::Iterator::fold");
+        assert!(
+            main_capture_struct_is_boxed(&dump, 2),
+            "the capture struct of the two arrays should be boxed"
         );
     }
 }
