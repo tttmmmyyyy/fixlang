@@ -618,10 +618,10 @@ pub fn parse_renamed_source_file(
 /// several `let`s left without their `;`, and the text after `e` can hold more of them. When the
 /// text holds a parse error of another kind, no `if` is reported. Each `;` put in at the position of
 /// `e` ends a `let`, an `eval` or an `if` in the form `if c { a }; b`, and leaves a hole after it. A
-/// `let` or an `eval` has an `if` to report: the first expression on the right end of its bound
-/// expression that reads a `;`. An `if` whose else branch follows `else` reads none. When that first
+/// `let` or an `eval` has an `if` to report: the first expression on the right end of the expression
+/// the `;` ends that reads a `;`. An `if` whose else branch follows `else` reads none. When that first
 /// expression is a `let` or an `eval`, either of the two `;` could be the one meant for the outer
-/// `let` or `eval`, and that has no `if` to report.
+/// `let` or `eval`, and the outer one has no `if` to report.
 fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Vec<usize> {
     // The text put in. The spaces keep its `;` from joining a `;` beside it into a `;;`.
     const INSERTED: &str = " ; ";
@@ -629,8 +629,8 @@ fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Vec<u
         return vec![];
     };
     // Each `;` put in ends a construct that reads a `;`: a binding of a `let`, an `eval`, an `if` in
-    // the form `if c { a }; b`, a definition or a member. Each of those starts at a byte of the text
-    // of its own, so there are no more of them than bytes.
+    // the form `if c { a }; b`, a declaration of the module or a member of a trait or an impl. Each of
+    // them starts at a different byte of `source_code`, so there are no more of them than bytes.
     let max_insertions = source_code.len();
     let mut patched = source_code.to_string();
     // The byte offsets in `patched` of the `;`s put in at `error_at`, in ascending order.
@@ -723,9 +723,9 @@ fn reads_a_semicolon_before_its_else_branch(expr_if: &Pair<Rule>) -> bool {
     })
 }
 
-/// The expression ended by the `in` or the `;` at the byte offset `at` of `let_or_eval`, an `expr_let`
-/// or an `expr_eval` pair: the bound expression of a binding of the `let`, or the expression of the
-/// `eval`. `None` says that `let_or_eval` has no `in` or `;` there.
+/// The expression that the `in` or `;` at the byte offset `at` ends in `let_or_eval`, an `expr_let` or
+/// `expr_eval` pair: the bound expression of a binding of the `let`, or the expression of the `eval`.
+/// `None` says that `let_or_eval` has no `in` or `;` there.
 fn bound_expression_ended_at(let_or_eval: Pair<Rule>, at: usize) -> Option<Pair<Rule>> {
     let mut previous = None;
     for pair in let_or_eval.into_inner() {
