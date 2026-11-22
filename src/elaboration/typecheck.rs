@@ -681,9 +681,9 @@ impl TypeCheckContext {
 
     /// The sources this context records, with the source `checked` records for each type variable
     /// `checked` created. `checked` is a copy of this context that went on to check an expression,
-    /// so a variable this context already has keeps the source recorded here: it is the one that
-    /// agrees with the types this context prints, where `checked` may have unified the variable
-    /// with another one and taken that one's source.
+    /// so a variable this context already has keeps what is recorded here, a source or none: that
+    /// is what agrees with the types this context prints, where `checked` may have unified the
+    /// variable with another one and taken that one's source.
     fn tyvar_sources_with_those_created_in(&self, checked: &TypeCheckContext) -> TyVarSources {
         assert!(
             checked.tyvar_id >= self.tyvar_id,
