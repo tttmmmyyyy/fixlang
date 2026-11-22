@@ -225,6 +225,16 @@ pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
 /// The bound can go once those passes walk a type in time linear in its declaration and the
 /// provenance analysis copies only what a `match` arm changes.
 pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 6;
+/// How many words a value of a lambda set represented by a capture struct or a union may take, laid
+/// out in place, where an array or a boxed struct or union stores the set's values (lambda set
+/// specialization). Past it, the capture structs of the set's classes that take more than a word are
+/// boxed.
+///
+/// Each element of an array, and each object of a boxed type, holds a value of its own laid out in
+/// place. An array filled with one function capturing eight arrays would take 24 words per element
+/// with an unboxed capture struct, and one word with a boxed one, whose captured values the elements
+/// share.
+pub const MAX_LS_STORED_CAPTURE_WORDS: usize = 4;
 /// How many classes the elements of a lambda set represented by a union may make (lambda set
 /// specialization), which is how many variants that union may have. A set past it is represented
 /// by closures.

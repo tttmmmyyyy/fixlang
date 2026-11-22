@@ -1,5 +1,5 @@
-// Shared machinery for passing what a lambda captures as a value: the unboxed struct that carries
-// the captured variables to the global function the lambda is lifted to.
+// Shared machinery for passing what a lambda captures as a value: the struct that carries the
+// captured variables to the global function the lambda is lifted to.
 
 use crate::{
     ast::{
@@ -17,8 +17,8 @@ use crate::{
 };
 use std::sync::Arc;
 
-/// The unboxed struct that carries a lambda's captured variables to the global function the lambda
-/// is lifted to.
+/// The struct that carries a lambda's captured variables to the global function the lambda is lifted
+/// to.
 ///
 /// The type constructor lives in the namespace of `owner`, and its name is `prefix@owner`, so that a
 /// value of it says which function it was built for. Two lambdas capturing the same names at the same
@@ -46,7 +46,13 @@ impl CaptureStruct {
     /// * `owner` - the global name of the function this capture struct is built for. Together with
     ///   `prefix`, it tells one capture struct from another.
     /// * `fields` - the captured names paired with their types, in the order the struct holds them.
-    pub fn new(prefix: &str, owner: &FullName, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
+    /// * `is_unbox` - whether the struct is unboxed.
+    pub fn new(
+        prefix: &str,
+        owner: &FullName,
+        fields: &[(FullName, Arc<TypeNode>)],
+        is_unbox: bool,
+    ) -> Self {
         let tycon = Arc::new(TyCon {
             name: Self::tycon_name(prefix, owner),
         });
@@ -54,7 +60,7 @@ impl CaptureStruct {
             punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Struct,
-            is_unbox: true,
+            is_unbox,
             tyvars: vec![],
             fields: fields
                 .iter()

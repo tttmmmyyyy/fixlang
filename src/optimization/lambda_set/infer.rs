@@ -101,6 +101,9 @@ pub struct Component {
     pub node_types: Vec<Vec<NodeType>>,
     /// The lambdas written in the bodies of the component.
     pub lams: Vec<LamId>,
+    /// The own slots of the functions that the values of the nodes store in an array or in a boxed
+    /// struct or union (`SlotLayout::collect_held_in_heap`).
+    pub held_in_heap: Vec<SetVar>,
     /// Every variable the nodes, the lambdas and the references of the component name, each a root
     /// of the solver, and each once. A copy of the component gives each of them a set. `infer`
     /// fills this list once every component is inferred, and replaces each variable that `types`,
@@ -260,6 +263,7 @@ pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
             solver,
             &mut component.types,
             &mut component.node_types,
+            &mut component.held_in_heap,
             lambdas,
             &component.lams,
         );
@@ -361,6 +365,17 @@ fn infer_component(
         sites,
         ..
     } = inferencer;
+    let mut held_in_heap = vec![];
+    let mut seen = Set::default();
+    for node in node_types.iter().flatten() {
+        layout.collect_held_in_heap(
+            &node.ty,
+            false,
+            &mut analysis.solver,
+            &mut seen,
+            &mut held_in_heap,
+        );
+    }
     generalize(
         analysis,
         symbols,
@@ -369,6 +384,7 @@ fn infer_component(
         vars_holding_current,
         sites,
         node_types,
+        held_in_heap,
     )
 }
 
@@ -853,8 +869,9 @@ fn instantiate(scheme: &LambdaSetScheme, solver: &mut Solver) -> Vec<SetVar> {
 
 /// The component inferred from the annotated `types` of its `symbols`, the `terms` of its lambdas
 /// and bodies, the variables `vars_holding_current` its lambdas were added to, its references
-/// `sites`, and the nodes of its bodies: the parameters are found, each lambda is given the ones
-/// it depends on, and the scheme is built.
+/// `sites`, the nodes of its bodies, and the slots `held_in_heap` the values of those nodes store
+/// in an array or in a boxed struct or union: the parameters are found, each lambda is given the
+/// ones it depends on, and the scheme is built.
 fn generalize(
     analysis: &mut Analysis,
     symbols: Vec<FullName>,
@@ -863,6 +880,7 @@ fn generalize(
     vars_holding_current: Vec<SetVar>,
     sites: Vec<Site>,
     node_types: Vec<Vec<NodeType>>,
+    held_in_heap: Vec<SetVar>,
 ) -> Component {
     let solver = &mut analysis.solver;
     let term_of_lam: Map<LamId, usize> = terms
@@ -1062,6 +1080,7 @@ fn generalize(
         body_params,
         node_types,
         lams,
+        held_in_heap,
         vars: vec![],
         var_index: Map::default(),
     }
@@ -1082,12 +1101,13 @@ pub fn slot_roots(solver: &mut Solver, types: &[AType]) -> Vec<SetVar> {
     roots
 }
 
-/// Replaces every variable that `types`, `node_types` and the lambdas `lams` name by its root, and
-/// returns those roots, each once, with the position of each in the list.
+/// Replaces every variable that `types`, `node_types`, `held_in_heap` and the lambdas `lams` name
+/// by its root, and returns those roots, each once, with the position of each in the list.
 fn root_vars(
     solver: &mut Solver,
     types: &mut [AType],
     node_types: &mut [Vec<NodeType>],
+    held_in_heap: &mut [SetVar],
     lambdas: &mut [Lambda],
     lams: &[LamId],
 ) -> (Vec<SetVar>, Map<SetVar, usize>) {
@@ -1117,6 +1137,7 @@ fn root_vars(
             }
         }
     }
+    collect_roots(solver, held_in_heap);
     for lam in lams {
         let lambda = &mut lambdas[*lam as usize];
         for (_, ty) in &mut lambda.captures {

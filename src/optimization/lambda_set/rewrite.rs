@@ -415,7 +415,12 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             .iter()
             .map(|(name, ty)| (name.clone(), self.rewrite_type(instance, ty)))
             .collect();
-        let cap = CaptureStruct::new(LS_CAP_PREFIX, &self.callee_name(c), &fields);
+        let cap = CaptureStruct::new(
+            LS_CAP_PREFIX,
+            &self.callee_name(c),
+            &fields,
+            !self.repr.classes[c as usize].boxed,
+        );
         self.insert_tycon(cap.tycon.as_ref().clone(), cap.tycon_info.clone());
         self.capture_structs.insert(c, cap.clone());
         cap

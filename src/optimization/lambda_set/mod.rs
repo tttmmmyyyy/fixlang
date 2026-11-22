@@ -13,9 +13,10 @@
 // classes, a class being the elements that name one lambda and make the same code. A value whose
 // set has one class becomes that class's capture struct, and a call of it calls the lambda
 // directly. A value whose set has two or more classes becomes an unboxed union of their capture
-// structs, and a call of it matches the variant and calls that class's lambda directly. A set that
-// no capture struct or union can stand for stays a set of closures (`represent::represent` lists
-// them).
+// structs, and a call of it matches the variant and calls that class's lambda directly. A class's
+// capture struct is boxed where an array or a boxed struct or union storing its values would
+// otherwise hold many words per value (`represent::boxed_classes`). A set that no capture struct or
+// union can stand for stays a set of closures (`represent::represent` lists them).
 //
 // The design is laid out in `dev-docs/2026-10-24-lambda-set-specialization/design.md`.
 
@@ -63,7 +64,7 @@ pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, dev
                 |tmp_path| fs::write(tmp_path, &text),
             ));
         }
-        let repr = represent(&analysis, &spec);
+        let repr = represent(&analysis, &spec, &prg.type_env);
         rewrite(prg, &layout, &analysis, &spec, &repr)
     };
     rewritten.apply(prg, num_threads);
