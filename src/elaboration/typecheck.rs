@@ -531,15 +531,16 @@ impl Substitution {
 pub enum InstantiationMode {
     /// Each variable the scheme generalizes is replaced by a fresh type variable, and each
     /// constraint becomes one the type checking has to deduce. `site`, when given, is where an
-    /// expression uses the value that has this scheme; diagnostics point each fresh variable there.
+    /// expression uses the value that has this scheme; diagnostics point there each fresh variable
+    /// that replaces a variable the source names, which `is_generated_tyvar` tells apart.
     Require { site: Option<InstantiationSite> },
     /// Each variable the scheme generalizes stays as the scheme writes it and is fixed against
     /// replacement, and each constraint becomes one that later deductions may use.
     Assume,
 }
 
-/// Where an expression uses a global value. Diagnostics point the type variables made by
-/// instantiating the value's type scheme at it.
+/// Where an expression uses a global value. Diagnostics point at it the type variables made by
+/// instantiating the value's type scheme for the variables the source names.
 pub struct InstantiationSite {
     /// The value the expression uses.
     value: Arc<FullName>,
