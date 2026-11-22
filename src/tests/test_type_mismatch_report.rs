@@ -484,3 +484,27 @@ main = (
         "`#3` is `m` in the type of `Std::Iterator::fold_m`.\n\n15:30-15:36 in ",
     );
 }
+
+/// A type variable that replaces a variable the compiler named in a global value's type, such as
+/// the functor of a field's `act_` function, gets no sentence about that variable, since the
+/// sentence would quote a name the source never writes.
+#[test]
+pub fn test_a_type_variable_from_a_variable_the_compiler_named_is_not_explained() {
+    let source = r##"
+module Main;
+
+type H = box struct { n : I64 };
+
+main : IO () = (
+    let h = H { n : 1 };
+    let h = h.act_n(|n| n + 1);
+    println(h.@n.to_string)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`n` of type `Std::I64` does not match the expected type `#1 Std::I64`.",
+    );
+    test_source_fail_excludes(source, Configuration::develop_mode(), "` is `#");
+}
