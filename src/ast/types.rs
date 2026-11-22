@@ -2996,8 +2996,29 @@ pub fn is_wrap_opaque_tyvar(name: &str) -> bool {
 /// Whether a type variable name is one the inference created: `INFERENCE_TYVAR_PREFIX` followed by
 /// a number, as `#a3` is.
 pub fn is_inference_tyvar(name: &str) -> bool {
-    name.strip_prefix(INFERENCE_TYVAR_PREFIX)
-        .is_some_and(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+    inference_tyvar_id(name).is_some()
+}
+
+/// The name of the type variable the inference creates as its `id`-th, which
+/// `inference_tyvar_id` reads back.
+///
+/// # Examples
+/// `inference_tyvar_name(3)` is `"#a3"`.
+pub fn inference_tyvar_name(id: u32) -> Name {
+    INFERENCE_TYVAR_PREFIX.to_string() + &id.to_string()
+}
+
+/// The number `inference_tyvar_name` writes in the name of a type variable the inference created:
+/// how many variables its context created before it.
+///
+/// # Examples
+/// `inference_tyvar_id("#a3")` is `Some(3)`, and `inference_tyvar_id("a")` is `None`.
+pub fn inference_tyvar_id(name: &str) -> Option<u32> {
+    let id = name.strip_prefix(INFERENCE_TYVAR_PREFIX)?;
+    if id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    id.parse().ok()
 }
 
 /// Gives each variable of `vars` that `kind_signs` names the kind the signature gives it.
