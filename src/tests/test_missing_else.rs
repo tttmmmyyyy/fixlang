@@ -1,6 +1,6 @@
-//! The `if` pointed at beside the parse error of a `let` left without its `;`, when the `if` is in
-//! the bound expression of the `let` with no `else` block: its `;` makes the rest of the block its
-//! else branch.
+//! The `if` pointed at beside the parse error of a `let` or an `eval` left without its `;`, when the
+//! `if` is in the expression the `;` ends, with no `else` block: its `;` makes the rest of the block
+//! its else branch.
 
 use crate::{
     configuration::Configuration,
@@ -301,8 +301,8 @@ main : IO () = println $ f(3).to_string;
     assert_ifs_are_pointed_at(&source, &["5:13-5:15"]);
 }
 
-/// A `;` put in that ends an `eval` at the end of the block points at no `if`, and the `let` before
-/// the `eval`, whose `;` is put in next, still has its `if` pointed at.
+/// A `;` put in that ends an `eval` whose expression holds no `if` points at no `if`, and the `let`
+/// before the `eval`, whose `;` is put in next, still has its `if` pointed at.
 #[test]
 pub fn test_a_semicolon_put_in_for_an_eval_leaves_the_if_of_the_let_pointed_at() {
     let source = r##"
@@ -351,8 +351,8 @@ main : IO () = println $ f(3).to_string;
     }
 }
 
-/// The `if` is pointed at however many `;`s the text after the parse error needs: here, one for each
-/// trait member.
+/// The `if` is pointed at however many `;`s the text after the parse error needs: here, each trait
+/// member is left without its `;` before the `}`, which is one more parse error of the same kind.
 #[test]
 pub fn test_the_if_is_pointed_at_however_many_semicolons_the_rest_of_the_text_needs() {
     let source = r##"

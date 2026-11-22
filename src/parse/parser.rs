@@ -615,13 +615,13 @@ pub fn parse_renamed_source_file(
 ///
 /// To find that `if`, this puts a `;` where `e` expected one and parses `source_code` again. It does
 /// this again at each such error that follows, until the whole text parses: one token can close
-/// several `let`s left without their `;`, and the text after `e` can hold more of them. When the
-/// text holds a parse error of another kind, no `if` is reported. Each `;` put in at the position of
-/// `e` ends a `let`, an `eval` or an `if` in the form `if c { a }; b`, and leaves a hole after it. A
-/// `let` or an `eval` has an `if` to report: the first expression on the right end of the expression
-/// the `;` ends that reads a `;`. An `if` whose else branch follows `else` reads none. When that first
-/// expression is a `let` or an `eval`, either of the two `;` could be the one meant for the outer
-/// `let` or `eval`, and the outer one has no `if` to report.
+/// several `let`s and `eval`s left without their `;`, and the text after `e` can hold more of them.
+/// When the text holds a parse error of another kind, no `if` is reported. Each `;` put in at the
+/// position of `e` ends a `let`, an `eval` or an `if` in the form `if c { a }; b`, and leaves a hole
+/// after it. A `let` or an `eval` has an `if` to report: of the expressions on the right end of the
+/// expression the `;` ends, the first that reads a `;`. An `if` whose else branch follows `else`
+/// reads none. When that first expression is a `let` or an `eval`, either of the two `;` could be the
+/// one meant for the outer `let` or `eval`, and the outer one has no `if` to report.
 fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Vec<usize> {
     // The text put in. The spaces keep its `;` from joining a `;` beside it into a `;;`.
     const INSERTED: &str = " ; ";
@@ -674,14 +674,14 @@ fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Vec<u
     let mut if_starts: Vec<usize> = semicolons_at_the_error
         .iter()
         .filter_map(|&semicolon| {
-            let bound = lets_and_evals
+            let ended = lets_and_evals
                 .iter()
-                .find_map(|pair| bound_expression_ended_at(pair.clone(), semicolon))?;
-            let expr_if = first_expression_reading_a_semicolon_at_the_end(bound)?;
+                .find_map(|pair| expression_ended_at(pair.clone(), semicolon))?;
+            let expr_if = first_expression_reading_a_semicolon_at_the_end(ended)?;
             (expr_if.as_rule() == Rule::expr_if).then(|| expr_if.as_span().start())
         })
         .collect();
-    // The `if`s are inside bound expressions that end at `error_at`, before every `;` put in, so
+    // The `if`s are inside expressions that end at `error_at`, before every `;` put in, so
     // their offsets in `patched` are those in `source_code`.
     assert!(
         if_starts.iter().all(|&start| start < error_at),
@@ -726,7 +726,7 @@ fn reads_a_semicolon_before_its_else_branch(expr_if: &Pair<Rule>) -> bool {
 /// The expression that the `in` or `;` at the byte offset `at` ends in `let_or_eval`, an `expr_let` or
 /// `expr_eval` pair: the bound expression of a binding of the `let`, or the expression of the `eval`.
 /// `None` says that `let_or_eval` has no `in` or `;` there.
-fn bound_expression_ended_at(let_or_eval: Pair<Rule>, at: usize) -> Option<Pair<Rule>> {
+fn expression_ended_at(let_or_eval: Pair<Rule>, at: usize) -> Option<Pair<Rule>> {
     let mut previous = None;
     for pair in let_or_eval.into_inner() {
         if matches!(pair.as_rule(), Rule::in_of_let | Rule::semicolon)
