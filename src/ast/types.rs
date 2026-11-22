@@ -1895,29 +1895,12 @@ impl TypeNode {
     /// of appearance, so that two types differing only in the names of their variables are written
     /// alike.
     pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
-        // Collect free variables keeping the order of appearance.
-        let mut free_vars = vec![];
-        self.free_vars_to_vec(&mut free_vars);
-
-        // Create substitution that normalizes the names of type variables.
-        let mut s = Substitution::default();
         let mut next_tyvar_no = 0;
-        let mut appeared: Set<Name> = Set::default();
-        for fv in free_vars {
-            if appeared.contains(&fv.name) {
-                continue;
-            }
-            appeared.insert(fv.name.clone());
+        self.to_string_with_tyvars_renamed(|_| {
             let new_name = number_to_varname(next_tyvar_no);
-            let merge_ok = s.merge(&Substitution::single(
-                &fv.name,
-                type_tyvar(&new_name, &fv.kind),
-            ));
-            assert!(merge_ok, "`{}` is renamed twice.", fv.name);
             next_tyvar_no += 1;
-        }
-
-        s.substitute_type(self).to_string()
+            Some(new_name)
+        })
     }
 
     /// This type as a diagnostic quotes it: written in source syntax under the names its own type
@@ -1929,15 +1912,27 @@ impl TypeNode {
     /// # Examples
     /// The annotation `Array _ _` is quoted `Std::Array _ _`.
     pub fn to_string_as_written(self: &Arc<TypeNode>) -> String {
-        let mut wildcards = Substitution::default();
+        self.to_string_with_tyvars_renamed(|tv| {
+            is_type_wildcard_tyvar(&tv.name).then(|| "_".to_string())
+        })
+    }
+
+    /// This type written by `to_string`, with each free type variable renamed to the name
+    /// `new_name` gives it, or kept where `new_name` gives none. `new_name` sees each variable
+    /// once, in order of first appearance.
+    fn to_string_with_tyvars_renamed(
+        self: &Arc<TypeNode>,
+        mut new_name: impl FnMut(&TyVar) -> Option<Name>,
+    ) -> String {
+        let mut renaming = Substitution::default();
         for tv in self.free_vars_vec() {
-            if is_type_wildcard_tyvar(&tv.name) {
+            if let Some(name) = new_name(&tv) {
                 let merge_ok =
-                    wildcards.merge(&Substitution::single(&tv.name, type_tyvar("_", &tv.kind)));
-                assert!(merge_ok, "wildcard `{}` is replaced twice", tv.name);
+                    renaming.merge(&Substitution::single(&tv.name, type_tyvar(&name, &tv.kind)));
+                assert!(merge_ok, "`{}` is renamed twice", tv.name);
             }
         }
-        wildcards.substitute_type(self).to_string()
+        renaming.substitute_type(self).to_string()
     }
 
     /// This type written in source syntax, under the names its own type variables carry. Two
