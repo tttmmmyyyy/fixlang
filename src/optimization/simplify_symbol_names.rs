@@ -15,7 +15,7 @@ use crate::{
         program::Program,
         traverse::{EndVisitResult, ExprVisitor, VisitState},
     },
-    constants::INSTANCIATED_NAME_SEPARATOR,
+    constants::{GENERATED_NAME_PREFIX, INSTANCIATED_NAME_SEPARATOR},
     misc::{insert_to_map_vec, Map},
 };
 
@@ -88,16 +88,17 @@ fn rename_var_expr(
 
 fn get_base_name(full_name: &FullName) -> FullName {
     let name = &full_name.name;
-    let new_name = if name.starts_with('#') {
+    let new_name = if full_name.is_generated() {
         // To avoid the name becomes empty, remove after second '#' if exists.
-        let second_sharp = name[1..].find("#");
+        let prefix_len = GENERATED_NAME_PREFIX.len_utf8();
+        let second_sharp = name[prefix_len..].find(INSTANCIATED_NAME_SEPARATOR);
         match second_sharp {
-            Some(pos) => name[0..pos + 1].to_string(),
+            Some(pos) => name[0..pos + prefix_len].to_string(),
             None => name.clone(),
         }
     } else {
         // Remove after first '#' if exists.
-        let first_sharp = name.find("#");
+        let first_sharp = name.find(INSTANCIATED_NAME_SEPARATOR);
         match first_sharp {
             Some(pos) => name[0..pos].to_string(),
             None => name.clone(),

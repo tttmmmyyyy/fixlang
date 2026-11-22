@@ -1,5 +1,6 @@
 use crate::constants::{
-    BIND_RESULT_VAR_PREFIX, MODULE_SEPARATOR, NAMESPACE_SEPARATOR, PATTERN_WILDCARD_VAR_PREFIX,
+    BIND_RESULT_VAR_PREFIX, GENERATED_NAME_PREFIX, MODULE_SEPARATOR, NAMESPACE_SEPARATOR,
+    PATTERN_WILDCARD_VAR_PREFIX,
 };
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -332,10 +333,9 @@ impl FullName {
         return !self.is_local();
     }
 
-    /// Whether the compiler generated this name. Such a name starts with `#`, which no name the
-    /// source writes starts with.
+    /// Whether the compiler generated this name, which starts with `GENERATED_NAME_PREFIX`.
     pub fn is_generated(&self) -> bool {
-        self.name.starts_with('#')
+        self.name.starts_with(GENERATED_NAME_PREFIX)
     }
 
     /// Whether this is the binder the compiler makes for a `_` the user wrote in a pattern. Such a

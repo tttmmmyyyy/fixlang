@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 /// The names one error report prints for the type variables the inference created (`#a575`): `#1`,
 /// `#2`, ... in the order the report first mentions them. A program cannot write a name beginning
-/// with `#`, so a name the report prints stands for one variable.
+/// with `GENERATED_NAME_PREFIX`, so a name the report prints stands for one variable.
 pub struct ReportTyVarNames {
     /// Every type variable the report mentions, each once, in the order it first mentions them.
     vars: Vec<Arc<TyVar>>,
