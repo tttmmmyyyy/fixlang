@@ -239,7 +239,7 @@ fn try_unify_receiver(
     let gv = program.global_values.get(name).ok_or(())?;
     let mut tc = tc_template.clone();
     let inst_ty = tc
-        .instantiate_scheme(&gv.scm, ConstraintInstantiationMode::Require)
+        .instantiate_scheme(&gv.scm, ConstraintInstantiationMode::Require { site: None })
         .map_err(|_| ())?;
     let (srcs, _) = inst_ty.collect_app_src(usize::MAX);
     let cand_recv_ty = srcs.last().ok_or(())?;

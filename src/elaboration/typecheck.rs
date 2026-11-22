@@ -15,10 +15,10 @@ use crate::{
         type_env::TypeEnv,
         typedecl::describe_field_names,
         types::{
-            is_inference_tyvar, is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar,
-            type_arrow, type_from_tyvar, type_tyapp, type_tycon, AssocType, Kind,
-            OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode,
-            MAX_TYPE_DEPTH,
+            is_generated_tyvar, is_inference_tyvar, is_opaque_tyvar, is_type_wildcard_tyvar,
+            kind_star, make_tyvar, type_arrow, type_from_tyvar, type_tyapp, type_tycon, AssocType,
+            Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
+            TypeNode, MAX_TYPE_DEPTH,
         },
     },
     constants::{
@@ -528,10 +528,21 @@ impl Substitution {
 
 /// What becomes of the constraints of a type scheme when the scheme is instantiated.
 pub enum ConstraintInstantiationMode {
-    /// Each constraint becomes one the type checking has to deduce.
-    Require,
+    /// Each constraint becomes one the type checking has to deduce, and each variable the scheme
+    /// generalizes is replaced by a fresh type variable. `site`, when given, is where an expression
+    /// uses the value whose type the scheme is; each fresh variable is recorded as arising there.
+    Require { site: Option<InstantiationSite> },
     /// Each constraint becomes one that later deductions may use.
     Assume,
+}
+
+/// Where an expression uses a value, for the type variables the instantiation of the value's type
+/// scheme creates to point at.
+pub struct InstantiationSite {
+    /// The value the expression uses.
+    pub value: FullName,
+    /// The span of the expression that uses it.
+    pub span: Span,
 }
 
 /// The state of type checking an expression: the assumptions it is checked under, what the
@@ -1075,11 +1086,27 @@ impl TypeCheckContext {
         }
         let mut eqs = scheme.equalities.clone();
         match constraint_mode {
-            ConstraintInstantiationMode::Require => {
+            ConstraintInstantiationMode::Require { site } => {
                 // Instantiate type variables.
                 let mut sub = Substitution::default();
                 for tv in &scheme.gen_vars {
                     let new_tv = self.new_tyvar_by(tv);
+                    // A diagnostic names the variable by the name the type gives it, so a
+                    // variable the compiler named has no source to point at.
+                    if let Some(site) = &site {
+                        if !is_generated_tyvar(&tv.name) {
+                            self.insert_tyvar_source(
+                                new_tv.name.clone(),
+                                TyVarSource {
+                                    span: site.span.clone(),
+                                    role: TyVarRole::GeneralizedVarOf {
+                                        tyvar: tv.name.clone(),
+                                        value: site.value.clone(),
+                                    },
+                                },
+                            );
+                        }
+                    }
                     let merge_ok = sub.merge(&Substitution::single(
                         &tv.name,
                         type_from_tyvar(new_tv.clone()),
@@ -1285,9 +1312,15 @@ impl TypeCheckContext {
                 for (ns, scm) in &candidates {
                     let fullname = FullName::new(ns, &var.name.name);
                     let mut tc = self.clone();
-                    let var_ty = UnifOrOtherErr::extract_others(
-                        tc.instantiate_scheme(&scm, ConstraintInstantiationMode::Require),
-                    )?;
+                    let var_ty = UnifOrOtherErr::extract_others(tc.instantiate_scheme(
+                        &scm,
+                        ConstraintInstantiationMode::Require {
+                            site: ei.source.clone().map(|span| InstantiationSite {
+                                value: fullname.clone(),
+                                span,
+                            }),
+                        },
+                    ))?;
                     if let Err(e) = var_ty {
                         candidates_check_res.push(Err((tc, fullname, scm.clone(), e)))
                     } else if let Err(e) =
@@ -1825,6 +1858,14 @@ impl TypeCheckContext {
                     (TyVarRole::ElementTypeOf, None) => {
                         format!("{} is the element type of this array.", prefix)
                     }
+                    (TyVarRole::GeneralizedVarOf { tyvar, value }, _) => {
+                        format!(
+                            "{} is `{}` in the type of `{}`.",
+                            prefix,
+                            tyvar,
+                            value.to_string()
+                        )
+                    }
                 };
                 msg_srcs.push((msg, src.span.clone()));
             }
@@ -2111,7 +2152,8 @@ impl TypeCheckContext {
         rhs: &Arc<Scheme>,
     ) -> Result<(), UnifOrOtherErr> {
         let lhs = self.instantiate_scheme(lhs, ConstraintInstantiationMode::Assume)?;
-        let rhs = self.instantiate_scheme(rhs, ConstraintInstantiationMode::Require)?;
+        let rhs =
+            self.instantiate_scheme(rhs, ConstraintInstantiationMode::Require { site: None })?;
         self.unify(&lhs, &rhs)?;
         self.reduce_predicates()?;
         if self.predicates.len() > 0 {
@@ -3284,6 +3326,9 @@ enum TyVarRole {
     ExpectedTypeOf,
     /// The variable is the element type of the expression, an array literal with no element.
     ElementTypeOf,
+    /// The variable replaces the type variable `tyvar` of the type of the global value `value`,
+    /// where the expression uses that value.
+    GeneralizedVarOf { tyvar: Name, value: FullName },
 }
 
 /// The trimmed source text `span` covers, where that text stands on one line and stays inside a

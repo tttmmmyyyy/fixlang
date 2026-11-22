@@ -434,3 +434,53 @@ main : IO () = (
         "`#1` is the type expected for `undefined(\"\")`.\n\n5:53-5:66 in ",
     );
 }
+
+/// A type variable that replaces a variable of a global value's type, where an expression uses the
+/// value, is described by the variable it replaces and the value, and points at the use. Here the
+/// lambda returns the state where `fold_m` expects it wrapped in its monad `m`.
+#[test]
+pub fn test_a_type_variable_from_the_type_of_a_global_value_names_the_variable_and_the_value() {
+    let source = r##"
+module Main;
+
+type H k v = box struct { ks : Array k, vs : Array v };
+
+new_h : I64 -> H k v;
+new_h = |_| H { ks : [], vs : [] };
+
+insert : k -> v -> H k v -> H k v;
+insert = |k, v, h| h.mod_ks(push_back(k)).mod_vs(push_back(v));
+
+main : IO ();
+main = (
+    let memo = new_h(10);
+    let memo = *range(2, 11).fold_m(memo, |n, memo|
+        range(n+1, 11).fold(memo, |m, memo|
+            let memo = memo.insert(n, m);
+            memo
+        )
+    );
+    println(memo.@ks.get_size.to_string)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`memo` of type `Main::H #2 #1` does not match the expected type `#3 (Main::H #2 #1)`.",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` is `v` in the type of `Main::new_h`.\n\n14:16-14:21 in ",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#2` is `k` in the type of `Main::new_h`.\n\n14:16-14:21 in ",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#3` is `m` in the type of `Std::Iterator::fold_m`.\n\n15:30-15:36 in ",
+    );
+}

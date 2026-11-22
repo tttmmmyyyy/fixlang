@@ -2981,6 +2981,12 @@ pub fn is_type_wildcard_tyvar(name: &str) -> bool {
     name.starts_with(TYPE_WILDCARD_VAR_PREFIX)
 }
 
+/// Whether the compiler generated this type variable name. Such a name starts with `#`, which no
+/// type variable the source writes starts with.
+pub fn is_generated_tyvar(name: &str) -> bool {
+    name.starts_with('#')
+}
+
 /// Whether a type variable name is one the inference created: `INFERENCE_TYVAR_PREFIX` followed by
 /// a number, as `#a3` is.
 pub fn is_inference_tyvar(name: &str) -> bool {
