@@ -187,6 +187,21 @@ pub trait BuiltinOp: DynClone + Send + Sync {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
+    /// The operand whose object holds a reference to every boxed leaf of this op's result, for the
+    /// operand types the op is instantiated at: the boxed container the op reads its result out of.
+    /// Default: no operand does.
+    ///
+    /// While that operand's object lives, so does every object the result refers to. `borrow_ify`
+    /// reads this to lend a call a value read out of a container that the code after the call still
+    /// holds.
+    fn result_held_by_operand(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Option<usize> {
+        None
+    }
+
     /// The values this op reference-counts inside `generate`, for the operand types it is
     /// instantiated at. An op that counts none answers the empty list and is never annotated.
     ///

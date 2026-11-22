@@ -387,6 +387,32 @@ pub(crate) fn alias_step(
     }
 }
 
+/// The boxed container whose object holds a reference to every boxed leaf of `var`'s value: the
+/// struct a field is read out of, the union a payload is read out of, or the operand a `Builtin` op
+/// reads its result out of (`BuiltinOp::result_held_by_operand`). `None` where no container is
+/// known to hold the value.
+///
+/// A container's contents do not change while a name refers to it, so the container keeps the
+/// value's objects alive for as long as it lives.
+pub(crate) fn holding_container(
+    vars: &VarTable,
+    type_env: &TypeEnv,
+    var: &FullName,
+) -> Option<FullName> {
+    match vars.bindings.get(var)? {
+        Binding::Field(container, _) if container.ty.is_box(type_env) => {
+            Some(container.name.clone())
+        }
+        Binding::Payload(scrut, Some(_)) if scrut.ty.is_box(type_env) => Some(scrut.name.clone()),
+        Binding::Builtin(op, args, _) => {
+            let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+            op.result_held_by_operand(&arg_tys, type_env)
+                .map(|j| args[j].name.clone())
+        }
+        _ => None,
+    }
+}
+
 /// Where the leaves beneath `path` of a `Builtin` op's result come from, for a path whose own record
 /// does not name an object.
 ///

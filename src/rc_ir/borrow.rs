@@ -55,9 +55,9 @@ use crate::rc_ir::ast::{
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
-    acted_references, alias_step, all_owned_units, collect_consumes, destructure_consumes, origin,
-    rc_units, rhs_consumes, truncate_to_unit, unit_step, units_under, AliasStep, References,
-    UnitStep, VarTable,
+    acted_references, alias_step, all_owned_units, collect_consumes, destructure_consumes,
+    holding_container, origin, rc_units, rhs_consumes, truncate_to_unit, unit_step, units_under,
+    AliasStep, References, UnitStep, VarTable,
 };
 use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneKey, CloneRegistry};
 use std::sync::Arc;
@@ -967,9 +967,10 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     /// Every name on the alias chain from `value` back to its object holds the reference `value`
     /// holds (`alias_step`): the container a field was destructured out of, the match binding an
     /// arm result flows into, the variable a move-bind renamed. A use of any of them after the call
-    /// keeps the object alive past it. Where the value may be one of several objects — a match
-    /// binding, or an op result whose leaves come from several operands — each of them has to be
-    /// held, unless a use of the value itself holds whichever it is.
+    /// keeps the object alive past it. So does a use of the boxed container the value was read out
+    /// of (`holding_container`), which goes on holding the object. Where the value may be one of
+    /// several objects — a match binding, or an op result whose leaves come from several operands
+    /// — each of them has to be held, unless a use of the value itself holds whichever it is.
     ///
     /// # Arguments
     /// * `held` - the answers given so far in this query. A chain of match bindings, each rebuilding
@@ -981,6 +982,8 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         }
         let (var, path) = value;
         let answer = after.uses(var)
+            || holding_container(self.vars, self.type_env(), var)
+                .is_some_and(|container| self.held_after(&(container, vec![]), after, held))
             || match alias_step(self.vars, self.type_env(), var, path) {
                 AliasStep::Stops => false,
                 AliasStep::Projects(source) => self.held_after(&source, after, held),
