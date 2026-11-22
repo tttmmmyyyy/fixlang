@@ -3075,8 +3075,9 @@ pub struct OpaqueTyConResolution {
 
 #[cfg(test)]
 mod tests {
-    use super::{kind_arrow, kind_star, make_tyvar, type_tyapp, TypeNode};
-    use crate::fixstd::builtin::{make_array_ty, make_i64_ty};
+    use super::{kind_arrow, kind_star, make_tyvar, type_tyapp, type_tyvar_star, TypeNode};
+    use crate::constants::TYPE_WILDCARD_VAR_PREFIX;
+    use crate::fixstd::builtin::{make_array_ty, make_i64_ty, make_tuple_ty};
     use crate::misc::Set;
     use crate::parse::sourcefile::{SourceFile, Span};
     use std::path::PathBuf;
@@ -3153,11 +3154,9 @@ mod tests {
     /// `to_string`, and both are quoted alike by `to_string_as_written`.
     #[test]
     fn test_to_string_tells_apart_types_that_differ_in_their_wildcards() {
-        let wildcard = |n: u32| {
-            super::type_tyvar_star(&format!("{}{}", crate::constants::TYPE_WILDCARD_VAR_PREFIX, n))
-        };
-        let two_wildcards = crate::fixstd::builtin::make_tuple_ty(vec![wildcard(0), wildcard(1)]);
-        let one_wildcard_twice = crate::fixstd::builtin::make_tuple_ty(vec![wildcard(0), wildcard(0)]);
+        let wildcard = |n: u32| type_tyvar_star(&format!("{}{}", TYPE_WILDCARD_VAR_PREFIX, n));
+        let two_wildcards = make_tuple_ty(vec![wildcard(0), wildcard(1)]);
+        let one_wildcard_twice = make_tuple_ty(vec![wildcard(0), wildcard(0)]);
 
         assert_ne!(
             two_wildcards.to_string(),
