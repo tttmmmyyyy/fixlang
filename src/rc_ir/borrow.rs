@@ -54,12 +54,15 @@ use crate::rc_ir::ast::{
     OwnershipShape, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
+use crate::fixstd::builtin::StructGetOp;
 use crate::rc_ir::ownership::{
-    acted_references, alias_step, all_owned_units, collect_consumes, destructure_consumes, origin,
+    acted_references, alias_step, all_owned_units, collect_consumes,
+    collect_consumes_outside_call_arguments, origin,
     rc_units, rhs_consumes, truncate_to_unit, unit_step, units_under, AliasStep, References,
     UnitStep, VarTable,
 };
 use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneKey, CloneRegistry};
+use std::iter;
 use std::sync::Arc;
 
 /// The parameter leaves borrow inference found `Own`, keyed by the parameter variable's name and the
@@ -142,9 +145,9 @@ fn infer_ownership(
 /// `owns_unit` answers once for such a pair, while the node it decides acts on each boxed leaf under
 /// the unit. Where those leaves come from roots the version owns differently, no single answer is
 /// right, so the leaves are levelled (`level_ownership`) before any of them is read.
-fn levelled_sites(func: &RcFunc, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> {
+fn levelled_sites(body: &RcExprNode, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> {
     let mut sites = vec![];
-    for_each_node(&func.body, &mut |node| match node.expr.as_ref() {
+    for_each_node(body, &mut |node| match node.expr.as_ref() {
         RcExpr::Retain(v, path, _, _) | RcExpr::Release(v, path, _, _) => {
             sites.push((v.clone(), path.clone()))
         }
@@ -290,7 +293,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         .map(|f| {
             let facts = LevellingFacts {
                 vars: VarTable::of(f),
-                sites: levelled_sites(f, type_env),
+                sites: levelled_sites(&f.body, type_env),
             };
             (f.name.clone(), facts)
         })
@@ -333,7 +336,10 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         .iter()
         .map(|g| {
             let vars = VarTable::body_only(&g.init);
-            g.with_init(RewriteCtx::new(&vars, &[], &[], &g.init, &mut versions).rewrite(&g.init))
+            let sites = levelled_sites(&g.init, type_env);
+            g.with_init(
+                RewriteCtx::new(&vars, &sites, &[], &[], &g.init, &mut versions).rewrite(&g.init),
+            )
         })
         .collect();
 
@@ -345,6 +351,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         let body = {
             let mut ctx = RewriteCtx::new(
                 &bodies[&fref].vars,
+                &bodies[&fref].sites,
                 &func.params,
                 &key,
                 &func.body,
@@ -788,13 +795,17 @@ struct RewriteCtx<'a, 'v> {
     /// This version's variables: what binds each one and its type, which decide the object a leaf
     /// belongs to and whether this version owns it.
     vars: &'v VarTable,
+    /// The values this version reads out of a boxed container without retaining them
+    /// (`lent_reads`). Each holds no reference of its own, as a borrowed parameter does.
+    lent: Set<FullName>,
 }
 
 impl<'a, 'v> RewriteCtx<'a, 'v> {
     /// The rewrite state of the version keyed on `key` of the function whose parameters are
-    /// `params` and whose body is `body`.
+    /// `params`, whose body is `body`, and whose levelled sites (`levelled_sites`) are `sites`.
     fn new(
         vars: &'v VarTable,
+        sites: &[(RcVar, FieldPath)],
         params: &[RcVar],
         key: &[OwnershipShape],
         body: &RcExprNode,
@@ -807,7 +818,7 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
             key.len(),
             params.len()
         );
-        RewriteCtx {
+        let mut ctx = RewriteCtx {
             param_ownership: params
                 .iter()
                 .map(|p| p.name.clone())
@@ -816,7 +827,145 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
             versions,
             tail: tail_result_vars(body),
             vars,
+            lent: Set::default(),
+        };
+        ctx.lent = ctx.lent_reads(body, sites);
+        ctx
+    }
+
+    /// The values read out of a boxed container that this version lends rather than retains: the
+    /// fields a `Destructure` reads out of a boxed struct, and the results of the ops reading them out
+    /// of an operand they borrow (`BuiltinOp::result_held_by_operand`). A lent value holds no
+    /// reference of its own, so the code holds its container for as long as it uses the value, and
+    /// takes a reference of the value where it hands one over. A value is lent where
+    ///
+    /// 1. the body consumes it, through its aliases, only as an argument of a call, before which
+    ///    the call's reference counting retains it (`call_rc`), as for a borrowed parameter;
+    /// 2. its container is held at each use of it (`container_held`); and
+    /// 3. no levelled site mixes it with a value this version owns (`level_ownership`).
+    ///
+    /// Lending changes no liveness, and only takes values out of the set, so the conditions are
+    /// checked again until the set is stable.
+    ///
+    /// A value is not lent where its container ends at the read, so a container whose last use is the
+    /// read gives the value a reference of its own, which is unique once the container is freed.
+    fn lent_reads(&self, body: &RcExprNode, sites: &[(RcVar, FieldPath)]) -> Set<FullName> {
+        let type_env = self.type_env();
+        let mut containers: Map<FullName, FullName> = Map::default();
+        for_each_node(body, &mut |node| match node.expr.as_ref() {
+            RcExpr::Destructure(container, fields, _, _) if container.ty.is_box(type_env) => {
+                for (_, field) in fields {
+                    if !field.ty.is_fully_unboxed(type_env) {
+                        containers.insert(field.name.clone(), container.name.clone());
+                    }
+                }
+            }
+            RcExpr::Let(x, RcRhs::Builtin(op, args), _) if !x.ty.is_fully_unboxed(type_env) => {
+                let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+                if let Some(j) = op.result_held_by_operand(&arg_tys, type_env) {
+                    if op.borrows_operand(j, &arg_tys, type_env) {
+                        containers.insert(x.name.clone(), args[j].name.clone());
+                    }
+                }
+            }
+            RcExpr::Let(..)
+            | RcExpr::Destructure(..)
+            | RcExpr::Retain(..)
+            | RcExpr::Release(..)
+            | RcExpr::Eval(..)
+            | RcExpr::Ret(..) => {}
+        });
+        if containers.is_empty() {
+            return Set::default();
         }
+        let mut consumed = vec![];
+        collect_consumes_outside_call_arguments(
+            body,
+            self.vars,
+            self.versions.prog,
+            type_env,
+            &mut consumed,
+        );
+        for (var, leaf) in &consumed {
+            for (root, _) in origin(self.vars, type_env, var, leaf).candidates() {
+                containers.remove(root);
+            }
+        }
+        // The objects each variable's units belong to, which a use of the variable holds.
+        let objects: Map<FullName, Vec<VarPath>> = self
+            .vars
+            .var_tys
+            .iter()
+            .chain(&self.vars.param_tys)
+            .map(|(v, ty)| {
+                let objects = rc_units(ty, type_env)
+                    .iter()
+                    .flat_map(|unit| {
+                        origin(self.vars, type_env, v, unit)
+                            .candidates()
+                            .into_iter()
+                            .cloned()
+                            .collect::<Vec<VarPath>>()
+                    })
+                    .collect();
+                (v.clone(), objects)
+            })
+            .collect();
+        let lending = Lending {
+            ctx: self,
+            objects: &objects,
+        };
+        loop {
+            let mut failing: Set<FullName> = Set::default();
+            lending.find_unheld_uses(body, None, &containers, &mut failing);
+            for (v, unit) in sites {
+                let where_from = origin(self.vars, type_env, &v.name, unit);
+                let candidates = where_from.candidates();
+                let mixes_an_owned_value = candidates.iter().any(|(root, path)| {
+                    !containers.contains_key(root) && self.owns_object(root, path)
+                });
+                if mixes_an_owned_value {
+                    failing.extend(
+                        candidates
+                            .iter()
+                            .map(|(root, _)| root)
+                            .filter(|root| containers.contains_key(*root))
+                            .cloned(),
+                    );
+                }
+            }
+            if failing.is_empty() {
+                return containers.into_keys().collect();
+            }
+            for value in &failing {
+                containers.remove(value);
+            }
+        }
+    }
+
+    /// Whether the value named `value` holds its objects throughout the body: a global, a value
+    /// coming from parameters this version borrows, which the caller holds across the call, or a
+    /// value of `containers` read out of a container held throughout.
+    fn held_throughout(&self, value: &FullName, containers: &Map<FullName, FullName>) -> bool {
+        if !value.is_local() {
+            return true;
+        }
+        if let Some(container) = containers.get(value) {
+            return self.held_throughout(container, containers);
+        }
+        let Some(ty) = self.vars.var_tys.get(value) else {
+            return false;
+        };
+        rc_units(ty, self.type_env()).iter().all(|unit| {
+            origin(self.vars, self.type_env(), value, unit)
+                .candidates()
+                .iter()
+                .all(|(root, path)| {
+                    !root.is_local()
+                        || (self.vars.param_tys.contains_key(root) && !self.owns_object(root, path))
+                        || (root != value && self.held_throughout(root, containers))
+                })
+        })
     }
 
     /// The type definitions, for resolving a value's type to its reference-counting units.
@@ -824,12 +973,14 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         self.versions.type_env
     }
 
-    /// Whether this version borrows any parameter unit. The all-`Own` original keeps every
-    /// reference-count node it was given.
-    fn borrows_any(&self) -> bool {
-        self.param_ownership
-            .values()
-            .any(OwnershipShape::borrows_any)
+    /// Whether this version holds a value it does not own: a parameter unit it borrows, or a value it
+    /// lends (`lent_reads`). A version holding none keeps every reference-count node it was given.
+    fn holds_unowned(&self) -> bool {
+        !self.lent.is_empty()
+            || self
+                .param_ownership
+                .values()
+                .any(OwnershipShape::borrows_any)
     }
 
     /// Rewrite a body for this version: route each direct call to a callee version, bracket a call
@@ -876,6 +1027,45 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                     ),
                     node.source.clone(),
                 )
+            }
+            RcExpr::Let(x, RcRhs::Builtin(op, args), k) if self.lent.contains(&x.name) => {
+                RcExprNode::new(
+                    RcExpr::Let(
+                        x.clone(),
+                        RcRhs::Builtin(op.lending(), args.clone()),
+                        self.rewrite_in(k, enclosing),
+                    ),
+                    node.source.clone(),
+                )
+            }
+            RcExpr::Destructure(container, fields, state, k)
+                if fields.iter().any(|(_, f)| self.lent.contains(&f.name)) =>
+            {
+                // A lent field is read by the getter lending it, and the destructure retains the
+                // rest out of the container.
+                let (lent, kept): (Vec<(usize, RcVar)>, Vec<(usize, RcVar)>) = fields
+                    .iter()
+                    .cloned()
+                    .partition(|(_, f)| self.lent.contains(&f.name));
+                let mut out = self.rewrite_in(k, enclosing);
+                if !kept.is_empty() {
+                    out = RcExprNode::new(
+                        RcExpr::Destructure(container.clone(), kept, *state, out),
+                        node.source.clone(),
+                    );
+                }
+                for (idx, field) in lent.into_iter().rev() {
+                    let read = StructGetOp::lending_field(&container.name, idx);
+                    out = RcExprNode::new(
+                        RcExpr::Let(
+                            field,
+                            RcRhs::Builtin(Box::new(read), vec![container.clone()]),
+                            out,
+                        ),
+                        node.source.clone(),
+                    );
+                }
+                out
             }
             RcExpr::Retain(v, path, state, k) => {
                 self.rewrite_rc(v, path, *state, false, k, enclosing, &node.source)
@@ -967,10 +1157,9 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     /// Every name on the alias chain from `value` back to its object holds the reference `value`
     /// holds (`alias_step`): the container a field was destructured out of, the match binding an
     /// arm result flows into, the variable a move-bind renamed. A use of any of them after the call
-    /// keeps the object alive past it. So does a use of the boxed container the value was read out
-    /// of (`AliasStep::ReadOut`), which goes on holding the object. Where the value may be one of
-    /// several objects — a match binding, or an op result whose leaves come from several operands
-    /// — each of them has to be held, unless a use of the value itself holds whichever it is.
+    /// keeps the object alive past it. Where the value may be one of several objects — a match
+    /// binding, or an op result whose leaves come from several operands — each of them has to be
+    /// held, unless a use of the value itself holds whichever it is.
     ///
     /// # Arguments
     /// * `held` - the answers given so far in this query. A chain of match bindings, each rebuilding
@@ -984,7 +1173,6 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         let answer = after.uses(var)
             || match alias_step(self.vars, self.type_env(), var, path) {
                 AliasStep::Stops => false,
-                AliasStep::ReadOut(container) => self.held_after(&(container, vec![]), after, held),
                 AliasStep::Projects(source) => self.held_after(&source, after, held),
                 AliasStep::Gathers(gathered) => {
                     // A leaf produced here belongs to this value alone, and a value with no leaf
@@ -1031,10 +1219,11 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     /// reference the borrowed leaf was only lent. `level_ownership` is what makes the answers agree,
     /// and this states that agreement where the rewrite reads it.
     ///
-    /// Only a borrowing version needs checking. The all-`Own` original owns every parameter and
-    /// capture unit, so `owns_object` is true of each of its objects.
+    /// Only a version holding a value it does not own needs checking. Any other owns every
+    /// parameter and capture unit and lends no value, so `owns_object` is true of each of its
+    /// objects.
     fn check_ownership_is_levelled(&self, func: &RcFunc) {
-        if !self.borrows_any() {
+        if !self.holds_unowned() {
             return;
         }
         for (v, unit) in &self.versions.bodies[&func.name].sites {
@@ -1056,8 +1245,12 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         }
     }
 
-    /// Whether this version owns the object a leaf comes from.
+    /// Whether this version owns the object a leaf comes from. A lent value (`lent_reads`) holds no
+    /// reference of its own.
     fn owns_object(&self, root: &FullName, path: &FieldPath) -> bool {
+        if self.lent.contains(root) {
+            return false;
+        }
         let Some(root_ty) = self.vars.param_tys.get(root) else {
             // A root this version takes no parameter for is a producer, or a global — whose reachable
             // graph is refcount-exempt. Either way the caller lent no reference of it, so the value
@@ -1107,8 +1300,8 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         (before, after)
     }
 
-    /// Rewrite a `Retain`/`Release`: in a borrowing version, drop the units that root at a borrowed
-    /// parameter (the callee no longer counts them); otherwise keep the node unchanged.
+    /// Rewrite a `Retain`/`Release`: drop the units that root at a borrowed parameter (the callee no
+    /// longer counts them) or at a lent value, which holds no reference of its own; keep the rest.
     fn rewrite_rc(
         &mut self,
         v: &RcVar,
@@ -1120,7 +1313,7 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         source: &Option<Span>,
     ) -> RcExprNode {
         let k = self.rewrite_in(k, enclosing);
-        if !self.borrows_any() {
+        if !self.holds_unowned() {
             return rc_node(is_release, v.clone(), path.clone(), state, k, source);
         }
         let kept: Vec<FieldPath> = units_under(&v.ty, path, self.type_env())
@@ -1129,6 +1322,161 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
             .collect();
         kept.into_iter().rev().fold(k, |cont, unit| {
             rc_node(is_release, v.clone(), unit, state, cont, source)
+        })
+    }
+}
+
+/// What `RewriteCtx::lent_reads` reads to tell where a container is held: the version being
+/// rewritten, and the objects each of its variables' units belong to.
+struct Lending<'l, 'a, 'v> {
+    /// The version being rewritten.
+    ctx: &'l RewriteCtx<'a, 'v>,
+    /// The objects each variable's units belong to (`origin`), which a use of the variable holds.
+    objects: &'l Map<FullName, Vec<VarPath>>,
+}
+
+impl Lending<'_, '_, '_> {
+    /// Adds to `failing` each value of `containers` (a value to lend, mapped to the container it is
+    /// read out of) that `node` or its continuation uses where its container is not held. A
+    /// `Retain` or a `Release` of a lent value is dropped, so it is no use of it. `enclosing` is the
+    /// code that runs once `node` returns.
+    fn find_unheld_uses(
+        &self,
+        node: &RcExprNode,
+        enclosing: Option<&After>,
+        containers: &Map<FullName, FullName>,
+        failing: &mut Set<FullName>,
+    ) {
+        grow_stack(|| match node.expr.as_ref() {
+            RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => {
+                self.find_unheld_uses(k, enclosing, containers, failing)
+            }
+            RcExpr::Let(_, RcRhs::Match(scrut, arms), k) => {
+                // The scrutinee is read where each arm starts, so its container is held in every
+                // arm.
+                let after_arms = After { k, enclosing };
+                for arm in arms {
+                    let in_arm = After {
+                        k: &arm.body,
+                        enclosing: Some(&after_arms),
+                    };
+                    self.check_use(scrut, Some(&in_arm), containers, failing);
+                    self.find_unheld_uses(&arm.body, Some(&after_arms), containers, failing);
+                }
+                self.find_unheld_uses(k, enclosing, containers, failing);
+            }
+            RcExpr::Let(_, rhs, k) => {
+                let after = After { k, enclosing };
+                let operands: Vec<&RcVar> = match rhs {
+                    RcRhs::Var(y) => vec![y],
+                    RcRhs::App(callee, args) => iter::once(callee).chain(args).collect(),
+                    RcRhs::Closure(_, caps) => caps.iter().collect(),
+                    RcRhs::Builtin(_, args) => args.iter().collect(),
+                    RcRhs::Match(..) => unreachable!("a match is walked by its own arm"),
+                };
+                for v in operands {
+                    self.check_use(v, Some(&after), containers, failing);
+                }
+                self.find_unheld_uses(k, enclosing, containers, failing);
+            }
+            RcExpr::Destructure(v, _, _, k) | RcExpr::Eval(v, k) => {
+                let after = After { k, enclosing };
+                self.check_use(v, Some(&after), containers, failing);
+                self.find_unheld_uses(k, enclosing, containers, failing);
+            }
+            RcExpr::Ret(v) => self.check_use(v, enclosing, containers, failing),
+        })
+    }
+
+    /// Adds to `failing` each value of `containers` that the use of `v` reads, through `v`'s
+    /// aliases, where its container is not held. `after` is the code that runs after the use.
+    fn check_use(
+        &self,
+        v: &RcVar,
+        after: Option<&After>,
+        containers: &Map<FullName, FullName>,
+        failing: &mut Set<FullName>,
+    ) {
+        let Some(objects) = self.objects.get(&v.name) else {
+            // A global holds no value read out of a container.
+            return;
+        };
+        for (root, _) in objects {
+            if let Some(container) = containers.get(root) {
+                if !self.container_held(container, after, containers) {
+                    failing.insert(root.clone());
+                }
+            }
+        }
+    }
+
+    /// Whether the container named `container` is held at a point that `after` follows, holding the
+    /// objects of a value read out of it. A container this version holds throughout is
+    /// (`RewriteCtx::held_throughout`). A container of `containers`, itself to be lent, holds the
+    /// value only that way: its own uses are what its container is held for. Any other container is
+    /// held where the code after the point holds each object the container may be: where it names a
+    /// variable whose units belong to that object, a reference-count node of one included.
+    fn container_held(
+        &self,
+        container: &FullName,
+        after: Option<&After>,
+        containers: &Map<FullName, FullName>,
+    ) -> bool {
+        if self.ctx.held_throughout(container, containers) {
+            return true;
+        }
+        if containers.contains_key(container) {
+            return false;
+        }
+        let Some(after) = after else {
+            return false;
+        };
+        let objects = &self.objects[container];
+        !objects.is_empty()
+            && objects
+                .iter()
+                .all(|object| self.object_held_after(object, after))
+    }
+
+    /// Whether the code `after` names a variable one of whose units belongs to `object`.
+    fn object_held_after(&self, object: &VarPath, after: &After) -> bool {
+        self.names_object(object, after.k)
+            || after
+                .enclosing
+                .is_some_and(|outer| self.object_held_after(object, outer))
+    }
+
+    /// Whether `node`, its continuation or the arms of its matches name a variable one of whose
+    /// units belongs to `object`: as a value, or in a reference-count node of that unit.
+    fn names_object(&self, object: &VarPath, node: &RcExprNode) -> bool {
+        let holds = |v: &RcVar| {
+            self.objects
+                .get(&v.name)
+                .is_some_and(|objects| objects.contains(object))
+        };
+        grow_stack(|| match node.expr.as_ref() {
+            RcExpr::Retain(v, path, _, k) | RcExpr::Release(v, path, _, k) => {
+                origin(self.ctx.vars, self.ctx.type_env(), &v.name, path)
+                    .candidates()
+                    .contains(&object)
+                    || self.names_object(object, k)
+            }
+            RcExpr::Let(_, rhs, k) => {
+                let in_rhs = match rhs {
+                    RcRhs::Var(y) => holds(y),
+                    RcRhs::App(callee, args) => holds(callee) || args.iter().any(holds),
+                    RcRhs::Closure(_, caps) => caps.iter().any(holds),
+                    RcRhs::Builtin(_, args) => args.iter().any(holds),
+                    RcRhs::Match(scrut, arms) => {
+                        holds(scrut) || arms.iter().any(|arm| self.names_object(object, &arm.body))
+                    }
+                };
+                in_rhs || self.names_object(object, k)
+            }
+            RcExpr::Destructure(v, _, _, k) | RcExpr::Eval(v, k) => {
+                holds(v) || self.names_object(object, k)
+            }
+            RcExpr::Ret(v) => holds(v),
         })
     }
 }
@@ -1458,9 +1806,12 @@ impl BodyModel<'_> {
 
     /// The objects a right-hand side consumes a reference of.
     fn rhs_consumed_objects(&self, rhs: &RcRhs, result_ty: &Arc<TypeNode>) -> Vec<VarPath> {
-        let owns = |p: &RcVar, leaf: &FieldPath| {
-            self.owned_units
-                .contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))
+        // An indirect callee owns every position.
+        let owns = |p: Option<&RcVar>, leaf: &FieldPath| {
+            p.is_none_or(|p| {
+                self.owned_units
+                    .contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))
+            })
         };
         let mut consumed = vec![];
         rhs_consumes(
@@ -1475,18 +1826,6 @@ impl BodyModel<'_> {
         consumed
             .iter()
             .flat_map(|(var, leaf)| self.leaf_objects(var, leaf))
-            .collect()
-    }
-
-    /// The objects a `Destructure` of `container` binding `fields` consumes a reference of.
-    fn destructure_consumed_objects(
-        &self,
-        container: &RcVar,
-        fields: &[(usize, RcVar)],
-    ) -> Vec<VarPath> {
-        destructure_consumes(container, fields, self.type_env)
-            .iter()
-            .flat_map(|leaf| self.leaf_objects(&container.name, leaf))
             .collect()
     }
 
@@ -1613,14 +1952,12 @@ impl<'a> CancelAnalysis<'a> {
                 self.consume_objects(&mut pending, &consumed);
                 self.walk(k, pending, returns_from_func)
             }
-            RcExpr::Destructure(container, fields, _state, k) => {
-                let consumed = self.model.destructure_consumed_objects(container, fields);
-                self.consume_objects(&mut pending, &consumed);
+            // A `Destructure` consumes nothing (`collect_consumes`), and `Eval` only observes its
+            // variable, so both are transparent to the pending-retain state (any release inserted
+            // after them is a separate `Release` node).
+            RcExpr::Destructure(_, _, _, k) | RcExpr::Eval(_, k) => {
                 self.walk(k, pending, returns_from_func)
             }
-            // `Eval` only observes its variable, so it is transparent to the pending-retain state
-            // (any release inserted after it is a separate `Release` node).
-            RcExpr::Eval(_, k) => self.walk(k, pending, returns_from_func),
             RcExpr::Ret(_) => {
                 if returns_from_func {
                     // A retain still pending at the function's return closes no bracket on this path.
@@ -1969,11 +2306,6 @@ impl RetainSinker<'_> {
                 }
             }
             RcExpr::Let(x, rhs, _) if consumes(self.model.rhs_consumed_objects(rhs, &x.ty)) => {
-                r.placed_before(node, true)
-            }
-            RcExpr::Destructure(container, fields, _, _)
-                if consumes(self.model.destructure_consumed_objects(container, fields)) =>
-            {
                 r.placed_before(node, true)
             }
             RcExpr::Let(..) | RcExpr::Destructure(..) | RcExpr::Retain(..) | RcExpr::Eval(..) => {

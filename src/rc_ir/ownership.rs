@@ -274,7 +274,7 @@ pub(crate) fn origin(
 fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
     let here = (var.clone(), path.to_vec());
     match alias_step(vars, type_env, var, path) {
-        AliasStep::Stops | AliasStep::ReadOut(_) => Origin::Exactly(here),
+        AliasStep::Stops => Origin::Exactly(here),
         AliasStep::Projects((source, source_path)) => origin(vars, type_env, &source, &source_path),
         AliasStep::Gathers(gathered) => {
             // The leaves beneath name no object only for a value that holds no reference: either the
@@ -304,14 +304,9 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// one binding back. `origin` follows these edges to the object a leaf belongs to, and every name it
 /// passes on the way holds the same reference.
 pub(crate) enum AliasStep {
-    /// The value is its own object: a parameter or capture, a producer, or a global.
+    /// The value is its own object: a parameter or capture, a producer, a global, or a value read
+    /// out of a boxed container, which the read retains or lends (`borrow_ify`'s `lent_reads`).
     Stops,
-    /// The value is its own object, read out of the boxed container this variable names, which the
-    /// read retains: a field of a boxed struct, the payload of a boxed union's variant, or the
-    /// result of a `Builtin` op that reads it out of an operand (`BuiltinOp::result_held_by_operand`).
-    /// A container's contents do not change while a name refers to it, so the container goes on
-    /// holding the object for as long as it lives.
-    ReadOut(FullName),
     /// The value is the value at this path of another variable: a move-bind, a field of an unboxed
     /// container, the payload of an unboxed union's variant or of a catch-all, or a pure projection
     /// of one operand of a `Builtin` op.
@@ -365,11 +360,11 @@ pub(crate) fn alias_step(
                     op.name(),
                     j
                 );
-                return AliasStep::ReadOut(args[j].name.clone());
+                return AliasStep::Stops;
             }
             // A result leaf that is a single `Arg(j, p)` is a pure projection of argument `j`'s leaf
-            // `p` — an alias; anything else (a fresh allocation, a join of several sources) is a
-            // producer, stopping here. A `Builtin` op is never partially
+            // `p` — an alias; anything else (a fresh allocation, a boxed-container read, a join of
+            // several sources) is a producer, stopping here. A `Builtin` op is never partially
             // applied, so a well-formed `result_prov` names only real argument indices (`args[j]`
             // else panics). A path whose own record does not name an object is answered by the
             // leaves beneath it (`gather_leaves_under`): a reference-counting unit path may name an
@@ -381,7 +376,8 @@ pub(crate) fn alias_step(
         }
         Some(Binding::Field(container, idx)) => {
             if container.ty.is_box(type_env) {
-                AliasStep::ReadOut(container.name.clone())
+                // Reading a field of a boxed struct retains or lends it: a producer.
+                AliasStep::Stops
             } else {
                 let mut container_path = vec![*idx];
                 container_path.extend_from_slice(path);
@@ -392,13 +388,13 @@ pub(crate) fn alias_step(
             // A catch-all binds the whole scrutinee: the same object.
             None => AliasStep::Projects((scrut.name.clone(), path.to_vec())),
             // An unboxed union's payload is the scrutinee's variant slot — an alias; a boxed union's
-            // payload is read out of it, which the read retains.
+            // payload is read out (retained) — a producer.
             Some(tag) if !scrut.ty.is_box(type_env) => {
                 let mut scrut_path = vec![*tag];
                 scrut_path.extend_from_slice(path);
                 AliasStep::Projects((scrut.name.clone(), scrut_path))
             }
-            Some(_) => AliasStep::ReadOut(scrut.name.clone()),
+            Some(_) => AliasStep::Stops,
         },
     }
 }
@@ -529,13 +525,30 @@ pub(crate) fn collect_consumes(
     type_env: &TypeEnv,
     out: &mut Vec<VarPath>,
 ) {
-    let owns = |p: &RcVar, leaf: &FieldPath| own.contains(&(p.name.clone(), leaf.clone()));
+    // An indirect callee owns every position.
+    let owns = |p: Option<&RcVar>, leaf: &FieldPath| {
+        p.is_none_or(|p| own.contains(&(p.name.clone(), leaf.clone())))
+    };
     collect_consumes_go(node, vars, prog, type_env, &owns, out);
 }
 
+/// Collect the leaves consumed in a body other than by an argument of a call: a captured value, an
+/// operand an op owns, a called closure, and a returned value. Alias edges are not consumes here,
+/// as in `collect_consumes`.
+pub(crate) fn collect_consumes_outside_call_arguments(
+    node: &RcExprNode,
+    vars: &VarTable,
+    prog: &RcProgram,
+    type_env: &TypeEnv,
+    out: &mut Vec<VarPath>,
+) {
+    collect_consumes_go(node, vars, prog, type_env, &|_, _| false, out);
+}
+
 /// Collect the leaves an expression and its continuation consume. `owns` answers whether a callee's
-/// parameter leaf is owned, which decides whether the argument at that position is consumed.
-fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
+/// parameter leaf is owned, or with `None` whether an indirect callee's is, which decides whether the
+/// argument at that position is consumed.
+fn collect_consumes_go<F: Fn(Option<&RcVar>, &FieldPath) -> bool>(
     node: &RcExprNode,
     vars: &VarTable,
     prog: &RcProgram,
@@ -560,38 +573,13 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
             }
             collect_consumes_go(k, vars, prog, type_env, owns, out);
         }
-        RcExpr::Destructure(container, fields, _state, k) => {
-            for leaf in destructure_consumes(container, fields, type_env) {
-                out.push((container.name.clone(), leaf));
-            }
-            collect_consumes_go(k, vars, prog, type_env, owns, out)
-        }
-        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Eval(_, k) => {
-            collect_consumes_go(k, vars, prog, type_env, owns, out)
-        }
+        // A `Destructure` consumes nothing: it borrows a boxed container, and moves an unboxed
+        // container's leaves into the field variables, whose consumes are their own.
+        RcExpr::Destructure(_, _, _, k)
+        | RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k)
+        | RcExpr::Eval(_, k) => collect_consumes_go(k, vars, prog, type_env, owns, out),
     }
-}
-
-/// The container leaves a `Destructure` consumes. A boxed container is released whole, so every boxed
-/// leaf of it goes. An unboxed container's `Destructure` names every field (`names_every_field`), and
-/// each field's leaves move into that field's variable, an alias whose consume is attributed to the
-/// field variable, so none goes. This is the model code generation implements
-/// (`ObjectFieldType::get_struct_fields`).
-pub(crate) fn destructure_consumes(
-    container: &RcVar,
-    fields: &[(usize, RcVar)],
-    type_env: &TypeEnv,
-) -> Vec<FieldPath> {
-    if container.ty.is_box(type_env) {
-        return boxed_leaf_paths(&container.ty, type_env);
-    }
-    assert!(
-        names_every_field(container, fields, type_env),
-        "a `Destructure` of the unboxed `{}` names fields {:?} of it",
-        container.ty.to_string(),
-        fields.iter().map(|(i, _)| *i).collect::<Vec<_>>()
-    );
-    vec![]
 }
 
 /// Whether a `Destructure` of `container` binding `fields` names each unpunched field of the
@@ -607,11 +595,11 @@ pub(crate) fn names_every_field(
 }
 
 /// The leaves an `App`, `Builtin`, or `Closure` right-hand side consumes: an owning argument
-/// position (`owns` decides, for the callee's parameter leaf), a captured value, and the closure
-/// callee. A `Var` move and a `Match` consume nothing here — a move is an alias, and a match's
+/// position (`owns` decides, for the callee's parameter leaf, or with `None` for an indirect
+/// callee's), a captured value, and the closure callee. A `Var` move and a `Match` consume nothing here — a move is an alias, and a match's
 /// consumes live in its arms. `result_ty` is the type the right-hand side binds, needed to read an
 /// op's passthrough.
-pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
+pub(crate) fn rhs_consumes<F: Fn(Option<&RcVar>, &FieldPath) -> bool>(
     rhs: &RcRhs,
     result_ty: &Arc<TypeNode>,
     vars: &VarTable,
@@ -630,18 +618,14 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
         RcRhs::App(callee, args) => {
             // Calling a closure consumes it (the callee releases its capture).
             push_boxed_leaves(&callee.name, &callee.ty, type_env, out);
-            // Each argument at an owning position of the callee is consumed. An unresolved (indirect)
-            // callee owns every position.
+            // Each argument at an owning position of the callee is consumed.
             let callee_params = resolve_callee_params(callee, vars, prog);
             for (i, a) in args.iter().enumerate() {
                 for leaf in boxed_leaf_paths(&a.ty, type_env) {
                     // `i` ranges over the arguments and `args.len() <= params.len()` (no over-
                     // application), so `params[i]` is in range.
-                    let is_owning_position = match &callee_params {
-                        Some(params) => owns(&params[i], &leaf),
-                        None => true,
-                    };
-                    if is_owning_position {
+                    let param = callee_params.map(|params| &params[i]);
+                    if owns(param, &leaf) {
                         out.push((a.name.clone(), leaf));
                     }
                 }

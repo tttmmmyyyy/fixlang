@@ -1048,6 +1048,29 @@ impl ObjectFieldType {
         struct_obj
     }
 
+    /// Read the fields of the boxed `struct_obj` listed in `field_indices` out as owned objects,
+    /// retaining each, and leave the struct its own reference.
+    pub fn read_boxed_struct_fields<'c, 'm>(
+        gc: &mut Generator<'c, 'm>,
+        struct_obj: &Object<'c>,
+        field_indices: &[u32],
+        state: RcState,
+    ) -> Vec<Object<'c>> {
+        assert!(
+            struct_obj.is_box(gc.type_env()),
+            "the fields of the unboxed `{}` are read out as if it were boxed",
+            struct_obj.ty.to_string()
+        );
+        field_indices
+            .iter()
+            .map(|field_idx| {
+                let field = ObjectFieldType::move_out_struct_field(gc, struct_obj, *field_idx);
+                gc.retain(field.clone(), state);
+                field
+            })
+            .collect()
+    }
+
     /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
     /// the struct: each returned field owns its reference and so outlives the struct it came from.
     /// A boxed struct keeps the fields left out of `field_indices`, and its release drops them. An

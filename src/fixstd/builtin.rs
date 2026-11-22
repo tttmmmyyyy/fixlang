@@ -3090,6 +3090,10 @@ pub struct ArrayUnsafeGetBoundsUncheckedOp {
     /// Whether the objects this op reference-counts inside `generate` are known to be in the local
     /// reference-counting state, so that those operations need no state dispatch.
     pub(crate) assume_local: bool,
+    /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
+    /// container goes on holding it.
+    #[serde(default)]
+    pub(crate) lend: bool,
 }
 
 #[typetag::serde]
@@ -3103,16 +3107,18 @@ impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
         let buf = get_array_storage_buf(gc, &array);
 
         // Get element
-        let elem = ObjectFieldType::read_from_array_buf(
-            gc,
-            None,
-            buf,
-            ty.clone(),
-            idx,
-            assumed_state(self.assume_local),
-        );
-
-        elem
+        if self.lend {
+            ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, ty.clone(), idx)
+        } else {
+            ObjectFieldType::read_from_array_buf(
+                gc,
+                None,
+                buf,
+                ty.clone(),
+                idx,
+                assumed_state(self.assume_local),
+            )
+        }
     }
 
     fn name(&self) -> String {
@@ -3169,13 +3175,27 @@ impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
         self.assume_local
     }
 
+    fn lending(&self) -> Box<dyn BuiltinOp> {
+        let mut c = self.clone();
+        c.lend = true;
+        Box::new(c)
+    }
+
+    fn lends(&self) -> bool {
+        self.lend
+    }
+
     fn internal_rc_targets(
         &self,
         _arg_tys: &[Arc<TypeNode>],
         _type_env: &TypeEnv,
     ) -> Vec<RcTarget> {
-        // `read_from_array_buf` retains the element it read out.
-        vec![RcTarget::Result(vec![])]
+        // `read_from_array_buf` retains the element it read out, unless the element is lent.
+        if self.lend {
+            vec![]
+        } else {
+            vec![RcTarget::Result(vec![])]
+        }
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3201,6 +3221,7 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             expr_builtin(
                 Box::new(ArrayUnsafeGetBoundsUncheckedOp {
                     assume_local: false,
+                    lend: false,
                     arr_name: FullName::local(ARR_NAME),
                     idx_name: FullName::local(IDX_NAME),
                 }),
@@ -5578,9 +5599,24 @@ pub struct StructGetOp {
     /// Whether the objects this op reference-counts inside `generate` are known to be in the local
     /// reference-counting state, so that those operations need no state dispatch.
     pub(crate) assume_local: bool,
+    /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
+    /// container goes on holding it.
+    #[serde(default)]
+    pub(crate) lend: bool,
 }
 
 impl StructGetOp {
+    /// The getter lending the field `field_idx` of the boxed struct `container` names: the read a
+    /// `Destructure` of that struct makes of the field, without retaining it.
+    pub fn lending_field(container: &FullName, field_idx: usize) -> Self {
+        StructGetOp {
+            var_name: container.clone(),
+            field_idx,
+            assume_local: false,
+            lend: true,
+        }
+    }
+
     /// The index of the field this operation reads.
     fn field_index(&self) -> usize {
         self.field_idx
@@ -5637,7 +5673,9 @@ impl BuiltinOp for StructGetOp {
                 let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
                 let field =
                     ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
-                gc.retain(field.clone(), assumed_state(self.assume_local));
+                if !self.lend {
+                    gc.retain(field.clone(), assumed_state(self.assume_local));
+                }
                 field
             }
         }
@@ -5707,11 +5745,23 @@ impl BuiltinOp for StructGetOp {
         self.assume_local
     }
 
+    fn lending(&self) -> Box<dyn BuiltinOp> {
+        let mut c = self.clone();
+        c.lend = true;
+        Box::new(c)
+    }
+
+    fn lends(&self) -> bool {
+        self.lend
+    }
+
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
         // A read that moves the field out counts nothing; one out of a boxed container retains the
-        // field alone. A field getter takes exactly the container, so `arg_tys[0]` is it.
+        // field alone, unless the field is lent. A field getter takes exactly the container, so
+        // `arg_tys[0]` is it.
         match self.field_read(&arg_tys[0], type_env) {
             FieldRead::Moved => vec![],
+            FieldRead::Retained if self.lend => vec![],
             FieldRead::Retained => vec![RcTarget::Result(vec![])],
         }
     }
@@ -5737,6 +5787,7 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
         expr_builtin(
             Box::new(StructGetOp {
                 assume_local: false,
+                lend: false,
                 var_name: FullName::local(VAR_NAME),
                 field_idx: field_idx as usize,
             }),

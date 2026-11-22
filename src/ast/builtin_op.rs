@@ -192,14 +192,27 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     /// Default: no operand does.
     ///
     /// While that operand's object lives, so does every object the result refers to. `borrow_ify`
-    /// reads this to lend a call a value read out of a container that the code after the call still
-    /// holds.
+    /// reads this to lend the result where the code holds the operand as long as it uses the result
+    /// (`lending`).
     fn result_held_by_operand(
         &self,
         _arg_tys: &[Arc<TypeNode>],
         _type_env: &TypeEnv,
     ) -> Option<usize> {
         None
+    }
+
+    /// This op reading its result out of the operand `result_held_by_operand` names without
+    /// retaining it: the result is lent, holding no reference of its own while that operand goes on
+    /// holding its objects. `borrow_ify` asks this only of an op it lends a result of, each of which
+    /// overrides it.
+    fn lending(&self) -> Box<dyn BuiltinOp> {
+        unreachable!("lending called on an op whose result borrow_ify does not lend")
+    }
+
+    /// Whether `lending` was applied. The RC IR dump renders it.
+    fn lends(&self) -> bool {
+        false
     }
 
     /// The values this op reference-counts inside `generate`, for the operand types it is

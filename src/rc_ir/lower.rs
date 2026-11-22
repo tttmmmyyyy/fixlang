@@ -527,8 +527,8 @@ impl<'a> Lowerer<'a> {
     /// A field of an unboxed container is a leaf of the container itself, so a field the
     /// `Destructure` leaves out has no owner. Bound to a variable nothing reads, it is released by a
     /// `Release` node of its own, which cancellation pairs with the retain RC insertion puts before
-    /// the `Destructure` where the container is used afterwards. A boxed container keeps the fields
-    /// it is not asked for, so its `Destructure` binds `named` alone.
+    /// the `Destructure` where the container is used afterwards. A boxed container keeps its fields,
+    /// so its `Destructure` binds `named` alone.
     fn push_destructure(
         &mut self,
         container: &RcVar,

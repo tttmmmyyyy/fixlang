@@ -177,13 +177,11 @@ pub enum RcExpr {
     /// subtree of the variable named by the path, then continue.
     Release(RcVar, FieldPath, RcState, RcExprNode),
     /// Destructure a struct/tuple container into its fields at once, then continue. Each `(index,
-    /// var)` binds field `index` to `var`. The container is consumed: an unboxed container names every
-    /// field, and its leaves are moved into the field variables (no per-field retain); a boxed
-    /// container retains each named field and releases the container. Reference-count
-    /// insertion retains the container before this node iff it is used afterward — together this
-    /// mirrors code generation's `get_scoped_obj` retain-if-used-later plus `get_struct_fields`
-    /// whole-container extraction. One node for the whole destructure lets that retain be decided
-    /// once, from the container's liveness after the destructure, and placed before the extraction.
+    /// var)` binds field `index` to `var`. An unboxed container names every field and is consumed: its
+    /// leaves are moved into the field variables (no per-field retain), and reference-count insertion
+    /// retains the container before this node iff it is used afterward. A boxed container is
+    /// borrowed: each named field is retained out of it, and the container keeps its reference,
+    /// which a `Release` after this node disposes at the container's last use.
     Destructure(RcVar, Vec<(usize, RcVar)>, RcState, RcExprNode),
     /// Force the variable's value for its effect and discard it, then continue — the RC IR form of the
     /// source `eval e0; e1`. Forcing a local is a no-op (it is already computed); forcing a global

@@ -1,7 +1,8 @@
 //! Reference-counting insertion (Phase B of the AST->RC IR lowering).
 //!
 //! Phase A produces the RC IR skeleton with no explicit `Retain`/`Release` nodes (the only baked-in
-//! reference counting is the boxed capture getter's retain and the `Destructure` node's extraction).
+//! reference counting is the retain of a value read out of a boxed container, by a getter or a
+//! `Destructure`, and the moves of an unboxed `Destructure`).
 //! This pass adds the explicit nodes by a backward last-use analysis over each function, at
 //! whole-value granularity (per-leaf paths and further precision come from later passes).
 //!
@@ -242,12 +243,12 @@ impl<'a> RcInserter<'a> {
         (node, live_before)
     }
 
-    /// A `destructure container into fields; cont`. The container is consumed: RC insertion retains
-    /// it beforehand iff it is used after the destructure (mirroring `get_scoped_obj`'s
-    /// retain-if-used-later before `get_struct_fields`), and each field the continuation never uses is
-    /// released. Code generation performs the extraction itself: a boxed container retains the fields
-    /// and releases the container; an unboxed container, whose every field is named, moves the fields
-    /// out. So the field retains and the container release are not emitted here.
+    /// A `destructure container into fields; cont`, and each field the continuation never uses is
+    /// released. Code generation performs the extraction itself, so no field retain is emitted here:
+    /// a boxed container retains the fields it reads out, and an unboxed container, whose every field
+    /// is named, moves the fields out. A boxed container is borrowed, and so released after the
+    /// destructure iff it is dead there. An unboxed container is consumed, and so retained beforehand
+    /// iff it is used after the destructure.
     fn insert_into_destructure(
         &self,
         container: RcVar,
@@ -265,15 +266,27 @@ impl<'a> RcInserter<'a> {
                 dead.push(fv.clone());
             }
         }
+        let boxed = container.ty.is_box(self.type_env);
+        if boxed
+            && container.name.is_local()
+            && !live_cont.contains(&container.name)
+            && self.needs_rc(&container)
+        {
+            dead.push(container.clone());
+        }
         let cont = build_releases(dead, cont);
 
         let node = RcExprNode::new(
             RcExpr::Destructure(container.clone(), fields.clone(), RcState::Unknown, cont),
             source,
         );
-        // Retain the container before the destructure iff it is used afterward, so both the extracted
-        // fields and the later use are covered.
-        let node = self.retain_if_live(&container, &live_cont, node);
+        // Retain an unboxed container before the destructure iff it is used afterward, so both the
+        // moved-out fields and the later use are covered.
+        let node = if boxed {
+            node
+        } else {
+            self.retain_if_live(&container, &live_cont, node)
+        };
 
         let mut live_before = live_cont;
         for (_, fv) in &fields {
@@ -404,8 +417,9 @@ impl<'a> RcInserter<'a> {
     }
 
     /// Wrap `node` in a `Retain` of `var` iff `var` is a local that needs reference counting and is
-    /// live in `live` — the owned-operand rule for a variable a consuming construct (a `Ret`, a
-    /// `Destructure`, or a `Match` scrutinee) uses, when it is still live afterward.
+    /// live in `live` — the owned-operand rule for a variable a consuming construct (a `Ret`, the
+    /// `Destructure` of an unboxed container, or a `Match` scrutinee) uses, when it is still live
+    /// afterward.
     fn retain_if_live(&self, var: &RcVar, live: &Set<FullName>, node: RcExprNode) -> RcExprNode {
         if var.name.is_local() && live.contains(&var.name) && self.needs_rc(var) {
             build_retains(vec![var.clone()], node)

@@ -239,10 +239,12 @@ fn rhs_to_string(rhs: &RcRhs, level: usize, ann: Annotations) -> String {
         }
         RcRhs::Builtin(op, _args) => {
             // The op's name spells out its operands, so it is the whole right-hand side here. A
-            // trailing `@local` says locality inference proved the objects the op's own checks and
-            // reference counting touch to be local.
-            let mark = if op.assumes_local() { " @local" } else { "" };
-            format!("{}{}", op.name(), mark)
+            // trailing `@lent` says the op lends its result (`BuiltinOp::lending`), and a trailing
+            // `@local` says locality inference proved the objects the op's own checks and reference
+            // counting touch to be local.
+            let lent = if op.lends() { " @lent" } else { "" };
+            let local = if op.assumes_local() { " @local" } else { "" };
+            format!("{}{}{}", op.name(), lent, local)
         }
         RcRhs::Match(scrutinee, arms) => {
             let mut out = format!("match {} {{\n", var_name(scrutinee));

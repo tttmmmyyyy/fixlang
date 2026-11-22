@@ -862,8 +862,7 @@ impl<'a> Walk<'a> {
     }
 
     /// The annotation of a `Destructure`, which counts every reference the node itself moves. Out of
-    /// a boxed container it releases the container and retains each named field, which the take-out
-    /// annotation covers. Out of an unboxed container, whose every field is named, it only moves the
+    /// a boxed container it retains each named field, which the take-out annotation covers. Out of an unboxed container, whose every field is named, it only moves the
     /// leaves into the field variables and counts nothing.
     fn annotate_destructure(&mut self, container: &RcVar) -> RcState {
         if !container.ty.is_box(self.type_env) {
@@ -874,9 +873,8 @@ impl<'a> Walk<'a> {
     }
 
     /// The annotation of a node that takes values out of the boxed container whose leaf is
-    /// `container`, retaining them and, for a `Destructure`, releasing the container. The take-out
-    /// rule decides it: the values are local only where the container is `DeepLocal`, which also
-    /// covers the container itself, and global where the container is.
+    /// `container`, retaining them. The take-out rule decides it: the values are local only where the
+    /// container is `DeepLocal`, and global where the container is.
     fn annotate_take_out(&mut self, container: &LeafCond) -> RcState {
         if container.global {
             return RcState::Global;
