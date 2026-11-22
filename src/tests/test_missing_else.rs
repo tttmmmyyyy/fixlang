@@ -15,7 +15,7 @@ const MAY_BE_MISSING_ELSE: &str = "This `if` may be missing its `else`.";
 fn assert_ifs_are_pointed_at(source: &str, if_spans: &[&str]) {
     let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
     assert!(errmsg.contains("Expected `;`"), "{}", errmsg);
-    let pointed_at: Vec<usize> = if_spans
+    let offsets_in_errmsg: Vec<usize> = if_spans
         .iter()
         .map(|span| {
             errmsg
@@ -23,7 +23,7 @@ fn assert_ifs_are_pointed_at(source: &str, if_spans: &[&str]) {
                 .unwrap_or_else(|| panic!("{} is not pointed at:\n{}", span, errmsg))
         })
         .collect();
-    assert!(pointed_at.is_sorted(), "{}", errmsg);
+    assert!(offsets_in_errmsg.is_sorted(), "{}", errmsg);
     assert_eq!(
         errmsg.matches(MAY_BE_MISSING_ELSE).count(),
         if_spans.len(),
