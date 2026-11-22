@@ -526,10 +526,11 @@ impl Substitution {
     }
 }
 
-/// What becomes of the constraints of a type scheme when the scheme is instantiated.
-pub enum ConstraintInstantiationMode {
-    /// Each constraint becomes one the type checking has to deduce, and each variable the scheme
-    /// generalizes is replaced by a fresh type variable. `site`, when given, is where an expression
+/// How a type scheme is instantiated: what becomes of the variables it generalizes and of its
+/// constraints.
+pub enum InstantiationMode {
+    /// Each variable the scheme generalizes is replaced by a fresh type variable, and each
+    /// constraint becomes one the type checking has to deduce. `site`, when given, is where an expression
     /// uses the value whose type the scheme is; each fresh variable is recorded as arising there.
     Require { site: Option<InstantiationSite> },
     /// Each constraint becomes one that later deductions may use.
@@ -1071,22 +1072,22 @@ impl TypeCheckContext {
     /// The type of `scheme`, with the constraints it is qualified by recorded in this context.
     ///
     /// # Arguments
-    /// * `constraint_mode` — `Require` replaces each variable the scheme generalizes by a fresh
+    /// * `mode` — `Require` replaces each variable the scheme generalizes by a fresh
     ///   type variable and leaves the constraints for the inference to deduce; `Assume` keeps the
     ///   generalized variables as the scheme writes them, fixes them against replacement, and
     ///   grants the constraints to later deductions.
     pub fn instantiate_scheme(
         &mut self,
         scheme: &Arc<Scheme>,
-        constraint_mode: ConstraintInstantiationMode,
+        mode: InstantiationMode,
     ) -> Result<Arc<TypeNode>, UnifOrOtherErr> {
         let mut preds = vec![];
         for pred in &scheme.predicates {
             preds.append(&mut pred.resolve_trait_aliases(&self.trait_env.aliases)?);
         }
         let mut eqs = scheme.equalities.clone();
-        match constraint_mode {
-            ConstraintInstantiationMode::Require { site } => {
+        match mode {
+            InstantiationMode::Require { site } => {
                 // Instantiate type variables.
                 let mut sub = Substitution::default();
                 for tv in &scheme.gen_vars {
@@ -1099,7 +1100,7 @@ impl TypeCheckContext {
                                 new_tv.name.clone(),
                                 TyVarSource {
                                     span: site.span.clone(),
-                                    role: TyVarRole::GeneralizedVarOf {
+                                    role: TyVarRole::InstantiatedVarOf {
                                         tyvar: tv.name.clone(),
                                         value: site.value.clone(),
                                     },
@@ -1138,7 +1139,7 @@ impl TypeCheckContext {
                 }
                 return Ok(ty);
             }
-            ConstraintInstantiationMode::Assume => {
+            InstantiationMode::Assume => {
                 for tv in &scheme.gen_vars {
                     self.fixed_tyvars.push(tv.clone());
                 }
@@ -1314,7 +1315,7 @@ impl TypeCheckContext {
                     let mut tc = self.clone();
                     let var_ty = UnifOrOtherErr::extract_others(tc.instantiate_scheme(
                         &scm,
-                        ConstraintInstantiationMode::Require {
+                        InstantiationMode::Require {
                             site: ei.source.clone().map(|span| InstantiationSite {
                                 value: fullname.clone(),
                                 span,
@@ -1859,7 +1860,7 @@ impl TypeCheckContext {
                     (TyVarRole::ElementTypeOf, None) => {
                         format!("{} is the element type of this array.", prefix)
                     }
-                    (TyVarRole::GeneralizedVarOf { tyvar, value }, _) => {
+                    (TyVarRole::InstantiatedVarOf { tyvar, value }, _) => {
                         format!(
                             "{} is `{}` in the type of `{}`.",
                             prefix,
@@ -2103,7 +2104,7 @@ impl TypeCheckContext {
         self.assert_freshness();
         let mut tc = self.clone();
         let instance_ty = tc
-            .instantiate_scheme(instance, ConstraintInstantiationMode::Assume)
+            .instantiate_scheme(instance, InstantiationMode::Assume)
             .ok()?;
         // The opaque type variables of `instance` stand for themselves too.
         instance.free_vars_to_vec(&mut tc.fixed_tyvars);
@@ -2153,9 +2154,8 @@ impl TypeCheckContext {
         lhs: &Arc<Scheme>,
         rhs: &Arc<Scheme>,
     ) -> Result<(), UnifOrOtherErr> {
-        let lhs = self.instantiate_scheme(lhs, ConstraintInstantiationMode::Assume)?;
-        let rhs =
-            self.instantiate_scheme(rhs, ConstraintInstantiationMode::Require { site: None })?;
+        let lhs = self.instantiate_scheme(lhs, InstantiationMode::Assume)?;
+        let rhs = self.instantiate_scheme(rhs, InstantiationMode::Require { site: None })?;
         self.unify(&lhs, &rhs)?;
         self.reduce_predicates()?;
         if self.predicates.len() > 0 {
@@ -2211,7 +2211,7 @@ impl TypeCheckContext {
         }
 
         let specified_ty = UnifOrOtherErr::extract_others(
-            self.instantiate_scheme(&expect_scm, ConstraintInstantiationMode::Assume),
+            self.instantiate_scheme(&expect_scm, InstantiationMode::Assume),
         )?;
         if let Err(e) = specified_ty {
             return Err(Errors::from_err(make_error(self, e, &expr.source)));
@@ -3330,7 +3330,7 @@ enum TyVarRole {
     ElementTypeOf,
     /// The variable replaces the type variable `tyvar` of the type of the global value `value`,
     /// where the expression uses that value.
-    GeneralizedVarOf { tyvar: Name, value: FullName },
+    InstantiatedVarOf { tyvar: Name, value: FullName },
 }
 
 /// The trimmed source text `span` covers, where that text stands on one line and stays inside a
