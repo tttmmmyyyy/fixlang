@@ -1923,8 +1923,8 @@ impl TypeNode {
     /// This type as a diagnostic quotes it: written in source syntax under the names its own type
     /// variables carry, with each `_` type wildcard written `_`.
     ///
-    /// Two wildcards print alike, so the string shows the type to a reader and does not identify
-    /// it; where a string has to tell types apart, `to_string` gives one.
+    /// Every wildcard prints as `_`, so two distinct types can give one string. Where a string has
+    /// to tell types apart, use `to_string`.
     ///
     /// # Examples
     /// The annotation `Array _ _` is quoted `Std::Array _ _`.
@@ -3161,7 +3161,7 @@ mod tests {
         assert_ne!(
             two_wildcards.to_string(),
             one_wildcard_twice.to_string(),
-            "`(_0, _1)` and `(_0, _0)` were written alike"
+            "`(#typewildcard0, #typewildcard1)` and `(#typewildcard0, #typewildcard0)` were written alike"
         );
         assert_eq!(two_wildcards.to_string_as_written(), "(_, _)");
         assert_eq!(one_wildcard_twice.to_string_as_written(), "(_, _)");
