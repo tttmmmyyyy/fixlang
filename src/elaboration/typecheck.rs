@@ -540,9 +540,9 @@ pub enum ConstraintInstantiationMode {
 /// scheme creates to point at.
 pub struct InstantiationSite {
     /// The value the expression uses.
-    pub value: FullName,
+    value: FullName,
     /// The span of the expression that uses it.
-    pub span: Span,
+    span: Span,
 }
 
 /// The state of type checking an expression: the assumptions it is checked under, what the
