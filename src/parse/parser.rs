@@ -642,9 +642,12 @@ fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Vec<u
         let Some(at) = semicolon_expected_before_a_closing_token(&error, &patched) else {
             return vec![];
         };
-        if insertion_count == max_insertions {
-            return vec![];
-        }
+        assert!(
+            insertion_count < max_insertions,
+            "{} `;`s are put in a text of {} bytes",
+            insertion_count + 1,
+            max_insertions
+        );
         // The text before `at` is as it was in the parse that failed there, so the parse that fails
         // next reaches past the text put in last.
         assert!(
