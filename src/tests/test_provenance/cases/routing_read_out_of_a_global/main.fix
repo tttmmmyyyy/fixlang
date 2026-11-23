@@ -1,0 +1,23 @@
+module Main;
+
+type Holder = box struct { arr : Array I64, n : I64 };
+
+// Builds a fresh array. Recursive, so the inliner leaves it a call.
+fresh : I64 -> Array I64;
+fresh = |n| if n <= 0 { [] } else { fresh(n - 1).push_back(n) };
+
+holder : Holder;
+holder = Holder { arr : fresh(3), n : 1 };
+
+// Only reads `a`. Recursive, so the inliner leaves it a call.
+total : I64 -> Array I64 -> I64;
+total = |i, a| if i >= a.@size { 0 } else { a.@(i) + total(i + 1, a) };
+
+// Reads the array out of the global and hands it to `total`. The global is named nowhere after
+// the call, and the call's result is added to, so the call is not in tail position. Recursive, so
+// the inliner leaves it a function of its own.
+from_global : I64 -> I64;
+from_global = |n| if n > 100 { from_global(n - 1) } else { 1 + total(n, holder.@arr) };
+
+main : IO ();
+main = println $ from_global(0).to_string;

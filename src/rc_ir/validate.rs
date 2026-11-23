@@ -950,6 +950,139 @@ mod tests {
         check(&body, &["u"]);
     }
 
+    /// A local variable of a boxed type, standing for a boxed scrutinee or container: the checks
+    /// it is used in read whether the type is boxed and nothing else of it.
+    fn boxed_var(name: &str) -> RcVar {
+        var_of(name, make_dynamic_object_ty())
+    }
+
+    /// A payload read that checks no tag is caught in an arm that selected another variant: there
+    /// the union holds that other variant, which the read would take for the one it names.
+    #[test]
+    #[should_panic(expected = "reads a variant no enclosing match arm selected")]
+    fn rejects_a_known_variant_read_in_the_arm_of_another_variant() {
+        // let m = match u { 1 -> let p = <read of variant 0, known>(u); ret p }; ret m
+        let read = UnionAsOp::of_known_variant(&FullName::local("u"), 0);
+        let arm = MatchArm {
+            tag: Some(1),
+            payload: None,
+            body: node(RcExpr::Let(
+                var("p"),
+                RcRhs::Builtin(Box::new(read), vec![boxed_var("u")]),
+                node(RcExpr::Ret(var("p"))),
+            )),
+        };
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(boxed_var("u"), vec![arm]),
+            node(RcExpr::Ret(var("m"))),
+        ));
+        check(&body, &["u"]);
+    }
+
+    /// A payload read that checks no tag is caught after the match whose arm selected its variant:
+    /// the selection holds inside the arm alone.
+    #[test]
+    #[should_panic(expected = "reads a variant no enclosing match arm selected")]
+    fn rejects_a_known_variant_read_after_the_match_that_selected_it() {
+        // let m = match u { 0 -> ret c }; let p = <read of variant 0, known>(u); ret p
+        let read = UnionAsOp::of_known_variant(&FullName::local("u"), 0);
+        let arm = MatchArm {
+            tag: Some(0),
+            payload: None,
+            body: node(RcExpr::Ret(var("c"))),
+        };
+        let after = node(RcExpr::Let(
+            var("p"),
+            RcRhs::Builtin(Box::new(read), vec![boxed_var("u")]),
+            node(RcExpr::Ret(var("p"))),
+        ));
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(boxed_var("u"), vec![arm]),
+            after,
+        ));
+        check(&body, &["u", "c"]);
+    }
+
+    /// A payload read that checks no tag is caught where an inner match on the same union has
+    /// closed: the variant its arm selected holds inside that arm alone, and after it the union
+    /// is known to hold the variant the outer arm selected.
+    #[test]
+    #[should_panic(expected = "reads a variant no enclosing match arm selected")]
+    fn rejects_a_known_variant_read_after_an_inner_match_that_selected_it() {
+        // let m = match u { 0 -> let i = match u { 1 -> ret c };
+        //                        let p = <read of variant 1, known>(u); ret p }; ret m
+        let read = UnionAsOp::of_known_variant(&FullName::local("u"), 1);
+        let inner_arm = MatchArm {
+            tag: Some(1),
+            payload: None,
+            body: node(RcExpr::Ret(var("c"))),
+        };
+        let after_inner = node(RcExpr::Let(
+            var("p"),
+            RcRhs::Builtin(Box::new(read), vec![boxed_var("u")]),
+            node(RcExpr::Ret(var("p"))),
+        ));
+        let outer_arm = MatchArm {
+            tag: Some(0),
+            payload: None,
+            body: node(RcExpr::Let(
+                var("i"),
+                RcRhs::Match(boxed_var("u"), vec![inner_arm]),
+                after_inner,
+            )),
+        };
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(boxed_var("u"), vec![outer_arm]),
+            node(RcExpr::Ret(var("m"))),
+        ));
+        check(&body, &["u", "c"]);
+    }
+
+    /// An arm binding a variable over a boxed scrutinee is caught: the match borrows a boxed
+    /// scrutinee, so nothing is moved into a variable of the arm.
+    #[test]
+    #[should_panic(
+        expected = "binds a variable over a boxed scrutinee, or none over an unboxed one"
+    )]
+    fn rejects_an_arm_binding_a_variable_over_a_boxed_scrutinee() {
+        // let m = match u { 0(p) -> ret c }; ret m   (u is boxed)
+        let arm = MatchArm {
+            tag: Some(0),
+            payload: Some(var("p")),
+            body: node(RcExpr::Ret(var("c"))),
+        };
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(boxed_var("u"), vec![arm]),
+            node(RcExpr::Ret(var("m"))),
+        ));
+        check(&body, &["u", "c"]);
+    }
+
+    /// An arm binding no variable over an unboxed scrutinee is caught: the match consumes an
+    /// unboxed scrutinee, and the variable the arm binds is what carries it away.
+    #[test]
+    #[should_panic(
+        expected = "binds a variable over a boxed scrutinee, or none over an unboxed one"
+    )]
+    fn rejects_an_arm_binding_no_variable_over_an_unboxed_scrutinee() {
+        // let m = match s { 0 -> ret c }; ret m   (s is unboxed)
+        let arm = MatchArm {
+            tag: Some(0),
+            payload: None,
+            body: node(RcExpr::Ret(var("c"))),
+        };
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(var("s"), vec![arm]),
+            node(RcExpr::Ret(var("m"))),
+        ));
+        check(&body, &["s", "c"]);
+    }
+
     /// A lifted closure function `f` reading captured value `cap_idx` of a capture object laid out as
     /// `cap_tys`, out of `read_var` — its capture parameter, in a well-formed function. It disposes of
     /// the capture it owns, so its reference counting balances.
@@ -1090,5 +1223,19 @@ mod tests {
             node(RcExpr::Ret(var("s"))),
         ));
         check(&body, &["p"]);
+    }
+
+    /// A `DestructureUnboxed` of a boxed container is caught: a boxed container keeps its fields,
+    /// which getters read out of it.
+    #[test]
+    #[should_panic(expected = "a `DestructureUnboxed` takes the boxed")]
+    fn rejects_destructure_unboxed_of_a_boxed_container() {
+        // destructure a { 0 -> s }; ret s   (a is boxed)
+        let body = node(RcExpr::DestructureUnboxed(
+            boxed_var("a"),
+            vec![(0, var("s"))],
+            node(RcExpr::Ret(var("s"))),
+        ));
+        check(&body, &["a"]);
     }
 }

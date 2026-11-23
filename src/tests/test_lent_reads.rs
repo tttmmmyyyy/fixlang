@@ -218,4 +218,77 @@ mod lent_reads_tests {
         "#;
         test_source(source, Configuration::develop_mode());
     }
+
+    /// A lent value an op consumes at two positions is retained once for each position.
+    ///
+    /// `pair_of` borrows `rows` and puts one element of it at both positions of an array literal,
+    /// which takes a reference per position. One retain too few frees the element while `rows`
+    /// still holds it, and one too many leaks it; Valgrind MemCheck reports either.
+    #[test]
+    pub fn test_a_lent_value_consumed_at_two_positions_is_retained_once_for_each() {
+        let source = r#"
+            module Main;
+
+            // Builds a fresh array. Recursive, so the inliner leaves it a call.
+            fresh : I64 -> Array I64;
+            fresh = |n| if n <= 0 { [] } else { fresh(n - 1).push_back(n) };
+
+            // Puts one element of `rows`, which the caller goes on holding, at both positions of a new array.
+            // The recursion keeps `pair_of` a call.
+            pair_of : I64 -> Array (Array I64) -> Array (Array I64);
+            pair_of = |n, rows| if n <= 0 { let r = rows.@(0); [r, r] } else { pair_of(n - 1, rows) };
+
+            main : IO ();
+            main = (
+                let n = (*get_args).@size;
+                let rows = [fresh(n + 2), fresh(n + 4)];
+                let p = pair_of(2, rows);
+                assert_eq(|_|"the element at both positions and in the array it was read out of", p.@(0).@size * 100 + p.@(1).@size * 10 + rows.@(0).@size, 333);;
+                pure()
+            );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// A value read out of a container that is a global on one path and an object built here on
+    /// another is held throughout on the first path alone, so it keeps a reference of its own.
+    ///
+    /// `either_table` reads a field out of such a table and reads the field after the table's last
+    /// use. On the path that built the table, releasing the table frees the field, so a read
+    /// lending the field would read it after it was freed, which Valgrind MemCheck reports.
+    #[test]
+    pub fn test_a_value_read_out_of_a_container_that_is_a_global_on_one_path_keeps_its_own_reference(
+    ) {
+        let source = r#"
+            module Main;
+
+            type Table = box struct { cells : Array I64, tag : Array I64 };
+
+            // Builds a fresh array. Recursive, so the inliner leaves it a call.
+            fresh : I64 -> Array I64;
+            fresh = |n| if n <= 0 { [] } else { fresh(n - 1).push_back(n) };
+
+            gtable : Table;
+            gtable = Table { cells : [1, 2, 3], tag : [4] };
+
+            // Reads a field out of a table that is the global on one path and built here on the other, and
+            // reads the field after the last use of the table. The recursion keeps `either_table` a call.
+            either_table : I64 -> I64;
+            either_table = |n| (
+                let k = if n > 0 { either_table(n - 1) } else { 0 };
+                let t = if n > 0 { gtable } else { Table { cells : fresh(n + 5), tag : fresh(1) } };
+                let c = t.@cells;
+                let y = fresh(40 + t.@tag.@size);
+                c.@(y.@size - 40) + k
+            );
+
+            main : IO ();
+            main = (
+                let n = (*get_args).@size;
+                assert_eq(|_|"the field of the global and of the table built here", either_table(n), 4);;
+                pure()
+            );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
 }

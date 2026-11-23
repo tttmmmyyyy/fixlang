@@ -562,3 +562,169 @@ impl Lender<'_, '_> {
             .any(|root| self.lent.contains(root))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::lend_reads;
+    use crate::ast::name::FullName;
+    use crate::ast::type_env::TypeEnv;
+    use crate::ast::typedecl::Field;
+    use crate::ast::types::{
+        kind_star, tycon, type_arrow, type_tyapp, type_tycon, TyCon, TyConInfo, TyConVariant,
+        TypeNode,
+    };
+    use crate::fixstd::builtin::{builtin_tycons, make_array_ty, make_i64_ty, StructGetOp};
+    use crate::misc::{Map, Set};
+    use crate::rc_ir::ast::{
+        FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
+    };
+    use std::sync::Arc;
+
+    /// `Array I64`, a boxed value.
+    fn array_ty() -> Arc<TypeNode> {
+        type_tyapp(make_array_ty(), make_i64_ty())
+    }
+
+    /// `Test::Holder`, the boxed struct of one `Array I64` field that `type_env` declares.
+    fn holder_ty() -> Arc<TypeNode> {
+        type_tycon(&tycon(FullName::from_strs(&["Test"], "Holder")))
+    }
+
+    /// A type environment holding the built-in type constructors and `Test::Holder`.
+    fn type_env() -> TypeEnv {
+        let mut tycons = builtin_tycons();
+        tycons.insert(
+            TyCon::new(FullName::from_strs(&["Test"], "Holder")),
+            TyConInfo {
+                kind: kind_star(),
+                variant: TyConVariant::Struct,
+                is_unbox: false,
+                tyvars: vec![],
+                fields: vec![Field::make("held".to_string(), array_ty(), None)],
+                source: None,
+                document: None,
+                punched_from: None,
+            },
+        );
+        TypeEnv::new(tycons, Map::default())
+    }
+
+    /// A local variable of the given type.
+    fn var_of(name: &str, ty: Arc<TypeNode>) -> RcVar {
+        RcVar {
+            name: FullName::local(name),
+            ty,
+            source: None,
+            debug_name: None,
+            skip_null_check: false,
+        }
+    }
+
+    /// An expression node carrying no source span.
+    fn node(expr: RcExpr) -> RcExprNode {
+        RcExprNode::new(expr, None)
+    }
+
+    /// `let x = <getter of field 0>(c); k`, where `c` is a `Test::Holder` and `x` its array.
+    fn read_then(k: RcExprNode) -> RcExprNode {
+        let read = StructGetOp::of_field(&FullName::local("c"), 0);
+        node(RcExpr::Let(
+            var_of("x", array_ty()),
+            RcRhs::Builtin(Box::new(read), vec![var_of("c", holder_ty())]),
+            k,
+        ))
+    }
+
+    /// The body `lend_reads` leaves of the function `f(c : Test::Holder)` whose body is `body`.
+    fn lent_body(body: RcExprNode, ret_ty: Arc<TypeNode>) -> RcExprNode {
+        let name = FuncRef {
+            name: FullName::local("f"),
+        };
+        let func = RcFunc {
+            name: name.clone(),
+            fn_ty: type_arrow(holder_ty(), ret_ty.clone()),
+            params: vec![var_of("c", holder_ty())],
+            capture: None,
+            ret_ty,
+            body,
+            source: None,
+            borrowed_units: Set::default(),
+            inline_into_callers: false,
+        };
+        let prog = RcProgram {
+            funcs: [(name.clone(), func)].into_iter().collect(),
+            globals: vec![],
+            roots: [name.name.clone()].into_iter().collect(),
+            retains_sunk: false,
+        };
+        lend_reads(&prog, &type_env()).funcs[&name].body.clone()
+    }
+
+    /// Whether the read `read_then` opens `body` with lends its value.
+    fn read_lends(body: &RcExprNode) -> bool {
+        match body.expr.as_ref() {
+            RcExpr::Let(_, RcRhs::Builtin(op, _), _) => op.lends(),
+            _ => panic!("the body opens with the read"),
+        }
+    }
+
+    /// A lent value a closure captures is retained right before the capture, which takes a
+    /// reference as a call owning its argument does.
+    #[test]
+    fn retains_a_lent_value_before_a_closure_captures_it() {
+        // let x = c.0; let g = closure target[x]; release c; ret g
+        let closure_ty = type_arrow(make_i64_ty(), make_i64_ty());
+        let target = FuncRef {
+            name: FullName::local("target"),
+        };
+        let body = read_then(node(RcExpr::Let(
+            var_of("g", closure_ty.clone()),
+            RcRhs::Closure(target, vec![var_of("x", array_ty())]),
+            node(RcExpr::Release(
+                var_of("c", holder_ty()),
+                vec![],
+                RcState::Unknown,
+                node(RcExpr::Ret(var_of("g", closure_ty.clone()))),
+            )),
+        )));
+        let lent = lent_body(body, closure_ty);
+        assert!(read_lends(&lent), "the read should lend the captured array");
+        let RcExpr::Let(_, _, after_read) = lent.expr.as_ref() else {
+            unreachable!("`read_lends` saw the read");
+        };
+        assert!(
+            matches!(
+                after_read.expr.as_ref(),
+                RcExpr::Retain(v, _, _, k)
+                    if v.name == FullName::local("x")
+                        && matches!(k.expr.as_ref(), RcExpr::Let(_, RcRhs::Closure(..), _))
+            ),
+            "a retain of the lent array should stand right before the capture"
+        );
+    }
+
+    /// A value used after its container's count may have reached zero keeps its own reference,
+    /// though a retain raises the count again before the use: the retain restores neither the
+    /// object nor what it held.
+    #[test]
+    fn keeps_the_reference_of_a_value_used_after_its_container_may_have_been_freed() {
+        // let x = c.0; release c; retain c; ret x
+        let c = || var_of("c", holder_ty());
+        let body = read_then(node(RcExpr::Release(
+            c(),
+            vec![],
+            RcState::Unknown,
+            node(RcExpr::Retain(
+                c(),
+                vec![],
+                RcState::Unknown,
+                node(RcExpr::Ret(var_of("x", array_ty()))),
+            )),
+        )));
+        let lent = lent_body(body, array_ty());
+        assert!(
+            !read_lends(&lent),
+            "the read should retain the array returned after the container's count reached zero"
+        );
+    }
+}

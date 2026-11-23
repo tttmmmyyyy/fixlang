@@ -580,6 +580,39 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that a value read out of a global is held past a call it is handed to, and is
+    /// lent: a global's object is never freed, though the body names the global nowhere after the
+    /// call. `from_global` reads an array out of a global struct and hands it to `total`, which
+    /// only reads it, so the call routes to the borrowing version, the getter reads the array by
+    /// the lending form, and `from_global` counts no reference at all.
+    #[test]
+    fn test_a_value_read_out_of_a_global_is_lent_to_a_borrowing_call() {
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "routing_read_out_of_a_global");
+        let dump = emit_main_rc_ir(&project_dir);
+        let from_global = func_block(&dump, "fn Main::from_global", |_| true);
+        let body = from_global.join("\n");
+
+        let call = from_global
+            .iter()
+            .find(|l| l.contains("= Main::total#"))
+            .unwrap_or_else(|| panic!("`from_global` calls no `total`:\n{}", body));
+        assert!(
+            call.contains("#borrow"),
+            "a call handed a value read out of a global should route to the borrowing version:\n{}",
+            body
+        );
+        let read = from_global
+            .iter()
+            .find(|l| l.contains("= struct_get_0(Main::holder#"))
+            .unwrap_or_else(|| panic!("`from_global` reads no field of the global:\n{}", body));
+        assert!(
+            read.contains(" @lent"),
+            "the array read out of the global should be lent:\n{}",
+            read
+        );
+        assert_counts_nothing(&from_global, "`from_global`");
+    }
+
     /// Verifies that a read lends its value where the container goes on holding it: the element read
     /// out of `rows` and the field read out of `table`, each handed to a call that borrows it while
     /// its container is read afterwards, are read by the lending form of the read, and `main` counts

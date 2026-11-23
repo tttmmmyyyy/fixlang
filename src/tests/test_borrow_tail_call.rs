@@ -64,4 +64,43 @@ mod borrow_tail_call_tests {
         config.set_valgrind(ValgrindTool::None);
         test_source(source, config);
     }
+
+    /// Deep tail recursion whose tail call passes a value read out of a parameter the version
+    /// borrows. The borrowed `ring` holds the array past the call, so outside tail position the
+    /// call would lend it; a call in tail position lends no owned value, since lending would leave
+    /// the release of the reference the read took after the call. So the call reaches a version
+    /// owning `a`, and the loop runs in constant stack.
+    ///
+    /// The depth makes this a stack test, not a memcheck one, so Valgrind is switched off to keep
+    /// it fast.
+    #[test]
+    pub fn test_tail_call_passing_a_value_read_out_of_a_borrowed_parameter() {
+        let source = r#"
+            module Main;
+
+            type Ring = box struct { even : Array I64, odd : Array I64 };
+
+            // Only reads `ring` and `a`, and its tail call passes at `a` an array read out of
+            // `ring`.
+            spin : I64 -> I64 -> Ring -> Array I64 -> I64;
+            spin = |n, acc, ring, a| (
+                if n == 0 { acc + a.@(0) };
+                spin(n - 1, acc + a.@(0), ring, if n % 2 == 0 { ring.@even } else { ring.@odd })
+            );
+
+            main : IO ();
+            main = (
+                let a = Array::from_map(3, |i| i + 1);
+                let b = Array::from_map(3, |i| 10 * (i + 1));
+                let ring = Ring { even : a, odd : b };
+                let n = 30000000;
+                assert_eq(|_|"loop over a borrowed struct", spin(n, 0, ring, a), 165000001);;
+                assert_eq(|_|"the borrowed struct survives", ring.@even.@(0) + ring.@odd.@(0), 11);;
+                pure()
+            );
+        "#;
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        test_source(source, config);
+    }
 }

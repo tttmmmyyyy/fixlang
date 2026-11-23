@@ -9,7 +9,8 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{
-        build_project_and_read_rc_ir, rc_ir_function_bodies_naming_all, setup_case_projects,
+        build_project_and_read_rc_ir, build_project_run_and_read_rc_ir,
+        rc_ir_function_bodies_naming_all, setup_case_projects,
     };
     use std::process::Command;
 
@@ -192,6 +193,41 @@ mod integration_tests {
             "[0, 12, 15, 18, 21, 15, 27, 30, 33, 36]",
         );
     }
+
+    /// A boxed union matched where it is built — with an arm for each variant, and with a
+    /// catch-all arm beside the arm of the variant built — and a boxed struct read where it is
+    /// built by nothing but the getters a pattern or the source reads its fields with, are each
+    /// cancelled against the code taking them apart. Each shape has a type of its own that only
+    /// its function builds, so a program holding no value of the type has cancelled that shape.
+    /// The built program still computes what the source says.
+    #[test]
+    fn test_boxed_constructions_cancelled() {
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "boxed_constructions");
+        let dump = build_project_run_and_read_rc_ir(&project_dir, "max", "[3, 3, 32, 4, 304]");
+        for (ty, shape) in [
+            ("Main::KnownOpt", "a boxed union matched where it is built"),
+            (
+                "Main::CatchAllOpt",
+                "a boxed union matched beside a catch-all arm where it is built",
+            ),
+            (
+                "Main::PatternPair",
+                "a boxed struct taken apart by a pattern where it is built",
+            ),
+            (
+                "Main::GetterPair",
+                "a boxed struct read by getters alone where it is built",
+            ),
+        ] {
+            let holding: Vec<&str> = dump.lines().filter(|line| line.contains(ty)).collect();
+            assert!(
+                holding.is_empty(),
+                "{} should be cancelled, but the program still holds a value of its type:\n{}",
+                shape,
+                holding.join("\n")
+            );
+        }
+    }
 }
 
 /// Fix programs written to drive the rewrites, compiled and run for the values each one computes.
@@ -327,6 +363,38 @@ mod value_tests {
                 assert_eq(
                     |_|"a matched value read after the match",
                     Iterator::range(0, 6).map(f).to_array, [1, 99, 7, 99, 13, 99]
+                );;
+                pure()
+            );
+        "#;
+        test_source(&source, Configuration::develop_mode());
+    }
+
+    /// The outer match is over a boxed union each inner arm builds, and its `some` arm reads the
+    /// union itself beside the payload. Moving that arm to the construction would leave the read
+    /// naming a value nothing binds any more, so the rewrite declines and the values stay what the
+    /// source computes.
+    #[test]
+    pub fn test_an_outer_arm_reading_the_boxed_union_beside_its_payload() {
+        let source = r#"
+            module Main;
+
+            type BoxOpt = box union { some : Array I64, none : () };
+
+            f : I64 -> I64;
+            f = |n| (
+                let o = if n % 2 == 0 { BoxOpt::some([n, n]) } else { BoxOpt::none() };
+                match o {
+                    some(a) => a.@size + (if o.is_some { 10 } else { 20 }),
+                    none(_) => -1
+                }
+            );
+
+            main : IO ();
+            main = (
+                assert_eq(
+                    |_|"an outer arm reading the boxed union it matches",
+                    Iterator::range(0, 4).map(f).to_array, [12, -1, 12, -1]
                 );;
                 pure()
             );
