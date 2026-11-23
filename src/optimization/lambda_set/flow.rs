@@ -116,17 +116,10 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
     /// This is the rule of an operation that declares none.
     pub fn make_all_dynamic(&mut self) {
         let kind = DynamicKind::Builtin(self.op_name.clone());
-        for operand in &self.operands {
-            self.solver.make_all_dynamic(operand, &kind);
+        for ty in self.operands.iter().chain([&self.result]) {
+            self.solver.make_all_dynamic(ty, &kind);
+            self.accounted.extend(ty.slots.iter().copied());
         }
-        self.solver.make_all_dynamic(&self.result, &kind);
-        let all: Vec<SetVar> = self
-            .operands
-            .iter()
-            .chain([&self.result])
-            .flat_map(|ty| ty.slots.iter().copied())
-            .collect();
-        self.accounted.extend(all);
     }
 
     /// Records that the rule has accounted for every slot of `ty`.

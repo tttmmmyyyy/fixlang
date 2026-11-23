@@ -124,6 +124,11 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     /// the lambda set it had. An op that applies a function operand, as `applies_a_function_operand`
     /// says, makes that operand's own slot Dynamic, since the code it generates calls a closure;
     /// the default rule does so, making every slot Dynamic.
+    ///
+    /// A rule accounts for every slot of every operand and of the result: by the flow it declares
+    /// there (`BuiltinFlow::same`), by making it Dynamic, or by declaring that no function flows
+    /// there (`BuiltinFlow::no_flow`). The inference stops the compiler on a rule that leaves a
+    /// slot out (`BuiltinFlow::unaccounted`).
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         flow.make_all_dynamic();
     }

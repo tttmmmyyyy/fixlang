@@ -218,9 +218,8 @@ impl Analysis {
     }
 }
 
-/// Infers the lambda sets of `prg`. With `develop_mode`, checks that the flow rule of each builtin
-/// operation accounts for every slot of its operands and its result (`BuiltinFlow::unaccounted`).
-pub fn infer(prg: &Program, layout: &SlotLayout, develop_mode: bool) -> Analysis {
+/// Infers the lambda sets of `prg`.
+pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
     let mut analysis = Analysis {
         components: vec![],
         component_of: Map::default(),
@@ -228,7 +227,7 @@ pub fn infer(prg: &Program, layout: &SlotLayout, develop_mode: bool) -> Analysis
         solver: Solver::new(),
     };
     for symbols in components_callees_first(prg) {
-        let component = infer_component(prg, layout, &mut analysis, symbols, vec![], develop_mode);
+        let component = infer_component(prg, layout, &mut analysis, symbols, vec![]);
         analysis.components.push(component);
     }
     let mut roots = vec![];
@@ -238,7 +237,7 @@ pub fn infer(prg: &Program, layout: &SlotLayout, develop_mode: bool) -> Analysis
     for export in &prg.export_statements {
         roots.push((export.value_expr.clone().unwrap(), DynamicKind::Export));
     }
-    let entry_component = infer_component(prg, layout, &mut analysis, vec![], roots, develop_mode);
+    let entry_component = infer_component(prg, layout, &mut analysis, vec![], roots);
     analysis.components.push(entry_component);
     // The variables of each component, as the roots they are once every component is inferred: a
     // component inferred later can unify a pinned variable of an earlier one, which can make
@@ -294,15 +293,13 @@ fn components_callees_first(prg: &Program) -> Vec<Vec<FullName>> {
 
 /// Infers the component of `symbols`, given the components it refers to in `analysis`. The
 /// component of the entry holds no symbol and gives `roots` instead: the expressions the runtime
-/// reads, each with what makes its type Dynamic. With `develop_mode`, checks the flow rules as
-/// `infer` says.
+/// reads, each with what makes its type Dynamic.
 fn infer_component(
     prg: &Program,
     layout: &SlotLayout,
     analysis: &mut Analysis,
     symbols: Vec<FullName>,
     roots: Vec<(Arc<ExprNode>, DynamicKind)>,
-    develop_mode: bool,
 ) -> Component {
     let id = analysis.components.len();
     for s in &symbols {
@@ -341,7 +338,6 @@ fn infer_component(
         sites: vec![],
         lam_counter: 0,
         nodes: vec![],
-        develop_mode,
     };
     let mut node_types = vec![];
     for (i, s) in symbols.iter().enumerate() {
@@ -422,9 +418,6 @@ struct Inferencer<'a, 'p, 'e> {
     /// The nodes of the expression under inference met so far, in the order `NodeType` lists them.
     /// A node is pushed as `None` when it is met and filled in once its type is known.
     nodes: Vec<Option<NodeType>>,
-    /// Whether to check that the flow rule of each builtin operation accounts for every slot of its
-    /// operands and its result.
-    develop_mode: bool,
 }
 
 impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
@@ -508,17 +501,17 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                     b.op.name(),
                 );
                 b.op.lambda_set_flow(&mut flow);
-                if self.develop_mode {
-                    if let Some(slot) = flow.unaccounted() {
-                        panic!(
-                            "the lambda set flow of the builtin `{}` says nothing about {}: it \
-                             declares where the functions there flow (`same`), that they are \
-                             closures built at run time (`make_own_dynamic`), or that none flows \
-                             there (`no_flow`)",
-                            b.op.name(),
-                            slot
-                        );
-                    }
+                // A slot the rule left out would receive no set from the operation, so a function
+                // that flows there at run time would be one the inference never saw.
+                if let Some(slot) = flow.unaccounted() {
+                    panic!(
+                        "the lambda set flow of the builtin `{}` says nothing about {}: it \
+                         declares where the functions there flow (`same`), that they are \
+                         closures built at run time (`make_own_dynamic`), or that none flows \
+                         there (`no_flow`)",
+                        b.op.name(),
+                        slot
+                    );
                 }
                 assert!(
                     !b.op.applies_a_function_operand() || flow.has_dynamic_operand_own_slot(),
