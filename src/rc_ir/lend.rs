@@ -66,41 +66,18 @@ pub(crate) fn lend_reads(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 /// documentation, checked again until the set is stable, since a value taken out of the set can
 /// fail a condition another value passed.
 fn lent_values(model: &BodyModel, body: &RcExprNode) -> Set<FullName> {
-    let type_env = model.type_env;
     let containers = reads(model);
     if containers.is_empty() {
         return Set::default();
     }
-    let mut lent: Set<FullName> = containers.keys().cloned().collect();
-    for_each_node(body, &mut |node| {
-        let RcExpr::Let(x, rhs, _) = node.expr.as_ref() else {
-            return;
-        };
-        if matches!(rhs, RcRhs::Match(..)) {
-            return;
-        }
-        let consumed = positions(model.rhs_consumed_leaves(rhs, &x.ty));
-        for v in operands(rhs) {
-            for unit in rc_units(&v.ty, type_env) {
-                if consumed_positions(model, &consumed, v, &unit).is_none() {
-                    for root in roots_under(model, &v.name, &v.ty, &unit) {
-                        lent.remove(&root);
-                    }
-                }
-            }
-        }
-    });
+    let consumed_in_part = roots_consumed_in_part(model, body);
+    let mut lent: Set<FullName> = containers
+        .keys()
+        .filter(|value| !consumed_in_part.contains(*value))
+        .cloned()
+        .collect();
     loop {
-        let mut failing = Set::default();
-        for (name, ty) in &model.vars.var_tys {
-            for unit in rc_units(ty, type_env) {
-                let roots = roots_under(model, name, ty, &unit);
-                if roots.iter().any(|r| lent.contains(r)) && roots.iter().any(|r| !lent.contains(r))
-                {
-                    failing.extend(roots.into_iter().filter(|r| lent.contains(r)));
-                }
-            }
-        }
+        let mut failing = lent_beside_unlent(model, &lent);
         let mut anchors: Map<FullName, Option<Set<FullName>>> = Map::default();
         for value in &lent {
             anchors_of(model, value, &containers, &lent, &mut anchors);
@@ -140,6 +117,43 @@ fn lent_values(model: &BodyModel, body: &RcExprNode) -> Set<FullName> {
             lent.remove(value);
         }
     }
+}
+
+/// The roots of the units an op of `body` consumes some leaves of more often than others.
+fn roots_consumed_in_part(model: &BodyModel, body: &RcExprNode) -> Set<FullName> {
+    let mut roots = Set::default();
+    for_each_node(body, &mut |node| {
+        let RcExpr::Let(x, rhs, _) = node.expr.as_ref() else {
+            return;
+        };
+        if matches!(rhs, RcRhs::Match(..)) {
+            return;
+        }
+        let consumed = positions(model.rhs_consumed_leaves(rhs, &x.ty));
+        for v in operands(rhs) {
+            for unit in rc_units(&v.ty, model.type_env) {
+                if consumed_positions(model, &consumed, v, &unit).is_none() {
+                    roots.extend(roots_under(model, &v.name, &v.ty, &unit));
+                }
+            }
+        }
+    });
+    roots
+}
+
+/// The values of `lent` that some unit of a variable may be on one path while it may be a value
+/// outside `lent` on another.
+fn lent_beside_unlent(model: &BodyModel, lent: &Set<FullName>) -> Set<FullName> {
+    let mut beside = Set::default();
+    for (name, ty) in &model.vars.var_tys {
+        for unit in rc_units(ty, model.type_env) {
+            let roots = roots_under(model, name, ty, &unit);
+            if roots.iter().any(|r| lent.contains(r)) && roots.iter().any(|r| !lent.contains(r)) {
+                beside.extend(roots.into_iter().filter(|r| lent.contains(r)));
+            }
+        }
+    }
+    beside
 }
 
 /// The values a body reads out of a boxed container (`read_container`), each mapped to that
@@ -199,12 +213,27 @@ fn consumed_positions(
     v: &RcVar,
     unit: &FieldPath,
 ) -> Option<usize> {
-    let mut counts = boxed_leaf_paths(&v.ty, model.type_env)
-        .into_iter()
-        .filter(|leaf| leaf.starts_with(unit))
+    let mut counts = boxed_leaves_under(&v.ty, unit, model.type_env)
         .map(|leaf| positions.get(&(v.name.clone(), leaf)).copied().unwrap_or(0));
-    let first = counts.next().unwrap_or(0);
+    let first = counts.next().unwrap_or_else(|| {
+        panic!(
+            "the unit {:?} of `{}` has no boxed leaf",
+            unit,
+            v.name.to_string()
+        )
+    });
     counts.all(|count| count == first).then_some(first)
+}
+
+/// The boxed leaves of a value of type `ty` under `path`.
+fn boxed_leaves_under<'p>(
+    ty: &Arc<TypeNode>,
+    path: &'p [usize],
+    type_env: &TypeEnv,
+) -> impl Iterator<Item = FieldPath> + 'p {
+    boxed_leaf_paths(ty, type_env)
+        .into_iter()
+        .filter(move |leaf| leaf.starts_with(path))
 }
 
 /// The variables a right-hand side other than a `Match` reads.
@@ -272,9 +301,7 @@ fn roots_under(
     ty: &Arc<TypeNode>,
     unit: &FieldPath,
 ) -> Set<FullName> {
-    boxed_leaf_paths(ty, model.type_env)
-        .into_iter()
-        .filter(|leaf| leaf.starts_with(unit))
+    boxed_leaves_under(ty, unit, model.type_env)
         .flat_map(|leaf| model.leaf_objects(name, &leaf))
         .filter(|(root, path)| {
             matches!(
@@ -297,6 +324,14 @@ struct Count {
 }
 
 impl Count {
+    /// The bound at a read out of the object, which the read itself reads.
+    fn at_read() -> Count {
+        Count {
+            low: 1,
+            broken: false,
+        }
+    }
+
     /// The bound after `delta` references come and go.
     fn moved(self, delta: i64) -> Count {
         let low = self.low + delta;
@@ -350,10 +385,7 @@ impl Walk<'_, '_> {
                     self.check_use(v, count);
                 }
                 let count = if x.name == *self.read {
-                    Some(Count {
-                        low: 1,
-                        broken: false,
-                    })
+                    Some(Count::at_read())
                 } else {
                     count
                 };
@@ -362,10 +394,7 @@ impl Walk<'_, '_> {
             RcExpr::Destructure(container, fields, _, k) => {
                 self.check_use(container, count);
                 let count = if fields.iter().any(|(_, f)| f.name == *self.read) {
-                    Some(Count {
-                        low: 1,
-                        broken: false,
-                    })
+                    Some(Count::at_read())
                 } else {
                     count
                 };
@@ -374,7 +403,8 @@ impl Walk<'_, '_> {
             RcExpr::Retain(v, path, _, k) => {
                 // A retain of a union retains the leaves of the variant it holds, which may not be
                 // the leaf that is the object, so only a unit of one leaf is certain to retain it.
-                let leaves: Vec<FieldPath> = self.leaves_under(v, path).collect();
+                let leaves: Vec<FieldPath> =
+                    boxed_leaves_under(&v.ty, path, self.model.type_env).collect();
                 let certain = match leaves.as_slice() {
                     [leaf] => {
                         (self.model.leaf_objects(&v.name, leaf)
@@ -385,8 +415,7 @@ impl Walk<'_, '_> {
                 self.walk(k, count.map(|c| c.moved(certain)))
             }
             RcExpr::Release(v, path, _, k) => {
-                let possible = self
-                    .leaves_under(v, path)
+                let possible = boxed_leaves_under(&v.ty, path, self.model.type_env)
                     .filter(|leaf| {
                         self.model
                             .leaf_objects(&v.name, leaf)
@@ -404,17 +433,6 @@ impl Walk<'_, '_> {
                 count
             }
         })
-    }
-
-    /// The boxed leaves of `v` under `path`.
-    fn leaves_under<'p>(
-        &self,
-        v: &RcVar,
-        path: &'p FieldPath,
-    ) -> impl Iterator<Item = FieldPath> + 'p {
-        boxed_leaf_paths(&v.ty, self.model.type_env)
-            .into_iter()
-            .filter(move |leaf| leaf.starts_with(path))
     }
 
     /// How many of `objects` are the walk's object.
@@ -472,14 +490,19 @@ impl Lender<'_, '_> {
                 )
             }
             RcExpr::Let(x, rhs, k) => {
-                let lending = match rhs {
-                    RcRhs::Builtin(op, args) if self.lent.contains(&x.name) => {
-                        let op = op.lending().expect(
-                            "`lent_values` lends the results of ops that have a lending form",
-                        );
-                        RcRhs::Builtin(op, args.clone())
-                    }
-                    _ => rhs.clone(),
+                let lending = if self.lent.contains(&x.name) {
+                    let RcRhs::Builtin(op, args) = rhs else {
+                        unreachable!(
+                            "the lent `{}` is bound by something other than an op",
+                            x.name.to_string()
+                        )
+                    };
+                    let op = op
+                        .lending()
+                        .expect("`lent_values` lends the results of ops that have a lending form");
+                    RcRhs::Builtin(op, args.clone())
+                } else {
+                    rhs.clone()
                 };
                 let bound = RcExprNode::new(
                     RcExpr::Let(x.clone(), lending, self.rewrite(k, returns)),

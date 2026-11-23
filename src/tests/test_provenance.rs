@@ -535,12 +535,7 @@ mod integration_tests {
             .collect();
         assert_eq!(calls.len(), 3, "`main` calls `tally` three times:\n{}", main.join("\n"));
         for call in calls {
-            let array = call
-                .split_once(" = ")
-                .and_then(|(_, rhs)| rhs.split_once('('))
-                .and_then(|(_, args)| args.split_once(','))
-                .map(|(array, _)| array)
-                .unwrap_or_else(|| panic!("no first argument in the call:\n{}", call));
+            let array = call_first_arg(call);
             let binding = format!("let {} : ", array);
             let read = main
                 .iter()

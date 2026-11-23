@@ -985,11 +985,16 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
             || match alias_step(self.vars, self.type_env(), var, path) {
                 AliasStep::Stops => {
                     read_container(self.vars, self.type_env(), var).is_some_and(|container| {
-                        rc_units(&container.ty, self.type_env())
-                            .into_iter()
-                            .all(|unit| {
-                                self.held_after(&(container.name.clone(), unit), after, held)
-                            })
+                        let units = rc_units(&container.ty, self.type_env());
+                        assert!(
+                            !units.is_empty(),
+                            "the container `{}` that `{}` is read out of holds no reference",
+                            container.name.to_string(),
+                            var.to_string()
+                        );
+                        units.into_iter().all(|unit| {
+                            self.held_after(&(container.name.clone(), unit), after, held)
+                        })
                     })
                 }
                 AliasStep::Projects(source) => self.held_after(&source, after, held),
