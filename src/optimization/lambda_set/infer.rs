@@ -505,7 +505,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 // that flows there at run time would be one the inference never saw.
                 if let Some(slot) = flow.describe_unaccounted_slot() {
                     panic!(
-                        "the lambda set flow of the builtin `{}` says nothing about {}: it \
+                        "the lambda set flow of the builtin `{}` says nothing about {}: a rule \
                          declares where the functions there flow (`same`), that they are \
                          closures built at run time (`make_own_dynamic`), or that none flows \
                          there (`no_other_flow`)",
