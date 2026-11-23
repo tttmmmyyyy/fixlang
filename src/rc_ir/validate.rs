@@ -13,8 +13,8 @@
 //! reference-counting unit of its variable; a function carries a capture parameter exactly for the
 //! closure ABI; every match has at least one arm, with any catch-all arm last; a `Builtin`
 //! operation's embedded operand names match its argument list; a closure value stores the capture
-//! layout its target function projects; and a `Destructure` of an unboxed container names each of
-//! its fields.
+//! layout its target function projects; a `Destructure` of an unboxed container names each of its
+//! fields; and no `Release` names a value its read lends.
 
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
@@ -203,6 +203,10 @@ struct Validator<'a, 'b> {
     /// the ground is checked: every pass that runs between the stages this validator is called at
     /// must place no node on one.
     made_without_storage: Set<FullName>,
+    /// The names bound to a value its read lends (`BuiltinOp::lends`). A lent value holds no
+    /// reference of its own, so nothing releases it: a release naming one would drop the
+    /// reference its container holds.
+    lent: Set<FullName>,
     /// The names currently in scope, which a use must resolve to.
     scope: Set<FullName>,
 }
@@ -232,6 +236,7 @@ impl<'a, 'b> Validator<'a, 'b> {
             location,
             bound_in,
             made_without_storage: Set::default(),
+            lent: Set::default(),
             scope: Set::default(),
         }
     }
@@ -327,6 +332,9 @@ impl<'a, 'b> Validator<'a, 'b> {
                     if op.as_any().downcast_ref::<NoStorageValueOp>().is_some() {
                         self.made_without_storage.insert(x.name.clone());
                     }
+                    if op.lends() {
+                        self.lent.insert(x.name.clone());
+                    }
                 }
                 self.bind(&x.name);
                 self.check_expr(k);
@@ -340,6 +348,15 @@ impl<'a, 'b> Validator<'a, 'b> {
                         self.stage,
                         v.name.to_string(),
                         v.ty.to_string(),
+                        self.location,
+                    );
+                }
+                if matches!(node.expr.as_ref(), RcExpr::Release(..)) && self.lent.contains(&v.name)
+                {
+                    panic!(
+                        "[RC IR validate] {}: a release names `{}`, a value its read lends, in `{}`",
+                        self.stage,
+                        v.name.to_string(),
                         self.location,
                     );
                 }
@@ -544,7 +561,7 @@ mod tests {
     };
     use crate::fixstd::builtin::{
         builtin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_ptr_ty,
-        CaptureProjectOp, NullPtrLitOp,
+        CaptureProjectOp, NullPtrLitOp, StructGetOp,
     };
     use crate::misc::{Map, Set};
     use crate::rc_ir::ast::{
@@ -840,6 +857,26 @@ mod tests {
             node(RcExpr::Ret(var("r"))),
         ));
         check(&body, &["x"]);
+    }
+
+    /// A release of a value its read lends is caught: the value holds no reference of its own, so
+    /// the release would drop the one its container holds.
+    #[test]
+    #[should_panic(expected = "a value its read lends")]
+    fn rejects_a_release_of_a_lent_value() {
+        // let x = <lending getter of field 0>(c); release x; ret x
+        let read = StructGetOp::lending_field(&FullName::local("c"), 0);
+        let body = node(RcExpr::Let(
+            var("x"),
+            RcRhs::Builtin(Box::new(read), vec![var("c")]),
+            node(RcExpr::Release(
+                var("x"),
+                vec![],
+                RcState::Unknown,
+                node(RcExpr::Ret(var("x"))),
+            )),
+        ));
+        check(&body, &["c"]);
     }
 
     /// A lifted closure function `f` reading captured value `cap_idx` of a capture object laid out as
