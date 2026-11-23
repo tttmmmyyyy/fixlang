@@ -3144,7 +3144,7 @@ impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
         i == 0
     }
 
-    fn result_held_by_operand(
+    fn operand_holding_result(
         &self,
         _arg_tys: &[Arc<TypeNode>],
         _type_env: &TypeEnv,
@@ -3175,10 +3175,10 @@ impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
         self.assume_local
     }
 
-    fn lending(&self) -> Option<Box<dyn BuiltinOp>> {
+    fn lending(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.lend = true;
-        Some(Box::new(c))
+        Box::new(c)
     }
 
     fn lends(&self) -> bool {
@@ -5706,7 +5706,7 @@ impl BuiltinOp for StructGetOp {
         i == 0
     }
 
-    fn result_held_by_operand(
+    fn operand_holding_result(
         &self,
         _arg_tys: &[Arc<TypeNode>],
         _type_env: &TypeEnv,
@@ -5747,10 +5747,10 @@ impl BuiltinOp for StructGetOp {
         self.assume_local
     }
 
-    fn lending(&self) -> Option<Box<dyn BuiltinOp>> {
+    fn lending(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.lend = true;
-        Some(Box::new(c))
+        Box::new(c)
     }
 
     fn lends(&self) -> bool {
@@ -6183,15 +6183,6 @@ impl BuiltinOp for CaptureProjectOp {
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
-    }
-
-    fn result_held_by_operand(
-        &self,
-        _arg_tys: &[Arc<TypeNode>],
-        _type_env: &TypeEnv,
-    ) -> Option<usize> {
-        // The captured value is read out of the capture object, operand 0, which keeps holding it.
-        Some(0)
     }
 
     fn result_locality(
@@ -8002,7 +7993,7 @@ impl BuiltinOp for UnionAsOp {
         i == 0 && self.payload_read(&arg_tys[0], type_env) != PayloadRead::Moved
     }
 
-    fn result_held_by_operand(
+    fn operand_holding_result(
         &self,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
@@ -8059,10 +8050,10 @@ impl BuiltinOp for UnionAsOp {
         self.assume_local
     }
 
-    fn lending(&self) -> Option<Box<dyn BuiltinOp>> {
+    fn lending(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.lend = true;
-        Some(Box::new(c))
+        Box::new(c)
     }
 
     fn lends(&self) -> bool {

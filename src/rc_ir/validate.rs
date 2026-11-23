@@ -888,9 +888,7 @@ mod tests {
     #[should_panic(expected = "a value its read lends")]
     fn rejects_a_release_of_a_lent_value() {
         // let x = <lending getter of field 0>(c); release x; ret x
-        let read = StructGetOp::of_field(&FullName::local("c"), 0)
-            .lending()
-            .expect("a field getter has a lending form");
+        let read = StructGetOp::of_field(&FullName::local("c"), 0).lending();
         let body = node(RcExpr::Let(
             var("x"),
             RcRhs::Builtin(read, vec![var("c")]),

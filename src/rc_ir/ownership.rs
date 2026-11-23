@@ -352,7 +352,7 @@ pub(crate) fn alias_step(
         Some(Binding::Builtin(op, args, result_ty)) => {
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
             let decl = op.result_prov(result_ty, &arg_tys, type_env);
-            if let Some(j) = op.result_held_by_operand(&arg_tys, type_env) {
+            if let Some(j) = op.operand_holding_result(&arg_tys, type_env) {
                 assert!(
                     decl.leaf_origins_at(path)
                         .and_then(as_arg_projection)
@@ -396,11 +396,9 @@ pub(crate) fn alias_step(
     }
 }
 
-/// The boxed container the binding of `var` reads its value out of, where the read can lend the
-/// value (`lend::lend_reads`): the operand an op reads its result out of
-/// (`BuiltinOp::result_held_by_operand`), borrows, and has a lending form for
-/// (`BuiltinOp::lending`). The container's field goes on holding the value for as long as the
-/// container is alive and unchanged.
+/// The boxed container the binding of `var` reads its value out of: the operand an op reads its
+/// result out of and can lend it out of (`BuiltinOp::operand_holding_result`). The container's
+/// field goes on holding the value for as long as the container is alive and unchanged.
 pub(crate) fn read_container<'a>(
     vars: &'a VarTable,
     type_env: &TypeEnv,
@@ -409,8 +407,14 @@ pub(crate) fn read_container<'a>(
     match vars.bindings.get(var)? {
         Binding::Builtin(op, args, _) => {
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-            let j = op.result_held_by_operand(&arg_tys, type_env)?;
-            (op.borrows_operand(j, &arg_tys, type_env) && op.lending().is_some()).then(|| &args[j])
+            let j = op.operand_holding_result(&arg_tys, type_env)?;
+            assert!(
+                op.borrows_operand(j, &arg_tys, type_env),
+                "`{}` reads its result out of operand {}, which it does not borrow",
+                op.name(),
+                j
+            );
+            Some(&args[j])
         }
         _ => None,
     }

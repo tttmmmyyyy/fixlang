@@ -209,7 +209,7 @@ pub struct LeafCond {
     /// `RefcntState::GLOBAL`. A global's initializer marks its whole result graph global, and a
     /// global object never changes, so this holds of a global and of what the body takes out of it
     /// by a `DestructureUnboxed`, a `Match`, or an op that reads its result out of an operand
-    /// (`BuiltinOp::result_held_by_operand`). Every other constructor leaves it false — an op's
+    /// (`BuiltinOp::operand_holding_result`). Every other constructor leaves it false — an op's
     /// declaration, a summary, a substitution — and a join keeps it only where both sides have it,
     /// so it holds only where the body reads the value out of a global itself.
     pub global: bool,
@@ -630,7 +630,7 @@ impl<'a> Walk<'a> {
                 let declared = op.result_locality(&result.ty, &arg_tys, self.type_env);
                 // An op that reads its result out of an operand (`lend_reads` lends that result
                 // while the operand lives on) declares the result taken out of that operand.
-                let held_by = op.result_held_by_operand(&arg_tys, self.type_env);
+                let held_by = op.operand_holding_result(&arg_tys, self.type_env);
                 if let Some(j) = held_by {
                     assert_eq!(
                         declared,

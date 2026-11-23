@@ -486,10 +486,7 @@ impl Lender<'_, '_> {
                             x.name.to_string()
                         )
                     };
-                    let op = op
-                        .lending()
-                        .expect("`lent_values` lends the results of ops that have a lending form");
-                    RcRhs::Builtin(op, args.clone())
+                    RcRhs::Builtin(op.lending(), args.clone())
                 } else {
                     rhs.clone()
                 };

@@ -187,14 +187,14 @@ pub trait BuiltinOp: DynClone + Send + Sync {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
-    /// The operand whose object holds a reference to every boxed leaf of this op's result, for the
-    /// operand types the op is instantiated at: the boxed container the op reads its result out of.
-    /// Default: no operand does.
+    /// The operand this op reads its result out of and can lend it out of, for the operand types
+    /// the op is instantiated at: a boxed container the op borrows, whose object holds a reference
+    /// to every boxed leaf of the result. Default: no operand is.
     ///
-    /// While that operand's object lives, so does every object the result refers to. So the result
-    /// can be lent (`lending`) where the operand's object stays referenced as long as the code uses
-    /// the result.
-    fn result_held_by_operand(
+    /// While that operand's object lives, so does every object the result refers to. So the op can
+    /// lend the result (`lending`) where the operand's object stays referenced as long as the code
+    /// uses the result.
+    fn operand_holding_result(
         &self,
         _arg_tys: &[Arc<TypeNode>],
         _type_env: &TypeEnv,
@@ -202,11 +202,14 @@ pub trait BuiltinOp: DynClone + Send + Sync {
         None
     }
 
-    /// This op reading its result out of the operand `result_held_by_operand` names without
+    /// This op reading its result out of the operand `operand_holding_result` names without
     /// retaining it: the result is lent, holding no reference of its own while that operand goes on
-    /// holding its objects. Default: the op has no such form, so none of its results is lent.
-    fn lending(&self) -> Option<Box<dyn BuiltinOp>> {
-        None
+    /// holding its objects. An op that names such an operand has this form.
+    fn lending(&self) -> Box<dyn BuiltinOp> {
+        panic!(
+            "`{}` reads its result out of no operand, so it has no lending form",
+            self.name()
+        )
     }
 
     /// Whether this op is the lending form `lending` returns.
