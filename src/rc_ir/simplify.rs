@@ -4,8 +4,9 @@
 //! to a fixpoint:
 //!
 //! - **case-of-known-constructor**: a `match` on a value known to be a specific constructor collapses
-//!   to that constructor's arm, and a `destructure` of a just-built struct binds each field directly
-//!   to the value that built it. The construction and the match/destructure both vanish.
+//!   to that constructor's arm, and a `destructure` of a just-built struct, or the field getters
+//!   that are the only readers of a just-built boxed struct, bind each field directly to the value
+//!   that built it. The construction and the match/destructure/getters all vanish.
 //! - **case-of-case**: a `match` whose scrutinee is itself a `match` moves each outer arm into the
 //!   inner arm that builds its constructor, so the construction and the outer match cancel together.
 //!   The walk over an inner arm follows into a `match` that arm ends in, so it reaches the
@@ -34,12 +35,12 @@
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
-use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp};
-use crate::misc::{grow_stack, Map};
+use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp, StructGetOp};
+use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    continuation_of, count_value_uses, map_children, map_continuation, MatchArm, RcExpr,
-    RcExprNode, RcProgram, RcRhs, RcVar,
+    continuation_of, count_value_uses, for_each_node, map_children, map_continuation, MatchArm,
+    RcExpr, RcExprNode, RcProgram, RcRhs, RcVar,
 };
 use crate::rc_ir::rename::{clone_fresh, copy_suffix, substitute_expr};
 use std::sync::Arc;
@@ -104,6 +105,7 @@ fn rewrite(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNo
 fn try_local(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
     let rewritten = case_of_known_union(node)
         .or_else(|| destructure_of_struct(node))
+        .or_else(|| getters_of_struct(node))
         .or_else(|| case_of_case(node, counter));
     match rewritten {
         Some(rewritten) => {
@@ -124,7 +126,7 @@ pub(crate) fn node_count(node: &RcExprNode) -> u64 {
                 return 1 + arms_size(arms) + node_count(k);
             }
             RcExpr::Let(_, _, k)
-            | RcExpr::Destructure(_, _, _, k)
+            | RcExpr::DestructureUnboxed(_, _, k)
             | RcExpr::Eval(_, k)
             | RcExpr::Retain(_, _, _, k)
             | RcExpr::Release(_, _, _, k) => k,
@@ -206,7 +208,7 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
         return None;
     };
     op.as_any().downcast_ref::<MakeStructOp>()?;
-    let RcExpr::Destructure(container, fields, _, k2) = k.expr.as_ref() else {
+    let RcExpr::DestructureUnboxed(container, fields, k2) = k.expr.as_ref() else {
         return None;
     };
     if container.name != x.name || count_value_uses(&x.name, k) != 1 {
@@ -226,6 +228,56 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
         subst.insert(fv.name.clone(), args[*idx].name.clone());
     }
     Some(substitute_expr(k2, &subst))
+}
+
+/// The field `rhs` reads out of the struct named `container`, where `rhs` is a field getter of it.
+fn field_read_of(rhs: &RcRhs, container: &FullName) -> Option<usize> {
+    let RcRhs::Builtin(op, args) = rhs else {
+        return None;
+    };
+    let getter = op.as_any().downcast_ref::<StructGetOp>()?;
+    (args[0].name == *container).then(|| getter.field_index())
+}
+
+/// case-of-known-constructor on a boxed struct: `let x = make_struct(a, b, ..); let f = x.i; k`,
+/// where every use of `x` is a field getter, binds each getter's variable directly to the operand
+/// that built that field, dropping the construction and the getters. This is what a struct pattern
+/// over a just-built boxed struct lowers to.
+fn getters_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
+    let RcExpr::Let(x, RcRhs::Builtin(op, args), k) = node.expr.as_ref() else {
+        return None;
+    };
+    op.as_any().downcast_ref::<MakeStructOp>()?;
+    // A getter right after the construction is the cheap sign of the shape, checked before the
+    // walks over the whole continuation.
+    let RcExpr::Let(_, first, _) = k.expr.as_ref() else {
+        return None;
+    };
+    field_read_of(first, &x.name)?;
+    let mut subst: Map<FullName, FullName> = Map::default();
+    for_each_node(k, &mut |n| {
+        if let RcExpr::Let(f, rhs, _) = n.expr.as_ref() {
+            if let Some(idx) = field_read_of(rhs, &x.name) {
+                subst.insert(f.name.clone(), args[idx].name.clone());
+            }
+        }
+    });
+    if count_value_uses(&x.name, k) != subst.len() {
+        return None;
+    }
+    let getters: Set<FullName> = subst.keys().cloned().collect();
+    Some(substitute_expr(&without_bindings(k, &getters), &subst))
+}
+
+/// `node` without the `Let` nodes binding the variables of `dropped`.
+fn without_bindings(node: &RcExprNode, dropped: &Set<FullName>) -> RcExprNode {
+    grow_stack(|| {
+        let node = map_children(node, |child| without_bindings(child, dropped));
+        match node.expr.as_ref() {
+            RcExpr::Let(x, _, k) if dropped.contains(&x.name) => k.clone(),
+            _ => node,
+        }
+    })
 }
 
 /// case-of-case: `let s = match iScrut { iArms }; let m = match s { oArms }; k2`, where `s` is
@@ -418,7 +470,7 @@ fn tail_match(x: RcVar, scrut: &RcVar, arms: Vec<MatchArm>, source: &Option<Span
 
 /// Replace the terminal `ret r` of `node` with `f(r)`, threading through the continuation chain. A
 /// `Match` is a right-hand side, so the tail is the final `Ret` reached through the
-/// `Let`/`Destructure`/`Eval`/`Retain`/`Release` continuations, and the arms of a `Match` are left as
+/// `Let`/`DestructureUnboxed`/`Eval`/`Retain`/`Release` continuations, and the arms of a `Match` are left as
 /// they are.
 fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> RcExprNode {
     // An arm body is a continuation chain that recurses to its full depth here; grow the stack.

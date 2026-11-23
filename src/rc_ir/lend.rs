@@ -27,7 +27,6 @@
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::fixstd::builtin::StructGetOp;
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
     for_each_node, map_continuation, FieldPath, RcExpr, RcExprNode, RcProgram, RcRhs, RcState,
@@ -176,8 +175,11 @@ fn read_containers(model: &BodyModel) -> Map<FullName, RcVar> {
 /// The state each read of a value of `lent` retains its value in.
 fn read_states(body: &RcExprNode, lent: &Set<FullName>) -> Map<FullName, RcState> {
     let mut states = Map::default();
-    for_each_node(body, &mut |node| match node.expr.as_ref() {
-        RcExpr::Let(x, RcRhs::Builtin(op, _), _) if lent.contains(&x.name) => {
+    for_each_node(body, &mut |node| {
+        let RcExpr::Let(x, RcRhs::Builtin(op, _), _) = node.expr.as_ref() else {
+            return;
+        };
+        if lent.contains(&x.name) {
             let state = if op.assumes_local() {
                 RcState::Local
             } else {
@@ -185,14 +187,6 @@ fn read_states(body: &RcExprNode, lent: &Set<FullName>) -> Map<FullName, RcState
             };
             states.insert(x.name.clone(), state);
         }
-        RcExpr::Destructure(_, fields, state, _) => {
-            for (_, field) in fields {
-                if lent.contains(&field.name) {
-                    states.insert(field.name.clone(), *state);
-                }
-            }
-        }
-        _ => {}
     });
     states
 }
@@ -391,13 +385,8 @@ impl Walk<'_, '_> {
                 };
                 self.walk(k, count)
             }
-            RcExpr::Destructure(container, fields, _, k) => {
+            RcExpr::DestructureUnboxed(container, _, k) => {
                 self.check_use(container, count);
-                let count = if fields.iter().any(|(_, f)| f.name == *self.anchor) {
-                    Some(CountBound::at_read())
-                } else {
-                    count
-                };
                 self.walk(k, count)
             }
             RcExpr::Retain(v, path, _, k) => {
@@ -511,35 +500,6 @@ impl Lender<'_, '_> {
                 let consumed = self.model.rhs_consumed_leaves(rhs, &x.ty);
                 self.retained_before(bound, &operands(rhs), consumed)
             }
-            RcExpr::Destructure(container, fields, state, k)
-                if fields.iter().any(|(_, f)| self.lent.contains(&f.name)) =>
-            {
-                // A lent field is read by the getter lending it, and the destructure retains the
-                // rest out of the container.
-                let (lent, kept): (Vec<(usize, RcVar)>, Vec<(usize, RcVar)>) = fields
-                    .iter()
-                    .cloned()
-                    .partition(|(_, f)| self.lent.contains(&f.name));
-                let mut out = self.rewrite(k, returns_from_func);
-                if !kept.is_empty() {
-                    out = RcExprNode::new(
-                        RcExpr::Destructure(container.clone(), kept, *state, out),
-                        source.clone(),
-                    );
-                }
-                for (idx, field) in lent.into_iter().rev() {
-                    let read = StructGetOp::lending_field(&container.name, idx);
-                    out = RcExprNode::new(
-                        RcExpr::Let(
-                            field,
-                            RcRhs::Builtin(Box::new(read), vec![container.clone()]),
-                            out,
-                        ),
-                        source.clone(),
-                    );
-                }
-                out
-            }
             RcExpr::Retain(v, path, state, k) | RcExpr::Release(v, path, state, k) => {
                 let is_release = matches!(node.expr.as_ref(), RcExpr::Release(..));
                 let k = self.rewrite(k, returns_from_func);
@@ -548,7 +508,7 @@ impl Lender<'_, '_> {
                     !self.counts_lent(v, unit)
                 })
             }
-            RcExpr::Destructure(..) | RcExpr::Eval(..) => {
+            RcExpr::DestructureUnboxed(..) | RcExpr::Eval(..) => {
                 map_continuation(node, |k| self.rewrite(k, returns_from_func))
             }
             RcExpr::Ret(v) if returns_from_func => {

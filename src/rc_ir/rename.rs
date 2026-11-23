@@ -114,7 +114,7 @@ fn assign_fresh_names_to_binders_inner(
             }
             assign_fresh_names_to_binders(k, suffix, renaming);
         }
-        RcExpr::Destructure(_, fields, _state, k) => {
+        RcExpr::DestructureUnboxed(_, fields, k) => {
             for (_, fv) in fields {
                 assign_fresh_name(&fv.name, suffix, renaming);
             }
@@ -164,13 +164,12 @@ fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> R
             *state,
             rename_expr(k, renaming),
         ),
-        RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
+        RcExpr::DestructureUnboxed(container, fields, k) => RcExpr::DestructureUnboxed(
             rename_var(container, renaming),
             fields
                 .iter()
                 .map(|(i, v)| (*i, rename_var(v, renaming)))
                 .collect(),
-            *state,
             rename_expr(k, renaming),
         ),
         RcExpr::Eval(v, k) => RcExpr::Eval(rename_var(v, renaming), rename_expr(k, renaming)),

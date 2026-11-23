@@ -310,27 +310,16 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let obj = self.eval_rc_rhs(rhs, &x.ty, func_vals);
                 self.bind_and_continue(x, obj, k, tail, func_vals)
             }
-            RcExpr::Destructure(container, fields, state, k) => {
-                // Extract all fields at once. A boxed container retains the fields it reads out and
-                // keeps its own reference, which a `Release` node disposes. An unboxed container,
-                // whose every field is named, moves the fields out, and was retained beforehand by a
-                // `Retain` node iff it is used afterward.
+            RcExpr::DestructureUnboxed(container, fields, k) => {
+                // Move all fields out at once. The container was retained beforehand by a `Retain`
+                // node iff it is used afterward.
                 let container_obj = self.get_scoped_obj_noretain(&container.name);
                 let field_indices: Vec<u32> = fields.iter().map(|(idx, _)| *idx as u32).collect();
-                let field_objs = if container_obj.is_box(self.type_env()) {
-                    ObjectFieldType::read_boxed_struct_fields(
-                        self,
-                        &container_obj,
-                        &field_indices,
-                        *state,
-                    )
-                } else {
-                    ObjectFieldType::take_unboxed_struct_fields(
-                        self,
-                        &container_obj,
-                        &field_indices,
-                    )
-                };
+                let field_objs = ObjectFieldType::take_unboxed_struct_fields(
+                    self,
+                    &container_obj,
+                    &field_indices,
+                );
                 // One object per requested index; the pop below walks `fields`, so a shorter list
                 // would leave it popping names this loop never pushed.
                 assert_eq!(

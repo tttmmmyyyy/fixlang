@@ -155,7 +155,7 @@ fn levelled_sites(func: &RcFunc, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> 
                 }
             }
         }
-        RcExpr::Let(..) | RcExpr::Destructure(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => {}
+        RcExpr::Let(..) | RcExpr::DestructureUnboxed(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => {}
     });
     sites
 }
@@ -549,7 +549,7 @@ fn binds_a_destructor(node: &RcExprNode) -> bool {
                     }
                 }
         }
-        RcExpr::Destructure(_, fields, _, _) => fields
+        RcExpr::DestructureUnboxed(_, fields, _) => fields
             .iter()
             .any(|(_, field)| mentions_a_destructor(&field.ty)),
         RcExpr::Retain(..) | RcExpr::Release(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => false,
@@ -750,7 +750,7 @@ fn mark_tail(node: &RcExprNode, in_tail: bool, out: &mut Set<FullName>) {
         }
         RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
-        | RcExpr::Destructure(_, _, _, k)
+        | RcExpr::DestructureUnboxed(_, _, k)
         | RcExpr::Eval(_, k) => mark_tail(k, in_tail, out),
         RcExpr::Ret(_) => {}
     }
@@ -767,7 +767,7 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
         RcExpr::Let(..)
         | RcExpr::Retain(..)
         | RcExpr::Release(..)
-        | RcExpr::Destructure(..)
+        | RcExpr::DestructureUnboxed(..)
         | RcExpr::Eval(..) => false,
     }
 }
@@ -883,9 +883,10 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
             RcExpr::Release(v, path, state, k) => {
                 self.rewrite_rc(v, path, *state, true, k, enclosing, &node.source)
             }
-            RcExpr::Let(..) | RcExpr::Destructure(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => {
-                map_continuation(node, |k| self.rewrite_in(k, enclosing))
-            }
+            RcExpr::Let(..)
+            | RcExpr::DestructureUnboxed(..)
+            | RcExpr::Eval(..)
+            | RcExpr::Ret(..) => map_continuation(node, |k| self.rewrite_in(k, enclosing)),
         }
     }
 
@@ -1627,10 +1628,10 @@ impl<'a> CancelAnalysis<'a> {
                 self.consume_objects(&mut pending, &consumed);
                 self.walk(k, pending, returns_from_func)
             }
-            // A `Destructure` consumes nothing (`collect_consumes`), and `Eval` only observes its
+            // A `DestructureUnboxed` consumes nothing (`collect_consumes`), and `Eval` only observes its
             // variable, so both are transparent to the pending-retain state (any release inserted
             // after them is a separate `Release` node).
-            RcExpr::Destructure(_, _, _, k) | RcExpr::Eval(_, k) => {
+            RcExpr::DestructureUnboxed(_, _, k) | RcExpr::Eval(_, k) => {
                 self.walk(k, pending, returns_from_func)
             }
             RcExpr::Ret(_) => {
@@ -1983,9 +1984,10 @@ impl RetainSinker<'_> {
             RcExpr::Let(x, rhs, _) if consumes(self.model.rhs_consumed_objects(rhs, &x.ty)) => {
                 r.placed_before(node, true)
             }
-            RcExpr::Let(..) | RcExpr::Destructure(..) | RcExpr::Retain(..) | RcExpr::Eval(..) => {
-                self.sink_past(r, node)
-            }
+            RcExpr::Let(..)
+            | RcExpr::DestructureUnboxed(..)
+            | RcExpr::Retain(..)
+            | RcExpr::Eval(..) => self.sink_past(r, node),
         }
     }
 

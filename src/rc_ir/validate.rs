@@ -13,8 +13,8 @@
 //! reference-counting unit of its variable; a function carries a capture parameter exactly for the
 //! closure ABI; every match has at least one arm, with any catch-all arm last; a `Builtin`
 //! operation's embedded operand names match its argument list; a closure value stores the capture
-//! layout its target function projects; a `Destructure` of an unboxed container names each of its
-//! fields; and no `Release` names a value its read lends.
+//! layout its target function projects; the container of a `DestructureUnboxed` is unboxed, and
+//! the node names each of its fields; and no `Release` names a value its read lends.
 
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
@@ -171,7 +171,7 @@ fn for_each_rhs(node: &RcExprNode, f: &mut impl FnMut(&RcRhs)) {
         RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
         | RcExpr::Eval(_, k)
-        | RcExpr::Destructure(_, _, _, k) => for_each_rhs(k, f),
+        | RcExpr::DestructureUnboxed(_, _, k) => for_each_rhs(k, f),
         RcExpr::Ret(_) => {}
     })
 }
@@ -368,15 +368,23 @@ impl<'a, 'b> Validator<'a, 'b> {
                 self.use_var(&v.name);
                 self.check_expr(k);
             }
-            RcExpr::Destructure(container, fields, _state, k) => {
+            RcExpr::DestructureUnboxed(container, fields, k) => {
                 self.use_var(&container.name);
-                // A field an unboxed container's `Destructure` leaves out would be dropped inside code
-                // generation, out of reach of cancellation, so lowering binds every field.
-                if !container.ty.is_box(self.type_env)
-                    && !names_every_field(container, fields, self.type_env)
-                {
+                // A boxed container keeps its fields, and lowering reads them out of it with
+                // getters.
+                if container.ty.is_box(self.type_env) {
                     panic!(
-                        "[RC IR validate] {}: a `Destructure` of the unboxed `{}` names fields {:?} of it, in `{}`",
+                        "[RC IR validate] {}: a `DestructureUnboxed` takes the boxed `{}` apart, in `{}`",
+                        self.stage,
+                        container.ty.to_string(),
+                        self.location,
+                    );
+                }
+                // A field the `DestructureUnboxed` leaves out would be dropped inside code generation, out
+                // of reach of cancellation, so lowering binds every field.
+                if !names_every_field(container, fields, self.type_env) {
+                    panic!(
+                        "[RC IR validate] {}: a `DestructureUnboxed` of the unboxed `{}` names fields {:?} of it, in `{}`",
                         self.stage,
                         container.ty.to_string(),
                         fields.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
@@ -552,6 +560,7 @@ impl<'a, 'b> Validator<'a, 'b> {
 #[cfg(test)]
 mod tests {
     use super::{validate, Validator};
+    use crate::ast::builtin_op::BuiltinOp;
     use crate::ast::name::FullName;
     use crate::ast::type_env::TypeEnv;
     use crate::ast::typedecl::Field;
@@ -865,10 +874,12 @@ mod tests {
     #[should_panic(expected = "a value its read lends")]
     fn rejects_a_release_of_a_lent_value() {
         // let x = <lending getter of field 0>(c); release x; ret x
-        let read = StructGetOp::lending_field(&FullName::local("c"), 0);
+        let read = StructGetOp::of_field(&FullName::local("c"), 0)
+            .lending()
+            .expect("a field getter has a lending form");
         let body = node(RcExpr::Let(
             var("x"),
-            RcRhs::Builtin(Box::new(read), vec![var("c")]),
+            RcRhs::Builtin(read, vec![var("c")]),
             node(RcExpr::Release(
                 var("x"),
                 vec![],
@@ -1007,16 +1018,15 @@ mod tests {
         validate_prog(vec![projecting_func(&capture, 1, vec![make_i64_ty()])]);
     }
 
-    /// A `Destructure` of an unboxed container that leaves one of its fields out is caught: code
+    /// A `DestructureUnboxed` that leaves one of its container's fields out is caught: code
     /// generation would drop that field inside the node, where no cancellation reaches the release.
     #[test]
-    #[should_panic(expected = "a `Destructure` of the unboxed")]
+    #[should_panic(expected = "a `DestructureUnboxed` of the unboxed")]
     fn rejects_destructure_of_an_unboxed_container_leaving_a_field_out() {
         // destructure p { 1 -> s }; ret s   (p : Test::Pair; field 0 is left out)
-        let body = node(RcExpr::Destructure(
+        let body = node(RcExpr::DestructureUnboxed(
             var_of("p", pair_ty()),
             vec![(1, var("s"))],
-            RcState::Unknown,
             node(RcExpr::Ret(var("s"))),
         ));
         check(&body, &["p"]);

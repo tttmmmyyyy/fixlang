@@ -217,7 +217,7 @@ mod tests {
 
     /// Every place a body can name a definition is followed: the `Var`, `App`, `Builtin` and
     /// `Match` right-hand sides, the body of a match arm, the `Retain`, `Release`, `Eval` and
-    /// `Destructure` nodes, and the `Ret`. A global is lowered to an atom carrying its own name
+    /// `DestructureUnboxed` nodes, and the `Ret`. A global is lowered to an atom carrying its own name
     /// (`Lowerer::lower_var`), so any of these can be the one place a definition is named from.
     #[test]
     fn test_every_mention_site_is_followed() {
@@ -247,10 +247,9 @@ mod tests {
         let at = |i: usize| var(names[i].clone());
 
         let mut body = node(RcExpr::Ret(at(10)));
-        body = node(RcExpr::Destructure(
+        body = node(RcExpr::DestructureUnboxed(
             at(9),
             vec![(0, local("field"))],
-            RcState::Unknown,
             body,
         ));
         body = node(RcExpr::Eval(at(8), body));

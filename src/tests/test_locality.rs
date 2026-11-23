@@ -111,34 +111,6 @@ mod integration_tests {
         }
     }
 
-    /// Assert that every `destructure` of `container` carries the state tag `expected` (the empty
-    /// string for one that must keep the runtime dispatch), and that there is at least one to judge.
-    /// The container is a variable of the dump, or the prefix a global's mangled name starts with.
-    fn assert_destructure_state(dump: &str, container: &str, expected: &str) {
-        let lines: Vec<&str> = dump
-            .lines()
-            .filter(|line| {
-                line.trim_start()
-                    .strip_prefix("destructure ")
-                    .is_some_and(|rest| rest.starts_with(container))
-            })
-            .collect();
-        assert!(
-            !lines.is_empty(),
-            "no `destructure` of `{}` in the RC IR dump, so this case asserts nothing:\n{}",
-            container,
-            dump
-        );
-        for line in &lines {
-            let tag = line.split_once('@').map_or("", |(_, t)| t.trim_end());
-            assert_eq!(
-                tag, expected,
-                "the destructure of `{}` should be tagged {:?}, but a line reads:\n{}",
-                container, expected, line
-            );
-        }
-    }
-
     /// Assert that every arm of the `match` on `scrutinee` carries the state tag `expected` (the
     /// empty string for one that must keep the runtime dispatch), and that there is at least one arm
     /// to judge. The scrutinee is a variable of the dump, or the prefix a global's mangled name
@@ -279,43 +251,35 @@ mod integration_tests {
         assert_op_state(&dump, "union_as_0", "Main::gholder#", "");
     }
 
-    /// Verifies the annotation of the two nodes that take a value out of a boxed container without
-    /// an operation — a `destructure` of a struct pattern and the variant arm of a `match`. The
-    /// take-out rule decides both: only a container whose whole reachable graph is proved local
-    /// hands out a local field or payload, and only a global container a global one, whose counting
-    /// the node drops. Neither node emits a run-time state check where it is right, so the dump is
-    /// the only place a wrong answer here shows up.
+    /// Verifies the annotation of the node that takes a value out of a boxed container without an
+    /// operation, the variant arm of a `match`. The take-out rule decides it: only a container
+    /// whose whole reachable graph is proved local hands out a local payload, and only a global
+    /// container a global one, whose counting the node drops. The node emits no run-time state
+    /// check where it is right, so the dump is the only place a wrong answer here shows up.
     #[test]
-    fn test_locality_of_a_take_out_of_a_boxed_container() {
+    fn test_locality_of_a_match_arm_taking_out_of_a_boxed_container() {
         let (_temp_dir, project_dir) = setup_case_projects(CASES, "containers");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let local_pair = binding_vars(&dump, "local_pair");
         let local_holder = binding_vars(&dump, "local_holder");
 
-        assert_destructure_state(&dump, &local_pair[0], "local");
         assert_match_arm_state(&dump, &local_holder[0], "local");
-
-        assert_destructure_state(&dump, "Main::gpair#", "global");
         assert_match_arm_state(&dump, "Main::gholder#", "global");
     }
 
-    /// Verifies that what a `destructure` or the variant arm of a `match` takes out of a global's
-    /// boxed container is itself global, so the reference counting on it after that node is dropped
+    /// Verifies that what a field getter or the variant arm of a `match` takes out of a global's
+    /// boxed container is itself global, so the reference counting on it after that read is dropped
     /// as well.
     #[test]
     fn test_a_value_taken_out_of_a_global_is_global() {
         let (_temp_dir, project_dir) = setup_case_projects(CASES, "containers");
         let dump = emit_main_rc_ir(&project_dir);
 
-        // `destructure_field_vars` takes the container's whole name, hash included.
-        let gpair = dump
-            .split_whitespace()
-            .find(|token| token.starts_with("Main::gpair#"))
-            .expect("the dump names the global `gpair`");
-        let fields: Vec<String> = [0, 1]
+        let fields: Vec<String> = ["struct_get_0", "struct_get_1"]
             .iter()
-            .flat_map(|&idx| destructure_field_vars(&dump, gpair, idx))
+            .flat_map(|getter| op_lines(&dump, getter, "Main::gpair#"))
+            .filter_map(|line| line.trim_start().strip_prefix("let "))
+            .filter_map(|rest| rest.split_whitespace().next().map(str::to_string))
             .collect();
         let payloads: Vec<String> = match_arm_lines(&dump, "Main::gholder#")
             .into_iter()

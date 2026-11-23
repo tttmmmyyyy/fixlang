@@ -202,18 +202,17 @@ fn expr_to_string(node: &RcExprNode, level: usize, ann: Annotations) -> String {
             out.push_str(&expr_to_string(cont, level, ann));
             out
         }
-        RcExpr::Destructure(container, fields, state, cont) => {
+        RcExpr::DestructureUnboxed(container, fields, cont) => {
             let binds = fields
                 .iter()
                 .map(|(idx, var)| format!(".{} -> {}", idx, var_to_string(var, ann)))
                 .collect::<Vec<_>>()
                 .join(", ");
             let mut out = format!(
-                "{}destructure {} {{ {} }}{}\n",
+                "{}destructure {} {{ {} }}\n",
                 ind,
                 var_name(container),
-                binds,
-                state_to_string(state)
+                binds
             );
             out.push_str(&expr_to_string(cont, level, ann));
             out

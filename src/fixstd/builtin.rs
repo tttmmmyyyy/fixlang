@@ -5606,19 +5606,18 @@ pub struct StructGetOp {
 }
 
 impl StructGetOp {
-    /// The getter lending the field `field_idx` of the boxed struct `container` names: the read a
-    /// `Destructure` of that struct makes of the field, without retaining it.
-    pub fn lending_field(container: &FullName, field_idx: usize) -> Self {
+    /// The getter of the field `field_idx` of the boxed struct `container` names.
+    pub fn of_field(container: &FullName, field_idx: usize) -> Self {
         StructGetOp {
             var_name: container.clone(),
             field_idx,
             assume_local: false,
-            lend: true,
+            lend: false,
         }
     }
 
     /// The index of the field this operation reads.
-    fn field_index(&self) -> usize {
+    pub(crate) fn field_index(&self) -> usize {
         self.field_idx
     }
 
@@ -5787,12 +5786,10 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
     const FIELD_NAME: &str = "field";
     let body = if definition.as_struct().is_boxed() {
         expr_builtin(
-            Box::new(StructGetOp {
-                assume_local: false,
-                lend: false,
-                var_name: FullName::local(VAR_NAME),
-                field_idx: field_idx as usize,
-            }),
+            Box::new(StructGetOp::of_field(
+                &FullName::local(VAR_NAME),
+                field_idx as usize,
+            )),
             field.ty.clone(),
             None,
         )

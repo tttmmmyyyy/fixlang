@@ -209,7 +209,8 @@ pub struct LeafCond {
     /// Whether, whatever the inputs, the object this leaf points to and every object it reaches are
     /// `RefcntState::GLOBAL`. A global's initializer marks its whole result graph global, and a
     /// global object never changes, so this holds of a global and of what the body takes out of it
-    /// by a `Destructure` or a `Match`. Every other constructor leaves it false — an op's
+    /// by a `DestructureUnboxed`, a `Match`, or an op that reads its result out of an operand
+    /// (`BuiltinOp::result_held_by_operand`). Every other constructor leaves it false — an op's
     /// declaration, a summary, a substitution — and a join keeps it only where both sides have it,
     /// so it holds only where the body reads the value out of a global itself.
     pub global: bool,
@@ -575,11 +576,10 @@ impl<'a> Walk<'a> {
                 let build = || RcExpr::Release(v.clone(), path.clone(), state, k);
                 (shape, self.rebuild(node, build))
             }
-            RcExpr::Destructure(container, fields, _, k) => {
-                let state = self.annotate_destructure(container);
+            RcExpr::DestructureUnboxed(container, fields, k) => {
                 self.bind_destructured_fields(container, fields);
                 let (shape, k) = self.walk(k);
-                let build = || RcExpr::Destructure(container.clone(), fields.clone(), state, k);
+                let build = || RcExpr::DestructureUnboxed(container.clone(), fields.clone(), k);
                 (shape, self.rebuild(node, build))
             }
             RcExpr::Eval(v, k) => {
@@ -631,7 +631,8 @@ impl<'a> Walk<'a> {
                 let declared = op.result_locality(&result.ty, &arg_tys, self.type_env);
                 // An op that reads its result out of an operand (`lend_reads` lends that result
                 // while the operand lives on) declares the result taken out of that operand.
-                if let Some(j) = op.result_held_by_operand(&arg_tys, self.type_env) {
+                let held_by = op.result_held_by_operand(&arg_tys, self.type_env);
+                if let Some(j) = held_by {
                     assert_eq!(
                         declared,
                         ExtShape::uniform(
@@ -645,7 +646,15 @@ impl<'a> Walk<'a> {
                         j
                     );
                 }
-                let result_shape = declared.substitute(&arg_shapes);
+                // The take-out rule applied to the operand's own leaf, which is what the declaration
+                // comes to once substituted, keeps the fact that the operand is a global.
+                let result_shape = match held_by {
+                    Some(j) => {
+                        let taken = LeafCond::take_out_of(arg_shapes[j].leaf_at(&[]));
+                        ExtShape::uniform(&result.ty, self.type_env, taken)
+                    }
+                    None => declared.substitute(&arg_shapes),
+                };
                 let annotated = self.annotate_op(op, &arg_tys, &arg_shapes, &result_shape);
                 (result_shape, annotated.map(Rewritten::Op))
             }
@@ -756,7 +765,7 @@ impl<'a> Walk<'a> {
     /// the inputs, when any leaf it consults says so. That is exactly what the clone gate asks of a
     /// body: a site whose leaves all answer unconditionally answers the same under every key, so
     /// cloning the body for it buys nothing. Every kind of site goes through here, because a body
-    /// whose only annotatable site is an operation's internal reference counting, a `Destructure`, or
+    /// whose only annotatable site is an operation's internal reference counting, a `DestructureUnboxed`, or
     /// a boxed-union `Match` is as worth cloning as one holding a `Retain`.
     fn site_inputs<'l>(
         &mut self,
@@ -861,18 +870,6 @@ impl<'a> Walk<'a> {
         Some(op.assuming_local())
     }
 
-    /// The annotation of a `Destructure`, which counts every reference the node itself moves. Out of
-    /// a boxed container it retains each named field, which the take-out annotation covers. Out of
-    /// an unboxed container, whose every field is named, it only moves the leaves into the field
-    /// variables and counts nothing.
-    fn annotate_destructure(&mut self, container: &RcVar) -> RcState {
-        if !container.ty.is_box(self.type_env) {
-            return RcState::Local;
-        }
-        let shape = self.shape_of(container);
-        self.annotate_take_out(shape.leaf_at(&[]))
-    }
-
     /// The annotation of a node that takes values out of the boxed container whose leaf is
     /// `container`, retaining them. The take-out rule decides it: the values are local only where the
     /// container is `DeepLocal`, and global where the container is.
@@ -886,19 +883,13 @@ impl<'a> Walk<'a> {
         }
     }
 
-    /// Bind the fields a `Destructure` names. Out of a boxed container each field is read by the
-    /// take-out rule; out of an unboxed one it is the projection of the container's own leaves.
+    /// Bind the fields a `DestructureUnboxed` names, each to the projection of the container's own
+    /// leaves.
     fn bind_destructured_fields(&mut self, container: &RcVar, fields: &[(usize, RcVar)]) {
         let container_shape = self.shape_of(container);
-        let boxed = container.ty.is_box(self.type_env);
         for (idx, fv) in fields {
-            let field_shape = if boxed {
-                let cond = LeafCond::take_out_of(container_shape.leaf_at(&[]));
-                ExtShape::uniform(&fv.ty, self.type_env, cond)
-            } else {
-                container_shape.project(*idx)
-            };
-            self.env.insert(fv.name.clone(), field_shape);
+            self.env
+                .insert(fv.name.clone(), container_shape.project(*idx));
         }
     }
 

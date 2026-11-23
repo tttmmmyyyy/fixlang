@@ -145,7 +145,7 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
             vars.var_tys.insert(x.name.clone(), x.ty.clone());
             collect_bindings(k, vars);
         }
-        RcExpr::Destructure(container, fields, _state, k) => {
+        RcExpr::DestructureUnboxed(container, fields, k) => {
             for (idx, fv) in fields {
                 vars.bindings
                     .insert(fv.name.clone(), Binding::Field(container.clone(), *idx));
@@ -166,7 +166,7 @@ fn returned_var(node: &RcExprNode) -> &RcVar {
     grow_stack(|| match node.expr.as_ref() {
         RcExpr::Ret(v) => v,
         RcExpr::Let(_, _, k)
-        | RcExpr::Destructure(_, _, _, k)
+        | RcExpr::DestructureUnboxed(_, _, k)
         | RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
         | RcExpr::Eval(_, k) => returned_var(k),
@@ -375,14 +375,10 @@ pub(crate) fn alias_step(
             }
         }
         Some(Binding::Field(container, idx)) => {
-            if container.ty.is_box(type_env) {
-                // Reading a field of a boxed struct retains or lends it: a producer.
-                AliasStep::Stops
-            } else {
-                let mut container_path = vec![*idx];
-                container_path.extend_from_slice(path);
-                AliasStep::Projects((container.name.clone(), container_path))
-            }
+            // A `DestructureUnboxed` moves the leaves of its container into the fields: an alias.
+            let mut container_path = vec![*idx];
+            container_path.extend_from_slice(path);
+            AliasStep::Projects((container.name.clone(), container_path))
         }
         Some(Binding::Payload(scrut, variant)) => match variant {
             // A catch-all binds the whole scrutinee: the same object.
@@ -400,8 +396,8 @@ pub(crate) fn alias_step(
 }
 
 /// The boxed container the binding of `var` reads its value out of, where the read can lend the
-/// value (`lend::lend_reads`): the container of a `Destructure` field, or the operand an op reads
-/// its result out of (`BuiltinOp::result_held_by_operand`), borrows, and has a lending form for
+/// value (`lend::lend_reads`): the operand an op reads its result out of
+/// (`BuiltinOp::result_held_by_operand`), borrows, and has a lending form for
 /// (`BuiltinOp::lending`). The container's field goes on holding the value for as long as the
 /// container is alive and unchanged.
 pub(crate) fn read_container<'a>(
@@ -410,7 +406,6 @@ pub(crate) fn read_container<'a>(
     var: &FullName,
 ) -> Option<&'a RcVar> {
     match vars.bindings.get(var)? {
-        Binding::Field(container, _) if container.ty.is_box(type_env) => Some(container),
         Binding::Builtin(op, args, _) => {
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
             let j = op.result_held_by_operand(&arg_tys, type_env)?;
@@ -577,17 +572,17 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
             }
             collect_consumes_go(k, vars, prog, type_env, owns, out);
         }
-        // A `Destructure` consumes nothing: it borrows a boxed container, and moves an unboxed
-        // container's leaves into the field variables, whose consumes are their own.
-        RcExpr::Destructure(_, _, _, k)
+        // A `DestructureUnboxed` consumes nothing: it moves its container's leaves into the field
+        // variables, whose consumes are their own.
+        RcExpr::DestructureUnboxed(_, _, k)
         | RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
         | RcExpr::Eval(_, k) => collect_consumes_go(k, vars, prog, type_env, owns, out),
     }
 }
 
-/// Whether a `Destructure` of `container` binding `fields` names each unpunched field of the
-/// container exactly once. RC IR lowering makes every `Destructure` of an unboxed container do so.
+/// Whether a `DestructureUnboxed` of `container` binding `fields` names each unpunched field of the
+/// container exactly once. RC IR lowering makes every `DestructureUnboxed` do so.
 pub(crate) fn names_every_field(
     container: &RcVar,
     fields: &[(usize, RcVar)],

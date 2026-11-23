@@ -171,7 +171,7 @@ impl<'a> Specializer<'a> {
             RcExpr::Let(_, RcRhs::Match(_, _) | RcRhs::Var(_) | RcRhs::Closure(_, _), _)
             | RcExpr::Retain(_, _, _, _)
             | RcExpr::Release(_, _, _, _)
-            | RcExpr::Destructure(_, _, _, _)
+            | RcExpr::DestructureUnboxed(_, _, _)
             | RcExpr::Eval(_, _)
             | RcExpr::Ret(_) => {
                 return map_children(node, |child| self.rewrite_expr(child, inputs))
@@ -322,7 +322,7 @@ fn collect_callees_and_unique_check(
         }
         RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
-        | RcExpr::Destructure(_, _, _, k)
+        | RcExpr::DestructureUnboxed(_, _, k)
         | RcExpr::Eval(_, k) => {
             collect_callees_and_unique_check(k, prog, type_env, callees, has_unique_check)
         }

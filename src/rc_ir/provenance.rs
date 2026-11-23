@@ -485,19 +485,12 @@ impl<'a> Interpreter<'a> {
             // `Eval` only observes its variable; like a release it creates no lasting alias, so the
             // provenance environment is unchanged.
             RcExpr::Release(_, _, _, cont) | RcExpr::Eval(_, cont) => self.interpret(cont, env),
-            RcExpr::Destructure(container, fields, _state, cont) => {
-                // Destructuring a boxed container retains each field out of the shared allocation, so
-                // every field's boxed leaf is `Unknown` (the same read-out-of-a-shared-box rule as a boxed
-                // union's payload in `interpret_match`). An unboxed container's fields carry the tracked
-                // provenance projected from the container.
-                let boxed = container.ty.is_box(self.type_env);
+            RcExpr::DestructureUnboxed(container, fields, cont) => {
+                // The container is unboxed, so its fields carry the tracked provenance projected
+                // from it.
                 let container_prov = self.prov_of(container, &env);
                 for (idx, fv) in fields {
-                    let field_prov = if boxed {
-                        Provenance::uniform(&fv.ty, self.type_env, LeafOrigin::Unknown)
-                    } else {
-                        container_prov.project(*idx)
-                    };
+                    let field_prov = container_prov.project(*idx);
                     self.record(fv, &field_prov, &mut env);
                 }
                 self.note_unique_flag(container, fields);
@@ -571,7 +564,7 @@ impl<'a> Interpreter<'a> {
     ///
     /// A callee's result provenance is symbolic in its capture as well as its parameters, while a
     /// call supplies only the arguments. The capture never survives into it: the capture object is
-    /// boxed, so the `Destructure` at the callee's entry reads every captured value as `Unknown`, and
+    /// boxed, so the reads out of it at the callee's entry give every captured value `Unknown`, and
     /// the object itself cannot be part of a result of a different type. `compose` therefore finds an
     /// operand for every `Arg` it meets.
     fn interpret_app(
@@ -609,7 +602,7 @@ impl<'a> Interpreter<'a> {
             .compose(&arg_provs)
     }
 
-    /// Record that a `Destructure` takes apart an `is_unique` result, pairing the flag it returns with
+    /// Record that a `DestructureUnboxed` takes apart an `is_unique` result, pairing the flag it returns with
     /// the value it returns so that a `match` on that flag can refine the value in its `true` arm.
     ///
     /// The pairing holds only where the tested leaf is a boxed leaf of the value: `is_unique` reports
@@ -647,7 +640,7 @@ impl<'a> Interpreter<'a> {
         let Some((value, path)) = self.flag_to_tested_leaf.get(&scrut.name) else {
             return env;
         };
-        // The flag and the value are bound by one `Destructure` upstream of this `match`, so the value
+        // The flag and the value are bound by one `DestructureUnboxed` upstream of this `match`, so the value
         // is in scope here.
         let refined = env
             .get(&value.name)

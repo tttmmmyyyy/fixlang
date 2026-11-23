@@ -6,9 +6,14 @@ module Main;
 // container, so a container the read consumed would have to be retained to reach it.
 type Holder = box struct { arr : Array I64, n : I64 };
 
+// Builds the holder. Recursive, so the inliner leaves it a call and `main` reads a struct it was
+// handed.
+holder_of : I64 -> Holder;
+holder_of = |n| if n <= 0 { Holder { arr : Array::fill(4, 0), n : 7 } } else { holder_of(n - 1) };
+
 main : IO ();
 main = (
-    let h = Holder { arr : Array::fill(4, 0), n : 7 };
+    let h = holder_of(1);
     let field = h.@arr;
     println $ (field.@(0) + field.@(1) + h.@n).to_string
 );

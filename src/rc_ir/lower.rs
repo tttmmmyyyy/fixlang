@@ -2,7 +2,8 @@
 //!
 //! This is the structural pass: it produces the RC IR skeleton — an A-normal form
 //! with fresh, globally-unique names, every lambda lifted to a top-level function, `If` and union
-//! patterns desugared to `Match`, and struct/tuple `let`-patterns desugared to a `Destructure` node.
+//! patterns desugared to `Match`, and struct/tuple `let`-patterns desugared to a `DestructureUnboxed` node
+//! over an unboxed container and to field getters over a boxed one.
 //! Every argument is owned and there are NO explicit `Retain`/`Release` nodes yet; reference-counting
 //! insertion is a separate backward pass. The one reference-counting effect already present is the
 //! retain baked into the boxed capture getter, per the retain-getter model.
@@ -16,7 +17,8 @@ use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{TyCon, TypeNode};
 use crate::constants::{BOOL_FALSE_TAG, BOOL_TRUE_TAG, CAP_NAME};
 use crate::fixstd::builtin::{
-    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp, MakeStructOp, NoStorageValueOp,
+    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp, MakeStructOp,
+    NoStorageValueOp, StructGetOp,
 };
 use crate::hash::md5_hex;
 use crate::misc::{grow_stack, Map, Set};
@@ -36,7 +38,7 @@ enum PendingBinding {
     Let(RcVar, RcRhs, Option<Span>),
     /// A struct/tuple destructure of the first variable, binding field `index` to `var` for each
     /// `(index, var)`.
-    Destructure(RcVar, Vec<(usize, RcVar)>, Option<Span>),
+    DestructureUnboxed(RcVar, Vec<(usize, RcVar)>, Option<Span>),
     /// The variable forced for its effect and discarded.
     Eval(RcVar, Option<Span>),
 }
@@ -236,10 +238,9 @@ impl<'a> Lowerer<'a> {
                 PendingBinding::Let(var, rhs, source) => {
                     RcExprNode::new(RcExpr::Let(var, rhs, cont), source)
                 }
-                PendingBinding::Destructure(container, fields, source) => RcExprNode::new(
-                    RcExpr::Destructure(container, fields, RcState::Unknown, cont),
-                    source,
-                ),
+                PendingBinding::DestructureUnboxed(container, fields, source) => {
+                    RcExprNode::new(RcExpr::DestructureUnboxed(container, fields, cont), source)
+                }
                 PendingBinding::Eval(var, source) => {
                     RcExprNode::new(RcExpr::Eval(var, cont), source)
                 }
@@ -520,15 +521,18 @@ impl<'a> Lowerer<'a> {
         result
     }
 
-    /// Append a `Destructure` of `container` binding each `(index, var)` of `named`. For an unboxed
-    /// container, every field `named` leaves out is bound to a fresh variable as well, so that the
-    /// `Destructure` names every field.
+    /// Append the bindings of a struct pattern over `container`, binding each `(index, var)` of
+    /// `named` to that field.
     ///
-    /// A field of an unboxed container is a leaf of the container itself, so a field the
-    /// `Destructure` leaves out has no owner. Bound to a variable nothing reads, it is released by a
-    /// `Release` node of its own, which cancellation pairs with the retain RC insertion puts before
-    /// the `Destructure` where the container is used afterwards. A boxed container keeps its fields,
-    /// so its `Destructure` binds `named` alone.
+    /// A boxed container keeps its fields, so each named field is read out of it by a getter
+    /// (`StructGetOp`), as `container.@f` is.
+    ///
+    /// An unboxed container is taken apart by a `DestructureUnboxed`, with every field `named` leaves out
+    /// bound to a fresh variable as well, so that the `DestructureUnboxed` names every field. A field of
+    /// an unboxed container is a leaf of the container itself, so a field the `DestructureUnboxed` left
+    /// out would have no owner. Bound to a variable nothing reads, it is released by a `Release`
+    /// node of its own, which cancellation pairs with the retain RC insertion puts before the
+    /// `DestructureUnboxed` where the container is used afterwards.
     fn push_destructure(
         &mut self,
         container: &RcVar,
@@ -536,15 +540,24 @@ impl<'a> Lowerer<'a> {
         source: Option<Span>,
         bindings: &mut Vec<PendingBinding>,
     ) {
-        if !container.ty.is_box(self.type_env) {
-            for (idx, field_ty) in container.ty.unpunched_field_types(self.type_env) {
-                if !named.iter().any(|(i, _)| *i == idx) {
-                    named.push((idx, self.fresh_var("field", field_ty, source.clone())));
-                }
+        if container.ty.is_box(self.type_env) {
+            for (idx, field) in named {
+                let read = StructGetOp::of_field(&container.name, idx);
+                bindings.push(PendingBinding::Let(
+                    field,
+                    RcRhs::Builtin(Box::new(read), vec![container.clone()]),
+                    source.clone(),
+                ));
             }
-            named.sort_by_key(|(idx, _)| *idx);
+            return;
         }
-        bindings.push(PendingBinding::Destructure(
+        for (idx, field_ty) in container.ty.unpunched_field_types(self.type_env) {
+            if !named.iter().any(|(i, _)| *i == idx) {
+                named.push((idx, self.fresh_var("field", field_ty, source.clone())));
+            }
+        }
+        named.sort_by_key(|(idx, _)| *idx);
+        bindings.push(PendingBinding::DestructureUnboxed(
             container.clone(),
             named,
             source,
@@ -925,7 +938,7 @@ impl<'a> Lowerer<'a> {
     // --- pattern destructuring ---
 
     /// Destructure `pat` against the value `obj`, binding each pattern variable in the environment
-    /// (a struct/tuple pattern emits a `Destructure` binding extracting all its fields at once) and
+    /// (a struct/tuple pattern emits the bindings of `push_destructure`, extracting all its fields) and
     /// returning the AST names it bound, for the caller to pop after the scope closes.
     fn destructure_pattern(
         &mut self,
@@ -990,9 +1003,7 @@ impl<'a> Lowerer<'a> {
                     }
                     fields.push((field_idx, field_var));
                 }
-                // Extract all fields in one step. RC insertion retains an unboxed container
-                // beforehand iff it is used after this destructure, and leaves a boxed one its own
-                // reference.
+                // Extract the fields before the sub-patterns that take them apart further.
                 self.push_destructure(obj, fields, pat.info.source.clone(), bindings);
                 for (field_var, subpat) in nested {
                     bound_names.extend(self.destructure_pattern(subpat, &field_var, bindings));

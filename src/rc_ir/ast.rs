@@ -176,13 +176,12 @@ pub enum RcExpr {
     /// Drop (refcount -1, freeing and traversing owned children at zero) every boxed leaf of the
     /// subtree of the variable named by the path, then continue.
     Release(RcVar, FieldPath, RcState, RcExprNode),
-    /// Destructure a struct/tuple container into its fields at once, then continue. Each `(index,
-    /// var)` binds field `index` to `var`. An unboxed container names every field and is consumed: its
-    /// leaves are moved into the field variables (no per-field retain), and reference-count insertion
-    /// retains the container before this node iff it is used afterward. A boxed container is
-    /// borrowed: each named field is retained out of it, and the container keeps its reference,
-    /// which a `Release` after this node disposes at the container's last use.
-    Destructure(RcVar, Vec<(usize, RcVar)>, RcState, RcExprNode),
+    /// Take an unboxed struct/tuple container apart into its fields at once, then continue. Each
+    /// `(index, var)` binds field `index` to `var`, and every field is named. The container is
+    /// consumed: its leaves are moved, uncounted, into the field variables, and reference-count
+    /// insertion retains the container before this node iff it is used afterward. The fields of a
+    /// boxed struct are read out of it by getters (`StructGetOp`).
+    DestructureUnboxed(RcVar, Vec<(usize, RcVar)>, RcExprNode),
     /// Force the variable's value for its effect and discard it, then continue — the RC IR form of the
     /// source `eval e0; e1`. Forcing a local is a no-op (it is already computed); forcing a global
     /// runs its call-once initializer, whose evaluation may have an effect (e.g. an `undefined`-valued
@@ -491,7 +490,7 @@ fn collect_mentions_inner(node: &RcExprNode, mention: &mut impl FnMut(&FullName)
             mention(&v.name);
             collect_mentions(k, mention);
         }
-        RcExpr::Destructure(container, _, _, k) => {
+        RcExpr::DestructureUnboxed(container, _, k) => {
             mention(&container.name);
             collect_mentions(k, mention);
         }
@@ -521,7 +520,7 @@ fn for_each_node_inner(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
         RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
         | RcExpr::Eval(_, k)
-        | RcExpr::Destructure(_, _, _, k) => for_each_node(k, visit),
+        | RcExpr::DestructureUnboxed(_, _, k) => for_each_node(k, visit),
         RcExpr::Ret(_) => {}
     }
 }
@@ -532,7 +531,7 @@ pub(crate) fn continuation_of(node: &RcExprNode) -> &RcExprNode {
     match node.expr.as_ref() {
         RcExpr::Ret(v) => unreachable!("`ret {}` ends the chain", v.name.to_string()),
         RcExpr::Let(_, _, k)
-        | RcExpr::Destructure(_, _, _, k)
+        | RcExpr::DestructureUnboxed(_, _, k)
         | RcExpr::Eval(_, k)
         | RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k) => k,
@@ -551,8 +550,8 @@ pub(crate) fn map_continuation(
         RcExpr::Release(v, path, state, k) => {
             RcExpr::Release(v.clone(), path.clone(), *state, f(k))
         }
-        RcExpr::Destructure(container, fields, state, k) => {
-            RcExpr::Destructure(container.clone(), fields.clone(), *state, f(k))
+        RcExpr::DestructureUnboxed(container, fields, k) => {
+            RcExpr::DestructureUnboxed(container.clone(), fields.clone(), f(k))
         }
         RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), f(k)),
         RcExpr::Ret(_) => return node.clone(),
@@ -602,7 +601,7 @@ fn for_each_var_of_node(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
         RcExpr::Retain(var, _, _, _) | RcExpr::Release(var, _, _, _) | RcExpr::Eval(var, _) => {
             visit(var)
         }
-        RcExpr::Destructure(var, fields, _, _) => {
+        RcExpr::DestructureUnboxed(var, fields, _) => {
             visit(var);
             for (_, field) in fields {
                 visit(field);
@@ -698,7 +697,7 @@ fn try_for_each_value_use(
             }
             try_for_each_value_use(k, visit)
         }
-        RcExpr::Destructure(container, _, _, k) => {
+        RcExpr::DestructureUnboxed(container, _, k) => {
             visit(container)?;
             try_for_each_value_use(k, visit)
         }

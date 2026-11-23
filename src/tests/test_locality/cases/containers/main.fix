@@ -38,9 +38,9 @@ sum_holder = |holder| match holder {
 head_of_holder : Holder -> I64;
 head_of_holder = |holder| if holder.is_some { holder.as_some.@(0) } else { 0 };
 
-// A struct pattern hands out both fields of a boxed container at once. The result is a field on
-// one path and `fallback` on another, so the destructure retains both fields and releases
-// the ones not returned.
+// A struct pattern reads both fields out of a boxed container, each with the getter `@head` and
+// `@tail` use. The result is a field on one path and `fallback` on another, so the reads retain
+// both fields and the ones not returned are released.
 longer_by_pattern : Array I64 -> Pair -> Array I64;
 longer_by_pattern = |fallback, pair| (
     let Pair { head : h, tail : t } = pair;

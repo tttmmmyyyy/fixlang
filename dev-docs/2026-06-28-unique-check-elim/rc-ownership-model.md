@@ -48,16 +48,15 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 
 - `Var(y)`（move-bind）= 別名。codegen でも同一 LLVM 値。
 - `Match` ノード自体（消費は各アームの中）。
-- `Destructure`。boxed コンテナは読むだけで、unbox コンテナの leaf はフィールド変数へ move される（別名）。
+- `DestructureUnboxed`。unbox コンテナの leaf はフィールド変数へ move される（別名）。boxed struct のパターン分解は getter（`StructGetOp`）の列に下ろされる。
 - `Retain`/`Release` ノードに現れる変数。
 - `borrows_operand(i)` が真のオペランド（read getter 群）。
 - `result_prov` が `Arg(i, π)` の leaf（素通し）。
 
 **ノードに現れない暗黙の RC**（検査を書くときに必ず要る）
 
-- boxed コンテナの `Destructure`: 各名前付きフィールドを retain する。コンテナの参照には触れない。
 - boxed union の variant アーム: payload を retain する。
-- unbox コンテナの `Destructure` / unbox union・catch-all の payload: **別名**であって新しい参照ではない。
+- `DestructureUnboxed` / unbox union・catch-all の payload: **別名**であって新しい参照ではない。
 
 ## 3. 別名関係（`origin`）
 

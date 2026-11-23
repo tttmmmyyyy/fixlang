@@ -1,8 +1,8 @@
 //! Reference-counting insertion (Phase B of the AST->RC IR lowering).
 //!
 //! Phase A produces the RC IR skeleton with no explicit `Retain`/`Release` nodes (the only baked-in
-//! reference counting is the retain of a value read out of a boxed container, by a getter or a
-//! `Destructure`, and the moves of an unboxed `Destructure`).
+//! reference counting is the retain of a value read out of a boxed container by a getter, and the
+//! moves of a `DestructureUnboxed`).
 //! This pass adds the explicit nodes by a backward last-use analysis over each function, at
 //! whole-value granularity (per-leaf paths and further precision come from later passes).
 //!
@@ -157,7 +157,7 @@ impl<'a> RcInserter<'a> {
             RcExpr::Let(x, rhs, cont) => {
                 self.insert_into_operation_let(x, rhs, cont, source, live_after)
             }
-            RcExpr::Destructure(container, fields, _state, cont) => {
+            RcExpr::DestructureUnboxed(container, fields, cont) => {
                 self.insert_into_destructure(container, fields, cont, source, live_after)
             }
             RcExpr::Eval(x, cont) => self.insert_into_eval(x, cont, source, live_after),
@@ -244,11 +244,8 @@ impl<'a> RcInserter<'a> {
     }
 
     /// A `destructure container into fields; cont`. Each field the continuation never uses is
-    /// released. Code generation performs the extraction itself, the field retains included: a boxed
-    /// container retains the fields it reads out, and an unboxed container, whose every field is
-    /// named, moves the fields out. A boxed container is borrowed, and so released after the
-    /// destructure iff it is dead there. An unboxed container is consumed, and so retained beforehand
-    /// iff it is used after the destructure.
+    /// released. Code generation moves the fields out of the container, which is consumed, and so
+    /// retained beforehand iff it is used after the destructure.
     fn insert_into_destructure(
         &self,
         container: RcVar,
@@ -266,23 +263,15 @@ impl<'a> RcInserter<'a> {
                 dead.push(fv.clone());
             }
         }
-        let boxed = container.ty.is_box(self.type_env);
-        if boxed && self.dies_borrowed(&container, &live_cont) {
-            dead.push(container.clone());
-        }
         let cont = build_releases(dead, cont);
 
         let node = RcExprNode::new(
-            RcExpr::Destructure(container.clone(), fields.clone(), RcState::Unknown, cont),
+            RcExpr::DestructureUnboxed(container.clone(), fields.clone(), cont),
             source,
         );
-        // Retain an unboxed container before the destructure iff it is used afterward, so both the
+        // Retain the container before the destructure iff it is used afterward, so both the
         // moved-out fields and the later use are covered.
-        let node = if boxed {
-            node
-        } else {
-            self.retain_if_live(&container, &live_cont, node)
-        };
+        let node = self.retain_if_live(&container, &live_cont, node);
 
         let mut live_before = live_cont;
         for (_, fv) in &fields {
@@ -420,8 +409,7 @@ impl<'a> RcInserter<'a> {
 
     /// Wrap `node` in a `Retain` of `var` iff `var` is a local that needs reference counting and is
     /// live in `live` — the owned-operand rule for a variable a consuming construct (a `Ret`, the
-    /// `Destructure` of an unboxed container, or a `Match` scrutinee) uses, when it is still live
-    /// afterward.
+    /// `DestructureUnboxed`, or a `Match` scrutinee) uses, when it is still live afterward.
     fn retain_if_live(&self, var: &RcVar, live: &Set<FullName>, node: RcExprNode) -> RcExprNode {
         if var.name.is_local() && live.contains(&var.name) && self.needs_rc(var) {
             build_retains(vec![var.clone()], node)
@@ -495,7 +483,7 @@ fn free_locals(node: &RcExprNode) -> Set<FullName> {
 
 /// The traversal behind `free_locals`: record into `refs` every local name `node` references and
 /// into `bound` every local name it binds — a `Let` variable, a `Match` arm's payload variable, or
-/// a `Destructure` field — descending through the continuation and match arms.
+/// a `DestructureUnboxed` field — descending through the continuation and match arms.
 fn collect_referenced_and_bound(
     node: &RcExprNode,
     refs: &mut Set<FullName>,
@@ -533,7 +521,7 @@ fn collect_referenced_and_bound(
             }
             collect_referenced_and_bound(k, refs, bound);
         }
-        RcExpr::Destructure(container, fields, _state, k) => {
+        RcExpr::DestructureUnboxed(container, fields, k) => {
             insert_if_local(refs, &container.name);
             for (_, fv) in fields {
                 bound.insert(fv.name.clone());
@@ -588,7 +576,7 @@ fn collect_vars(node: &RcExprNode, vars: &mut Map<FullName, RcVar>) {
             }
             collect_vars(k, vars);
         }
-        RcExpr::Destructure(container, fields, _state, k) => {
+        RcExpr::DestructureUnboxed(container, fields, k) => {
             record_if_local(vars, container);
             for (_, fv) in fields {
                 record_if_local(vars, fv);
