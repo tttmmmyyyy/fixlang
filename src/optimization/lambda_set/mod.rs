@@ -757,13 +757,13 @@ main = println(((p.@f)(1) + h(p.@g)).to_string);
             flow.unaccounted().is_some()
         };
         // The whole of each place, each in its own way.
-        let whole = |flow: &mut BuiltinFlow| {
+        let complete_rule = |flow: &mut BuiltinFlow| {
             flow.no_flow(&flow.operand(0));
             let taken = flow.type_arg(&flow.operand(1), 0);
             flow.same(&taken, &flow.result());
             flow.make_own_dynamic(&flow.operand(1));
         };
-        assert!(!reported(&whole));
+        assert!(!reported(&complete_rule));
         assert!(!reported(&|flow| flow.make_all_dynamic()));
         assert!(reported(&|_| {}));
         // The first operand left out.

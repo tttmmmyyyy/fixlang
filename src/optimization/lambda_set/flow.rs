@@ -130,23 +130,23 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
     /// A slot of an operand or of the result that the rule has not accounted for, named as the
     /// place it is at and the type there; `None` where the rule accounted for every slot.
     pub fn unaccounted(&self) -> Option<String> {
-        let (place, ty, slot) = self
+        let (place_idx, ty, slot_idx) = self
             .operands
             .iter()
             .chain([&self.result])
             .enumerate()
-            .find_map(|(place, ty)| {
-                let slot = ty.slots.iter().position(|v| !self.accounted.contains(v))?;
-                Some((place, ty, slot))
+            .find_map(|(place_idx, ty)| {
+                let slot_idx = ty.slots.iter().position(|v| !self.accounted.contains(v))?;
+                Some((place_idx, ty, slot_idx))
             })?;
-        let place = if place < self.operands.len() {
-            format!("operand {}", place)
+        let place = if place_idx < self.operands.len() {
+            format!("operand {}", place_idx)
         } else {
             "the result".to_string()
         };
         Some(format!(
             "slot {} of {}, of type `{}`",
-            slot,
+            slot_idx,
             place,
             ty.ty.to_string()
         ))
