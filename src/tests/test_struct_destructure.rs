@@ -60,10 +60,10 @@ main : IO () = (
     /// A function whose only use of a boxed parameter is to destructure it, called twice on one
     /// value the caller keeps using.
     ///
-    /// A destructure consumes its container, so ownership inference has to give the parameter to
-    /// the callee: a callee that borrowed it would release a container it does not own, and the
-    /// caller's value would die while the caller still holds it. The recursion keeps the callee out
-    /// of the caller, so the call goes through the inferred parameter ownership.
+    /// A destructure reads its boxed container and leaves it its reference, so the callee borrows
+    /// the parameter and releases nothing of it: a callee that released the container would kill
+    /// the caller's value while the caller still holds it. The recursion keeps the callee out of
+    /// the caller, so the call goes through the inferred parameter ownership.
     const DESTRUCTURED_PARAMETER_SOURCE: &str = r#"
 module Main;
 
@@ -142,8 +142,8 @@ main : IO () = (
     ///
     /// A partial pattern is what tells the two kinds of container apart: an unboxed container is
     /// taken apart whole, and the fields the pattern leaves out are released as dead bindings,
-    /// while a boxed one retains the named fields and releases itself, letting its own drop reach
-    /// the rest. A reordered pattern is what makes the extraction read the field index recorded per
+    /// while a boxed one retains the named fields and keeps its own reference, whose release
+    /// reaches the rest. A reordered pattern is what makes the extraction read the field index recorded per
     /// field rather than the position the field is written at.
     const PARTIAL_DESTRUCTURE_SOURCE: &str = r#"
 module Main;

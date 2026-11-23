@@ -10,8 +10,8 @@ mod lent_reads_tests {
     ///
     /// On the branch `main` takes, `step` reads `order` out of the unique `w`, then replaces that
     /// field: the update is made in place and releases the array `order` was read out of, which
-    /// `order` is read again after. The match binding `r`, used afterwards, holds the walk's
-    /// object on the other branch alone, so it does not hold the array on this one. A read lending
+    /// `order` is read again after. The match binding `r`, used afterwards, holds `w`'s object on
+    /// the other branch alone, so it does not hold the array on this one. A read lending
     /// `order` would read it after it was freed. The program runs under Valgrind MemCheck, which
     /// reports that read.
     #[test]

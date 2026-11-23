@@ -31,7 +31,7 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 
 ## 2. 消費する構文と読むだけの構文
 
-権威は `ownership.rs` の `collect_consumes_go` / `rhs_consumes` / `destructure_consumes`。
+権威は `ownership.rs` の `collect_consumes_go` / `rhs_consumes`。
 
 **消費する（leaf 粒度）**
 
@@ -41,8 +41,6 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 | `App(callee, args)` | callee の全 boxed leaf（closure の捕捉）＋ callee のその位置が `Own` である引数 leaf |
 | `Closure(f, caps)` | 各 capture の全 boxed leaf |
 | `Llvm(gen, args)` | `borrows_operand(i)` が偽のオペランドのうち、`result_prov` が `Arg(i, π)` として素通しを宣言していない leaf |
-| `Destructure`（boxed コンテナ） | コンテナの全 boxed leaf（明示 `Release` ノードは無く、codegen の `get_struct_fields` が release する） |
-| `Destructure`（unbox コンテナ） | **名前が付いていないフィールド**の leaf のみ（名前付きフィールドは move＝別名） |
 | `Match`（boxed union の variant アーム） | scrutinee コンテナ。ただし RC 挿入が**明示 `Release` ノード**を各アーム先頭に置く |
 | `Release(v, π)` | その unit 1 個 |
 
@@ -50,13 +48,14 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 
 - `Var(y)`（move-bind）= 別名。codegen でも同一 LLVM 値。
 - `Match` ノード自体（消費は各アームの中）。
+- `Destructure`。boxed コンテナは読むだけで、unbox コンテナの leaf はフィールド変数へ move される（別名）。
 - `Retain`/`Release` ノードに現れる変数。
 - `borrows_operand(i)` が真のオペランド（read getter 群）。
 - `result_prov` が `Arg(i, π)` の leaf（素通し）。
 
 **ノードに現れない暗黙の RC**（検査を書くときに必ず要る）
 
-- boxed コンテナの `Destructure`: コンテナを release し、各名前付きフィールドを retain する。
+- boxed コンテナの `Destructure`: 各名前付きフィールドを retain する。コンテナの参照には触れない。
 - boxed union の variant アーム: payload を retain する。
 - unbox コンテナの `Destructure` / unbox union・catch-all の payload: **別名**であって新しい参照ではない。
 

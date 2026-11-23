@@ -41,8 +41,8 @@
 //! variable it names.
 //!
 //! Which construct consumes which reference, and which object a reference belongs to, is the shared
-//! model in `ownership`. `BodyModel` reads that model for one body, so `cancel` and `sink_retains`
-//! give the same answer.
+//! model in `ownership`. `BodyModel` reads that model for one body, so `cancel`, `sink_retains` and
+//! `lend::lend_reads` give the same answer.
 
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
