@@ -416,8 +416,8 @@ impl Walk<'_, '_> {
                     boxed_leaves_under(&v.ty, path, self.model.type_env).collect();
                 let certain = match leaves.as_slice() {
                     [leaf] => {
-                        (self.model.leaf_objects(&v.name, leaf)
-                            == slice::from_ref(&self.object)) as i64
+                        (self.model.leaf_objects(&v.name, leaf) == slice::from_ref(&self.object))
+                            as i64
                     }
                     _ => 0,
                 };
@@ -555,14 +555,16 @@ impl Lender<'_, '_> {
                     .into_iter()
                     .filter(|unit| !self.counts_lent(v, unit))
                     .collect();
-                kept.into_iter().rev().fold(self.rewrite(k, returns_from_func), |k, unit| {
-                    let expr = if is_release {
-                        RcExpr::Release(v.clone(), unit, *state, k)
-                    } else {
-                        RcExpr::Retain(v.clone(), unit, *state, k)
-                    };
-                    RcExprNode::new(expr, source.clone())
-                })
+                kept.into_iter()
+                    .rev()
+                    .fold(self.rewrite(k, returns_from_func), |k, unit| {
+                        let expr = if is_release {
+                            RcExpr::Release(v.clone(), unit, *state, k)
+                        } else {
+                            RcExpr::Retain(v.clone(), unit, *state, k)
+                        };
+                        RcExprNode::new(expr, source.clone())
+                    })
             }
             RcExpr::Destructure(..) | RcExpr::Eval(..) => {
                 map_continuation(node, |k| self.rewrite(k, returns_from_func))

@@ -533,14 +533,21 @@ mod integration_tests {
             .copied()
             .filter(|l| tally_version_called(l).is_some())
             .collect();
-        assert_eq!(calls.len(), 3, "`main` calls `tally` three times:\n{}", main.join("\n"));
+        assert_eq!(
+            calls.len(),
+            3,
+            "`main` calls `tally` three times:\n{}",
+            main.join("\n")
+        );
         for call in calls {
             let array = call_first_arg(call);
             let binding = format!("let {} : ", array);
             let read = main
                 .iter()
                 .find(|l| l.trim_start().starts_with(&binding))
-                .unwrap_or_else(|| panic!("`main` does not bind `{}`:\n{}", array, main.join("\n")));
+                .unwrap_or_else(|| {
+                    panic!("`main` does not bind `{}`:\n{}", array, main.join("\n"))
+                });
             let lent = read.contains(" @lent");
             if calls_tally_borrow_version(call) {
                 assert!(

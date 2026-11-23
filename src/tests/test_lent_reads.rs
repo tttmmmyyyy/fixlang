@@ -141,7 +141,8 @@ mod lent_reads_tests {
     /// `rows` frees `row` and with it the array `x` names, so a read lending `x` would read it
     /// after it was freed, which Valgrind MemCheck reports.
     #[test]
-    pub fn test_a_value_read_out_of_a_lent_value_keeps_its_own_reference_past_the_outer_container() {
+    pub fn test_a_value_read_out_of_a_lent_value_keeps_its_own_reference_past_the_outer_container()
+    {
         let source = r#"
             module Main;
 
@@ -184,7 +185,8 @@ mod lent_reads_tests {
     /// the update is made in place and releases the array `order` names, so a read lending `order`
     /// would read it after it was freed, which Valgrind MemCheck reports.
     #[test]
-    pub fn test_a_value_read_before_a_branch_updating_its_container_on_one_arm_keeps_its_own_reference() {
+    pub fn test_a_value_read_before_a_branch_updating_its_container_on_one_arm_keeps_its_own_reference(
+    ) {
         let source = r#"
             module Main;
 
