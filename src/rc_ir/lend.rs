@@ -37,6 +37,8 @@ use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
     all_owned_units, origin, rc_units, read_container, units_under, Origin,
 };
+use std::iter;
+use std::slice;
 use std::sync::Arc;
 
 /// `prog` with every read that can lend its value (see the module documentation) lending it.
@@ -240,7 +242,7 @@ fn boxed_leaves_under<'p>(
 fn operands(rhs: &RcRhs) -> Vec<&RcVar> {
     match rhs {
         RcRhs::Var(y) => vec![y],
-        RcRhs::App(callee, args) => std::iter::once(callee).chain(args).collect(),
+        RcRhs::App(callee, args) => iter::once(callee).chain(args).collect(),
         RcRhs::Closure(_, caps) => caps.iter().collect(),
         RcRhs::Builtin(_, args) => args.iter().collect(),
         RcRhs::Match(..) => unreachable!("a match is walked by its arms"),
@@ -408,7 +410,7 @@ impl Walk<'_, '_> {
                 let certain = match leaves.as_slice() {
                     [leaf] => {
                         (self.model.leaf_objects(&v.name, leaf)
-                            == std::slice::from_ref(&self.object)) as i64
+                            == slice::from_ref(&self.object)) as i64
                     }
                     _ => 0,
                 };
@@ -600,7 +602,7 @@ impl Lender<'_, '_> {
                 } else {
                     RcState::Unknown
                 };
-                retains.extend(std::iter::repeat_n(((*v).clone(), unit.clone(), state), count));
+                retains.extend(iter::repeat_n(((*v).clone(), unit.clone(), state), count));
             }
         }
         let source = node.source.clone();
