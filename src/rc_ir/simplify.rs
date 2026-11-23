@@ -192,18 +192,18 @@ fn is_payload_read_of(rhs: &RcRhs, union: &FullName, variant: usize) -> bool {
 /// The variables the body of `arm`, a variant arm of a match on the boxed union `scrut`, binds to
 /// the payload it reads out of `scrut`.
 fn payload_reads(arm: &MatchArm, scrut: &RcVar) -> Set<FullName> {
-    let mut reads = Set::default();
+    let mut vars = Set::default();
     let Some(variant) = arm.tag else {
-        return reads;
+        return vars;
     };
     for_each_node(&arm.body, &mut |n| {
         if let RcExpr::Let(p, rhs, _) = n.expr.as_ref() {
             if is_payload_read_of(rhs, &scrut.name, variant) {
-                reads.insert(p.name.clone());
+                vars.insert(p.name.clone());
             }
         }
     });
-    reads
+    vars
 }
 
 /// The body of `arm`, a variant arm of a match on `scrut`, with the payload it matches being
@@ -213,12 +213,12 @@ fn with_payload_bound(arm: &MatchArm, scrut: &RcVar, operand: &RcVar) -> RcExprN
     match &arm.payload {
         Some(payload) => substitute_expr(&arm.body, &single_subst(&payload.name, &operand.name)),
         None => {
-            let reads = payload_reads(arm, scrut);
-            let subst = reads
+            let read_vars = payload_reads(arm, scrut);
+            let subst = read_vars
                 .iter()
-                .map(|read| (read.clone(), operand.name.clone()))
+                .map(|var| (var.clone(), operand.name.clone()))
                 .collect();
-            substitute_expr(&without_bindings(&arm.body, &reads), &subst)
+            substitute_expr(&without_bindings(&arm.body, &read_vars), &subst)
         }
     }
 }
@@ -314,8 +314,8 @@ fn getters_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
     if count_value_uses(&x.name, k) != subst.len() {
         return None;
     }
-    let getters: Set<FullName> = subst.keys().cloned().collect();
-    Some(substitute_expr(&without_bindings(k, &getters), &subst))
+    let getter_vars: Set<FullName> = subst.keys().cloned().collect();
+    Some(substitute_expr(&without_bindings(k, &getter_vars), &subst))
 }
 
 /// `node` without the `Let` nodes binding the variables of `dropped`.
