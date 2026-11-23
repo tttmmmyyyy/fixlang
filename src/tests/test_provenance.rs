@@ -565,19 +565,7 @@ mod integration_tests {
             "the children read out of the borrowed node should be lent:\n{}",
             read
         );
-        let counted: Vec<&str> = count
-            .iter()
-            .copied()
-            .filter(|l| {
-                let l = l.trim_start();
-                l.starts_with("retain ") || l.starts_with("release ")
-            })
-            .collect();
-        assert!(
-            counted.is_empty(),
-            "the borrowing version of `count` should count no reference:\n{}",
-            body
-        );
+        assert_counts_nothing(&count, "the borrowing version of `count`");
     }
 
     /// Verifies that a value read out of a global is held past a call it is handed to, and is

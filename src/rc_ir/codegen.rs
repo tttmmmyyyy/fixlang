@@ -630,7 +630,16 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.builder().position_at_end(arm_bbs[i]);
 
             // Bind the variable the arm binds: a variant arm moves the variant's value out of the
-            // scrutinee, and a catch-all arm binds the whole scrutinee.
+            // scrutinee, and a catch-all arm binds the whole scrutinee. The move counts nothing,
+            // which is right of an unboxed scrutinee alone.
+            assert_eq!(
+                arm.payload.is_some(),
+                !scrut.ty.is_box(self.type_env()),
+                "an arm of the match on `{}`, of type `{}`, binds a variable over a boxed \
+                 scrutinee, or none over an unboxed one",
+                scrut.name.to_string(),
+                scrut.ty.to_string()
+            );
             if let Some(payload) = &arm.payload {
                 let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
                 let payload_obj = match arm.tag {

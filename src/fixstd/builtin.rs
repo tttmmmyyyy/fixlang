@@ -3089,7 +3089,6 @@ pub struct ArrayUnsafeGetBoundsUncheckedOp {
     idx_name: FullName,
     /// The reference-counting state the objects this op reference-counts inside `generate` are
     /// known to be in, which those operations run under; `Unknown` has them read it.
-    #[serde(default)]
     pub(crate) assumed: RcState,
     /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
     /// container goes on holding it.
@@ -3247,7 +3246,6 @@ pub struct ArrayTruncateBoundsUncheckedOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -3404,7 +3402,6 @@ pub struct ArrayAppendValueCapacityUncheckedOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -3713,7 +3710,6 @@ pub struct ArraySetCapacityBoundsUncheckedOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -3895,7 +3891,6 @@ pub struct ArrayAppendCapacityUncheckedOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -4088,7 +4083,6 @@ pub struct ArrayCopyCapacityBoundsUncheckedOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -4270,7 +4264,6 @@ pub struct ArrayGrowSizeOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -4549,7 +4542,6 @@ pub struct ArraySetOp {
     bounds_checked: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -4735,7 +4727,6 @@ pub struct ArraySwapOp {
     bounds_checked: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -4911,7 +4902,6 @@ pub struct ArrayPunchOp {
     arr_name: FullName,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -5120,7 +5110,6 @@ pub struct PunchedArrayPlugOp {
     punched_name: FullName,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -5535,7 +5524,6 @@ pub struct StructGetOp {
     field_idx: usize,
     /// The reference-counting state the objects this op reference-counts inside `generate` are
     /// known to be in, which those operations run under; `Unknown` has them read it.
-    #[serde(default)]
     pub(crate) assumed: RcState,
     /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
     /// container goes on holding it.
@@ -6095,7 +6083,6 @@ pub struct CaptureProjectOp {
     pub cap_tys: Vec<Arc<TypeNode>>,
     /// The reference-counting state the objects this op reference-counts inside `generate` are
     /// known to be in, which those operations run under; `Unknown` has them read it.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -6222,7 +6209,6 @@ pub struct StructPunchOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -6431,7 +6417,6 @@ pub struct StructPlugInOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -7434,7 +7419,6 @@ pub struct StructSetOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -7796,15 +7780,12 @@ pub struct UnionAsOp {
     field_idx: usize,
     /// Whether the union is known to hold the variant read, as it is in the arm of a `match` that
     /// selected the variant, so that the read checks no tag.
-    #[serde(default)]
     variant_known: bool,
     /// The reference-counting state the objects this op reference-counts inside `generate` are
     /// known to be in, which those operations run under; `Unknown` has them read it.
-    #[serde(default)]
     pub(crate) assumed: RcState,
     /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
     /// container goes on holding it.
-    #[serde(default)]
     pub(crate) lend: bool,
 }
 
@@ -8620,7 +8601,6 @@ pub struct IsUniqueOp {
     pub(crate) assume_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -8843,7 +8823,6 @@ pub struct ArrayIsStorageUniqueOp {
     pub(crate) assume_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
@@ -9740,7 +9719,6 @@ pub struct MutatePtrOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    #[serde(default)]
     pub(crate) assumed: RcState,
 }
 
