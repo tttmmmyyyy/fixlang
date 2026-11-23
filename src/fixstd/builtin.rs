@@ -5634,6 +5634,8 @@ impl StructGetOp {
         let field_ty = &container_ty.field_types(type_env)[self.field_idx];
         if field_ty.is_fully_unboxed(type_env) {
             FieldRead::Moved
+        } else if self.lend {
+            FieldRead::Lent
         } else {
             FieldRead::Retained
         }
@@ -5648,6 +5650,9 @@ enum FieldRead {
     /// The field is moved out of a boxed container and retained, so the reader holds a reference of
     /// its own and the container keeps the one it holds.
     Retained,
+    /// The field is read out of a boxed container that goes on holding it for the reader, so
+    /// nothing is counted (`BuiltinOp::lending`).
+    Lent,
 }
 
 #[typetag::serde]
@@ -5665,7 +5670,7 @@ impl BuiltinOp for StructGetOp {
             );
         }
         match self.field_read(&container_ty, gc.type_env()) {
-            FieldRead::Moved => {
+            FieldRead::Moved | FieldRead::Lent => {
                 let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
                 ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32)
             }
@@ -5673,9 +5678,7 @@ impl BuiltinOp for StructGetOp {
                 let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
                 let field =
                     ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
-                if !self.lend {
-                    gc.retain(field.clone(), assumed_state(self.assume_local));
-                }
+                gc.retain(field.clone(), assumed_state(self.assume_local));
                 field
             }
         }
@@ -5756,12 +5759,11 @@ impl BuiltinOp for StructGetOp {
     }
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
-        // A read that moves the field out counts nothing; one out of a boxed container retains the
-        // field alone, unless the field is lent. A field getter takes exactly the container, so
-        // `arg_tys[0]` is it.
+        // A read that moves the field out or lends it counts nothing, and one that retains the
+        // field counts it alone. A field getter takes exactly the container, so `arg_tys[0]` is
+        // it.
         match self.field_read(&arg_tys[0], type_env) {
-            FieldRead::Moved => vec![],
-            FieldRead::Retained if self.lend => vec![],
+            FieldRead::Moved | FieldRead::Lent => vec![],
             FieldRead::Retained => vec![RcTarget::Result(vec![])],
         }
     }
@@ -10178,7 +10180,7 @@ fn split_ios_result<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ios_res: &Object<'c>,
 ) -> (Object<'c>, Object<'c>) {
-    let fields = ObjectFieldType::get_struct_fields(gc, ios_res, &[0, 1], RcState::Unknown);
+    let fields = ObjectFieldType::take_unboxed_struct_fields(gc, ios_res, &[0, 1]);
     (fields[0].clone(), fields[1].clone())
 }
 
