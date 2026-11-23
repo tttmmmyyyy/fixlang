@@ -1136,12 +1136,9 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         if !self.borrows_any() {
             return rc_node(is_release, v.clone(), path.clone(), state, k, source);
         }
-        let kept: Vec<FieldPath> = units_under(&v.ty, path, self.type_env())
-            .into_iter()
-            .filter(|unit| self.owns_unit(v, unit))
-            .collect();
-        kept.into_iter().rev().fold(k, |cont, unit| {
-            rc_node(is_release, v.clone(), unit, state, cont, source)
+        let type_env = self.type_env();
+        rc_of_units(v, path, state, is_release, k, source, type_env, |unit| {
+            self.owns_unit(v, unit)
         })
     }
 }
@@ -1213,18 +1210,19 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
     match node.expr.as_ref() {
         RcExpr::Retain(v, path, state, k) => {
             let k = split_body(k, type_env);
-            split_rc(v, path, *state, false, k, &node.source, type_env)
+            rc_of_units(v, path, *state, false, k, &node.source, type_env, |_| true)
         }
         RcExpr::Release(v, path, state, k) => {
             let k = split_body(k, type_env);
-            split_rc(v, path, *state, true, k, &node.source, type_env)
+            rc_of_units(v, path, *state, true, k, &node.source, type_env, |_| true)
         }
         _ => map_children(node, |child| split_body(child, type_env)),
     }
 }
 
-/// Rebuild a `Retain`/`Release` as one node per unit under its path, preserving the state and span.
-fn split_rc(
+/// A `Retain` (or `Release`, when `is_release`) of `v` at `path` rebuilt over `k` as one node for
+/// each unit under the path that `keep` accepts, preserving the state and span.
+pub(crate) fn rc_of_units(
     v: &RcVar,
     path: &FieldPath,
     state: RcState,
@@ -1232,9 +1230,11 @@ fn split_rc(
     k: RcExprNode,
     source: &Option<Span>,
     type_env: &TypeEnv,
+    keep: impl Fn(&FieldPath) -> bool,
 ) -> RcExprNode {
     units_under(&v.ty, path, type_env)
         .into_iter()
+        .filter(keep)
         .rev()
         .fold(k, |cont, unit| {
             rc_node(is_release, v.clone(), unit, state, cont, source)

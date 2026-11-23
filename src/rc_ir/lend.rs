@@ -33,10 +33,10 @@ use crate::rc_ir::ast::{
     for_each_node, map_continuation, FieldPath, RcExpr, RcExprNode, RcProgram, RcRhs, RcState,
     RcVar, VarPath,
 };
-use crate::rc_ir::borrow::{rewrite_bodies, BodyModel};
+use crate::rc_ir::borrow::{rc_of_units, rewrite_bodies, BodyModel};
 use crate::rc_ir::leaf_map::{boxed_leaf_paths, boxed_leaves_under};
 use crate::rc_ir::ownership::{
-    all_owned_units, origin, rc_units, read_container, units_under, Origin,
+    all_owned_units, origin, rc_units, read_container, Origin,
 };
 use std::iter;
 use std::slice;
@@ -540,20 +540,11 @@ impl Lender<'_, '_> {
             }
             RcExpr::Retain(v, path, state, k) | RcExpr::Release(v, path, state, k) => {
                 let is_release = matches!(node.expr.as_ref(), RcExpr::Release(..));
-                let kept: Vec<FieldPath> = units_under(&v.ty, path, self.model.type_env)
-                    .into_iter()
-                    .filter(|unit| !self.counts_lent(v, unit))
-                    .collect();
-                kept.into_iter()
-                    .rev()
-                    .fold(self.rewrite(k, returns_from_func), |k, unit| {
-                        let expr = if is_release {
-                            RcExpr::Release(v.clone(), unit, *state, k)
-                        } else {
-                            RcExpr::Retain(v.clone(), unit, *state, k)
-                        };
-                        RcExprNode::new(expr, source.clone())
-                    })
+                let k = self.rewrite(k, returns_from_func);
+                let type_env = self.model.type_env;
+                rc_of_units(v, path, *state, is_release, k, source, type_env, |unit| {
+                    !self.counts_lent(v, unit)
+                })
             }
             RcExpr::Destructure(..) | RcExpr::Eval(..) => {
                 map_continuation(node, |k| self.rewrite(k, returns_from_func))
