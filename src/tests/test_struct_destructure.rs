@@ -3,8 +3,9 @@
 // Destructuring a boxed container retains each extracted field out of it
 // (`read_boxed_struct_fields`) and leaves the container its own reference, released at its last use.
 // With boxed fields, a field the continuation drops, and a container still used after the
-// destructure, must leave every value released exactly once — checked under valgrind. `test_basic`'s boxed-struct pattern test uses unboxed `I64` fields,
-// which do not exercise the field retains; these tests use boxed (`Array`) fields.
+// destructure, must leave every value released exactly once — checked under valgrind.
+// `test_basic`'s boxed-struct pattern test uses unboxed `I64` fields, which do not exercise the
+// field retains; these tests use boxed (`Array`) fields.
 
 #[cfg(test)]
 mod struct_destructure_tests {

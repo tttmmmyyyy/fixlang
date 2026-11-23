@@ -862,8 +862,9 @@ impl<'a> Walk<'a> {
     }
 
     /// The annotation of a `Destructure`, which counts every reference the node itself moves. Out of
-    /// a boxed container it retains each named field, which the take-out annotation covers. Out of an unboxed container, whose every field is named, it only moves the
-    /// leaves into the field variables and counts nothing.
+    /// a boxed container it retains each named field, which the take-out annotation covers. Out of
+    /// an unboxed container, whose every field is named, it only moves the leaves into the field
+    /// variables and counts nothing.
     fn annotate_destructure(&mut self, container: &RcVar) -> RcState {
         if !container.ty.is_box(self.type_env) {
             return RcState::Local;

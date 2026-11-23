@@ -17,8 +17,8 @@ built_here : Array I64 -> Array I64;
 built_here = |elements| elements.to_iter.to_array;
 
 // Both fields are read, and a field longer than `fallback` is returned in its place. The result is
-// a field on one path and `fallback` on another, so each read in an arm retains its field rather
-// than lending it.
+// a field on one path and `fallback` on another, so each read in an arm retains its
+// field.
 longer_of_pair : Array I64 -> Pair -> Array I64;
 longer_of_pair = |fallback, pair| (
     if pair.@head.@size > fallback.@size { pair.@head }
@@ -39,8 +39,8 @@ head_of_holder : Holder -> I64;
 head_of_holder = |holder| if holder.is_some { holder.as_some.@(0) } else { 0 };
 
 // A struct pattern hands out both fields of a boxed container at once. The result is a field on
-// one path and `fallback` on another, so the destructure retains both fields rather than lending
-// them, and releases the ones not returned.
+// one path and `fallback` on another, so the destructure retains both fields and releases
+// the ones not returned.
 longer_by_pattern : Array I64 -> Pair -> Array I64;
 longer_by_pattern = |fallback, pair| (
     let Pair { head : h, tail : t } = pair;
@@ -72,7 +72,7 @@ main = (
     // Every element is built here, so what the array holds turns on the write alone.
     let (planted, _) = [built_here([70]), built_here([80])].plant_global;
     // The elements are put into a new array once `planted` has been released, so each read retains
-    // its element rather than lending it.
+    // its element.
     let elements = [planted.@(0), planted.@(1)];
     let from_planted = elements.@(0).@(0) + elements.@(1).@(0);
 

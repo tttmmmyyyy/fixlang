@@ -1,27 +1,28 @@
 //! Lending reads: a value read out of a boxed container is read without a retain where the
 //! container's object holds it for as long as the code uses it. Such a value is *lent*: it holds no
-//! reference of its own, so its reference counting goes, and where the code consumes it, by handing
-//! it to a callee or an op that owns it, capturing it, or returning it, a retain right before gives
-//! the consumer the reference it takes.
+//! reference of its own, so the retains and releases of it are removed. Where the code consumes it,
+//! by handing it to a callee or an op that owns it, capturing it, or returning it, a retain right
+//! before gives the consumer the reference it takes.
 //!
-//! A read lends its value `a`, read out of the container `c` whose object is `o`, where
+//! A read lends its value `a`, read out of the container `c` whose object is `o`, where both of
+//! these conditions hold:
 //!
-//! 1. each unit that may be `a` is lent whole on every path: no unit of any variable may be `a` on
-//!    one path and a value this body does not lend on another, and no op consumes some leaves of
-//!    such a unit while passing the others through to its result. So each reference-count node and
-//!    each consume, which count a unit at a time, either count a lent value or count none;
-//! 2. `o` stays referenced while the code uses `a`: walking forward from the read along every
-//!    path, a lower bound of `o`'s reference count (`Count`) stays at least 1 up to and including
-//!    each use of `a` and of its aliases. The bound starts at 1, since the read itself reads `o`,
-//!    rises by a retain of a value that is `o` on every path, and falls by each consume and release
-//!    of a value that may be `o` on some path (`BodyModel`, the model `cancel` reads).
+//! - *Lent whole*: each unit that may be `a` is lent whole on every path. No unit of any variable
+//!   may be `a` on one path and a value this body does not lend on another, and no op consumes some
+//!   leaves of such a unit while passing the others through to its result. So each reference-count
+//!   node and each consume, which count a unit at a time, either count a lent value or count none.
+//! - *Held while used*: `o` stays referenced while the code uses `a`. Walking forward from the read
+//!   along every path, a lower bound of `o`'s reference count (`Count`) stays at least 1 up to and
+//!   including each use of `a` and of its aliases. The bound starts at 1, since the read itself
+//!   reads `o`, rises by a retain of a value that is `o` on every path, and falls by each consume
+//!   and release of a value that may be `o` on some path (`BodyModel`, the model `cancel` reads).
 //!
 //! A container that is itself lent holds its value only while its own container is referenced, so
-//! the walk runs from the outermost read of the chain, and a value read out of a global is held
+//! the walk runs from the outermost read of the chain. A value read out of a global is held
 //! throughout, since a global's objects are never freed.
 //!
-//! The pass runs once every pass moving or deleting reference counting has run, on the counting
-//! code generation emits.
+//! The pass runs after every pass that moves or deletes reference counting, so it reads the
+//! counting that code generation emits.
 
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
@@ -121,7 +122,8 @@ fn lent_values(model: &BodyModel, body: &RcExprNode) -> Set<FullName> {
     }
 }
 
-/// The roots of the units an op of `body` consumes some leaves of more often than others.
+/// The roots of every unit that some op of `body` consumes unevenly, some of its leaves more often
+/// than others.
 fn roots_consumed_in_part(model: &BodyModel, body: &RcExprNode) -> Set<FullName> {
     let mut roots = Set::default();
     for_each_node(body, &mut |node| {
@@ -159,7 +161,7 @@ fn lent_beside_unlent(model: &BodyModel, lent: &Set<FullName>) -> Set<FullName> 
 }
 
 /// The values a body reads out of a boxed container (`read_container`), each mapped to that
-/// container. A fully unboxed value holds no reference, so none of those is among them.
+/// container. A fully unboxed value holds no reference and is left out.
 fn reads(model: &BodyModel) -> Map<FullName, RcVar> {
     model
         .vars
@@ -197,7 +199,8 @@ fn read_states(body: &RcExprNode, lent: &Set<FullName>) -> Map<FullName, RcState
     states
 }
 
-/// How many positions consume each of the leaves `consumed` lists once per position.
+/// How many operand positions consume each leaf. `consumed` lists a leaf once for each position
+/// that consumes it.
 fn positions(consumed: Vec<VarPath>) -> Map<VarPath, usize> {
     let mut positions = Map::default();
     for leaf in consumed {
@@ -286,7 +289,10 @@ fn anchors_of(
     answer
 }
 
-/// The object `container`, a boxed value, is on every path, if it is one.
+/// The one local object that the boxed `container` is on every path.
+///
+/// # Returns
+/// `None` where `container` may be one of several objects, or is a global's object.
 fn sole_object(model: &BodyModel, container: &RcVar) -> Option<VarPath> {
     match model.leaf_objects(&container.name, &[]).as_slice() {
         [object] if object.0.is_local() => Some(object.clone()),
@@ -295,8 +301,8 @@ fn sole_object(model: &BodyModel, container: &RcVar) -> Option<VarPath> {
 }
 
 /// The roots of the objects the boxed leaves of the unit `unit` of the variable named `name`, of
-/// type `ty`, may belong to. A match binding joining several objects is a name for them and no
-/// object itself, so it is not among the roots.
+/// type `ty`, may belong to. A match binding joining several objects only names them, so it is
+/// left out of the roots.
 fn roots_under(
     model: &BodyModel,
     name: &FullName,
@@ -334,7 +340,7 @@ impl Count {
         }
     }
 
-    /// The bound after `delta` references come and go.
+    /// The bound after the reference count changes by `delta`.
     fn moved(self, delta: i64) -> Count {
         let low = self.low + delta;
         Count {
@@ -343,7 +349,7 @@ impl Count {
         }
     }
 
-    /// The bound after one of several paths, the weakest of them.
+    /// The bound where several paths join: the weakest of their bounds.
     fn weakest(paths: impl Iterator<Item = Count>) -> Option<Count> {
         paths.reduce(|a, b| Count {
             low: a.low.min(b.low),
@@ -352,8 +358,9 @@ impl Count {
     }
 }
 
-/// The walk of one body checking condition 2 of the module documentation for the values read,
-/// directly or through lent containers, out of the container the read of `read` reads.
+/// The walk of one body checking the *held while used* condition of the module documentation for
+/// the values read, directly or through lent containers, out of the container the read of `read`
+/// reads.
 struct Walk<'w, 'm> {
     /// What the body's nodes act on.
     model: &'w BodyModel<'m>,
@@ -611,8 +618,8 @@ impl Lender<'_, '_> {
         })
     }
 
-    /// Whether the unit `unit` of `v` counts a lent value. By condition 1 of the module
-    /// documentation, a unit that may be a lent value is one on every path.
+    /// Whether the unit `unit` of `v` counts a lent value. By the *lent whole* condition of the
+    /// module documentation, a unit that may be a lent value is one on every path.
     fn counts_lent(&self, v: &RcVar, unit: &FieldPath) -> bool {
         roots_under(self.model, &v.name, &v.ty, unit)
             .iter()

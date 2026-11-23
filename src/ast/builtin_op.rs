@@ -191,9 +191,9 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     /// operand types the op is instantiated at: the boxed container the op reads its result out of.
     /// Default: no operand does.
     ///
-    /// While that operand's object lives, so does every object the result refers to. `lend_reads`
-    /// reads this to lend the result where the operand's object stays referenced as long as the code
-    /// uses the result (`lending`).
+    /// While that operand's object lives, so does every object the result refers to. So the result
+    /// can be lent (`lending`) where the operand's object stays referenced as long as the code uses
+    /// the result.
     fn result_held_by_operand(
         &self,
         _arg_tys: &[Arc<TypeNode>],
@@ -204,13 +204,12 @@ pub trait BuiltinOp: DynClone + Send + Sync {
 
     /// This op reading its result out of the operand `result_held_by_operand` names without
     /// retaining it: the result is lent, holding no reference of its own while that operand goes on
-    /// holding its objects. Default: the op has no such form, and `lend_reads` lends none of its
-    /// results.
+    /// holding its objects. Default: the op has no such form, so none of its results is lent.
     fn lending(&self) -> Option<Box<dyn BuiltinOp>> {
         None
     }
 
-    /// Whether `lending` was applied. The RC IR dump renders it.
+    /// Whether this op is the lending form `lending` returns.
     fn lends(&self) -> bool {
         false
     }

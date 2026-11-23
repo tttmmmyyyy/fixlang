@@ -968,9 +968,10 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     /// holds (`alias_step`): the container a field was destructured out of, the match binding an
     /// arm result flows into, the variable a move-bind renamed. A use of any of them after the call
     /// keeps the object alive past it. A value read out of a boxed container (`read_container`) is
-    /// held by the container's field as well, so it is held after the call when the container is. Where the value may be one of several objects — a match
-    /// binding, or an op result whose leaves come from several operands — each of them has to be
-    /// held, unless a use of the value itself holds whichever it is.
+    /// held by the container's field as well, so it is held after the call when the container is.
+    /// Where the value may be one of several objects — a match binding, or an op result whose
+    /// leaves come from several operands — each of them has to be held, unless a use of the value
+    /// itself holds whichever it is.
     ///
     /// # Arguments
     /// * `held` - the answers given so far in this query. A chain of match bindings, each rebuilding

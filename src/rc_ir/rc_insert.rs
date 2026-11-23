@@ -243,10 +243,10 @@ impl<'a> RcInserter<'a> {
         (node, live_before)
     }
 
-    /// A `destructure container into fields; cont`, and each field the continuation never uses is
-    /// released. Code generation performs the extraction itself, so no field retain is emitted here:
-    /// a boxed container retains the fields it reads out, and an unboxed container, whose every field
-    /// is named, moves the fields out. A boxed container is borrowed, and so released after the
+    /// A `destructure container into fields; cont`. Each field the continuation never uses is
+    /// released. Code generation performs the extraction itself, the field retains included: a boxed
+    /// container retains the fields it reads out, and an unboxed container, whose every field is
+    /// named, moves the fields out. A boxed container is borrowed, and so released after the
     /// destructure iff it is dead there. An unboxed container is consumed, and so retained beforehand
     /// iff it is used after the destructure.
     fn insert_into_destructure(
