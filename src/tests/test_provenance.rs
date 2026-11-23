@@ -517,6 +517,70 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that a read lends its value where the container goes on holding it: the element read
+    /// out of `rows` and the field read out of `table`, each handed to a call that borrows it while
+    /// its container is read afterwards, are read by the lending form of the read, and `main` counts
+    /// no reference of either. The element read out of `last`, whose container ends at the read,
+    /// keeps a reference of its own, which the call it is handed to owns.
+    #[test]
+    fn test_a_read_lends_its_value_while_the_container_holds_it() {
+        let (_temp_dir, project_dir) =
+            setup_case_projects(CASES, "routing_read_out_of_a_held_container");
+        let dump = emit_main_rc_ir(&project_dir);
+        let main = main_block(&dump, "Main::tally");
+        let calls: Vec<&str> = main
+            .iter()
+            .copied()
+            .filter(|l| tally_version_called(l).is_some())
+            .collect();
+        assert_eq!(calls.len(), 3, "`main` calls `tally` three times:\n{}", main.join("\n"));
+        for call in calls {
+            let array = call
+                .split_once(" = ")
+                .and_then(|(_, rhs)| rhs.split_once('('))
+                .and_then(|(_, args)| args.split_once(','))
+                .map(|(array, _)| array)
+                .unwrap_or_else(|| panic!("no first argument in the call:\n{}", call));
+            let binding = format!("let {} : ", array);
+            let read = main
+                .iter()
+                .find(|l| l.trim_start().starts_with(&binding))
+                .unwrap_or_else(|| panic!("`main` does not bind `{}`:\n{}", array, main.join("\n")));
+            let lent = read.contains(" @lent");
+            if calls_tally_borrow_version(call) {
+                assert!(
+                    lent,
+                    "the value handed to a borrowing call while its container is held should be \
+                     lent:\n{}",
+                    read
+                );
+                let counted = main.iter().any(|l| {
+                    let t = l.trim_start();
+                    ["retain ", "release "].iter().any(|op| {
+                        t.strip_prefix(op).is_some_and(|rest| {
+                            rest == array
+                                || rest
+                                    .strip_prefix(array)
+                                    .is_some_and(|tail| tail.starts_with([' ', '.']))
+                        })
+                    })
+                });
+                assert!(
+                    !counted,
+                    "`main` should count no reference of the lent `{}`:\n{}",
+                    array,
+                    main.join("\n")
+                );
+            } else {
+                assert!(
+                    !lent,
+                    "the value read at its container's last use should keep its own reference:\n{}",
+                    read
+                );
+            }
+        }
+    }
+
     /// Verifies that the routing finds an argument's object held after the call through the match
     /// binding it flows out of: `env` is whichever value the `if` takes, and `env` is read after the
     /// call, so the array read out of it outlives the call on either branch and the call is routed
