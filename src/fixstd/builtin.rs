@@ -3087,9 +3087,10 @@ pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub struct ArrayUnsafeGetBoundsUncheckedOp {
     arr_name: FullName,
     idx_name: FullName,
-    /// Whether the objects this op reference-counts inside `generate` are known to be in the local
-    /// reference-counting state, so that those operations need no state dispatch.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the objects this op reference-counts inside `generate` are
+    /// known to be in, which those operations run under; `Unknown` has them read it.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
     /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
     /// container goes on holding it.
     #[serde(default)]
@@ -3110,14 +3111,7 @@ impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
         if self.lend {
             ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, ty.clone(), idx)
         } else {
-            ObjectFieldType::read_from_array_buf(
-                gc,
-                None,
-                buf,
-                ty.clone(),
-                idx,
-                assumed_state(self.assume_local),
-            )
+            ObjectFieldType::read_from_array_buf(gc, None, buf, ty.clone(), idx, self.assumed)
         }
     }
 
@@ -3165,14 +3159,14 @@ impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
         ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container))
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn lending(&self) -> Box<dyn BuiltinOp> {
@@ -3220,7 +3214,7 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_builtin(
                 Box::new(ArrayUnsafeGetBoundsUncheckedOp {
-                    assume_local: false,
+                    assumed: RcState::Unknown,
                     lend: false,
                     arr_name: FullName::local(ARR_NAME),
                     idx_name: FullName::local(IDX_NAME),
@@ -3251,9 +3245,10 @@ pub struct ArrayTruncateBoundsUncheckedOp {
     /// When true, clone the array first if it is shared, so the shrink lands in a uniquely owned
     /// array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -3263,12 +3258,7 @@ impl BuiltinOp for ArrayTruncateBoundsUncheckedOp {
         let new_len = gc.get_scoped_obj_field(&self.len_name, 0).into_int_value();
 
         // Force the array to be unique before shrinking it in place.
-        let array = force_unique_or_assert(
-            gc,
-            array,
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
 
         // Release the dropped tail `[new_len, size)`, then lower the length to `new_len`. The caller
         // guarantees `0 <= new_len <= size`, so there is no size check.
@@ -3282,7 +3272,7 @@ impl BuiltinOp for ArrayTruncateBoundsUncheckedOp {
             size,
             elem_ty,
             TraverserWorkType::release(),
-            assumed_state(self.assume_local),
+            self.assumed,
         );
         array.insert_field(gc, ARRAY_SIZE_IDX, new_len)
     }
@@ -3316,14 +3306,14 @@ impl BuiltinOp for ArrayTruncateBoundsUncheckedOp {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -3380,7 +3370,7 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_builtin(
                 Box::new(ArrayTruncateBoundsUncheckedOp {
-                    assume_local: false,
+                    assumed: RcState::Unknown,
                     arr_name: FullName::local(ARR_NAME),
                     len_name: FullName::local(LEN_NAME),
                     force_unique: true,
@@ -3412,9 +3402,10 @@ pub struct ArrayAppendValueCapacityUncheckedOp {
     /// When true, clone the array first if it is shared, so the appended slots land in a uniquely
     /// owned array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -3427,25 +3418,13 @@ impl BuiltinOp for ArrayAppendValueCapacityUncheckedOp {
             .into_int_value();
 
         // Force the array to be unique before appending in place.
-        let array = force_unique_or_assert(
-            gc,
-            array,
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
 
         // Write `value` into the `count` uninitialized slots at the end and grow the length. The
         // caller guarantees `count >= 0` and `size + count <= capacity`.
         let size = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
         let buf = get_array_storage_buf(gc, &array);
-        ObjectFieldType::append_value_into_array_buf(
-            gc,
-            buf,
-            size,
-            count,
-            value,
-            assumed_state(self.assume_local),
-        );
+        ObjectFieldType::append_value_into_array_buf(gc, buf, size, count, value, self.assumed);
         let new_size = gc.builder().build_int_add(size, count, "new_size").unwrap();
         array.insert_field(gc, ARRAY_SIZE_IDX, new_size)
     }
@@ -3487,14 +3466,14 @@ impl BuiltinOp for ArrayAppendValueCapacityUncheckedOp {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -3554,7 +3533,7 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
                 vec![var_local(ARR_NAME)],
                 expr_builtin(
                     Box::new(ArrayAppendValueCapacityUncheckedOp {
-                        assume_local: false,
+                        assumed: RcState::Unknown,
                         arr_name: FullName::local(ARR_NAME),
                         value_name: FullName::local(VALUE_NAME),
                         count_name: FullName::local(COUNT_NAME),
@@ -3732,9 +3711,10 @@ pub struct ArraySetCapacityBoundsUncheckedOp {
     /// retain-copy a shared array's elements. Set false only where the array is statically known to
     /// be unique, leaving just the `realloc`.
     pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -3756,8 +3736,7 @@ impl BuiltinOp for ArraySetCapacityBoundsUncheckedOp {
         let storage = get_array_storage(gc, &array);
         let storage_ptr = storage.value(gc).into_pointer_value();
         build_capacity_check(gc, &elem_ty, new_cap, CapacityCheck::Run);
-        let (unique_bb, shared_bb) =
-            gc.build_branch_by_is_unique(storage_ptr, assumed_state(self.assume_local));
+        let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr, self.assumed);
         let current_func = unique_bb.get_parent().unwrap();
         let end_bb = gc
             .context
@@ -3776,16 +3755,8 @@ impl BuiltinOp for ArraySetCapacityBoundsUncheckedOp {
         let new_storage = alloc_array_storage(gc, elem_ty.clone(), new_cap, CapacityCheck::Skip);
         let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
         let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        ObjectFieldType::clone_array_buf(
-            gc,
-            len,
-            src_buf,
-            dst_buf,
-            elem_ty,
-            None,
-            assumed_state(self.assume_local),
-        );
-        release_replaced_array(gc, array.clone(), None, assumed_state(self.assume_local));
+        ObjectFieldType::clone_array_buf(gc, len, src_buf, dst_buf, elem_ty, None, self.assumed);
+        release_replaced_array(gc, array.clone(), None, self.assumed);
         let new_storage_val = new_storage.value(gc);
         let cloned_array = array
             .clone()
@@ -3834,14 +3805,14 @@ impl BuiltinOp for ArraySetCapacityBoundsUncheckedOp {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -3891,7 +3862,7 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_builtin(
                 Box::new(ArraySetCapacityBoundsUncheckedOp {
-                    assume_local: false,
+                    assumed: RcState::Unknown,
                     arr_name: FullName::local(ARR_NAME),
                     cap_name: FullName::local(CAP_NAME),
                     force_unique: true,
@@ -3922,9 +3893,10 @@ pub struct ArrayAppendCapacityUncheckedOp {
     /// When true, clone `dst` first if it is shared, so the appended slots land in a uniquely owned
     /// array. Set false only where `dst` is statically known to be unique. `src` is read either way.
     pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -3934,7 +3906,7 @@ impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
         let src = gc.get_scoped_obj(&self.src_name);
         let elem_ty = dst.ty.field_types(gc.type_env())[0].clone();
         let (dst, dst_len, dst_write) =
-            array_tail_destination(gc, dst, self.force_unique, assumed_state(self.assume_local));
+            array_tail_destination(gc, dst, self.force_unique, self.assumed);
 
         let src_storage = get_array_storage(gc, &src);
         let src_ptr = src_storage.value(gc).into_pointer_value();
@@ -3961,7 +3933,7 @@ impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
             .unwrap();
         let zero = gc.context.i64_type().const_zero();
         let src_emptied = src.clone().insert_field(gc, ARRAY_SIZE_IDX, zero);
-        gc.release(src_emptied, assumed_state(self.assume_local));
+        gc.release(src_emptied, self.assumed);
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Shared `src`: the elements stay in `src`, so retain each one into `dst`'s tail, then
@@ -3974,9 +3946,9 @@ impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
             dst_write,
             elem_ty,
             None,
-            assumed_state(self.assume_local),
+            self.assumed,
         );
-        gc.release(src, assumed_state(self.assume_local));
+        gc.release(src, self.assumed);
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Grow `dst`'s length by the number of appended elements.
@@ -4019,14 +3991,14 @@ impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -4083,7 +4055,7 @@ pub fn array_append_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(SRC_NAME), var_local(DST_NAME)],
         expr_builtin(
             Box::new(ArrayAppendCapacityUncheckedOp {
-                assume_local: false,
+                assumed: RcState::Unknown,
                 dst_name: FullName::local(DST_NAME),
                 src_name: FullName::local(SRC_NAME),
                 force_unique: true,
@@ -4114,9 +4086,10 @@ pub struct ArrayCopyCapacityBoundsUncheckedOp {
     /// owned array. Set false only where `dst` is statically known to be unique. `src` is borrowed
     /// either way.
     pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -4132,21 +4105,13 @@ impl BuiltinOp for ArrayCopyCapacityBoundsUncheckedOp {
         let elem_value_ty = elem_ty.get_embedded_type(gc);
         let n = gc.builder().build_int_sub(end, begin, "copy_n").unwrap();
         let (dst, dst_len, dst_write) =
-            array_tail_destination(gc, dst, self.force_unique, assumed_state(self.assume_local));
+            array_tail_destination(gc, dst, self.force_unique, self.assumed);
 
         // Retain each element of `src[begin, end)` into `dst`'s tail. `src` keeps its elements and
         // its reference for its caller.
         let src_buf = get_array_storage_buf(gc, &src);
         let src_read = build_gep_array_elem(gc, elem_value_ty, src_buf, begin, "copy_src_read");
-        ObjectFieldType::clone_array_buf(
-            gc,
-            n,
-            src_read,
-            dst_write,
-            elem_ty,
-            None,
-            assumed_state(self.assume_local),
-        );
+        ObjectFieldType::clone_array_buf(gc, n, src_read, dst_write, elem_ty, None, self.assumed);
 
         // Grow `dst`'s length by the number of copied elements.
         let new_dst_len = gc
@@ -4198,14 +4163,14 @@ impl BuiltinOp for ArrayCopyCapacityBoundsUncheckedOp {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -4267,7 +4232,7 @@ pub fn array_copy_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         ],
         expr_builtin(
             Box::new(ArrayCopyCapacityBoundsUncheckedOp {
-                assume_local: false,
+                assumed: RcState::Unknown,
                 dst_name: FullName::local(DST_NAME),
                 src_name: FullName::local(SRC_NAME),
                 begin_name: FullName::local(BEGIN_NAME),
@@ -4303,9 +4268,10 @@ pub struct ArrayGrowSizeOp {
     /// When true, clone the array first if it is shared, so the length grows on a uniquely owned
     /// array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -4326,12 +4292,7 @@ impl BuiltinOp for ArrayGrowSizeOp {
 
         // Force the array to be unique before growing it in place, so the length is written only on a
         // uniquely owned array.
-        let array = force_unique_or_assert(
-            gc,
-            array,
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
         array.insert_field(gc, ARRAY_SIZE_IDX, length)
     }
 
@@ -4364,14 +4325,14 @@ impl BuiltinOp for ArrayGrowSizeOp {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -4425,7 +4386,7 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_builtin(
                 Box::new(ArrayGrowSizeOp {
-                    assume_local: false,
+                    assumed: RcState::Unknown,
                     arr_name,
                     len_name,
                     force_unique: true,
@@ -4586,9 +4547,10 @@ pub struct ArraySetOp {
     /// fixed where the primitive is registered: `Array::set` sets it and
     /// `Array::unsafe_set_bounds_unchecked` clears it.
     bounds_checked: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -4600,12 +4562,7 @@ impl BuiltinOp for ArraySetOp {
         let value = gc.get_scoped_obj(&self.value_name);
 
         // Force array to be unique
-        let array = force_unique_or_assert(
-            gc,
-            array,
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
 
         // Perform write and return. `set` bounds-checks unless `--no-runtime-check` is set;
         // `unsafe_set_bounds_unchecked` never bounds-checks.
@@ -4615,15 +4572,7 @@ impl BuiltinOp for ArraySetOp {
             None
         };
         let array_buf = get_array_storage_buf(gc, &array);
-        ObjectFieldType::write_to_array_buf(
-            gc,
-            len,
-            array_buf,
-            idx,
-            value,
-            true,
-            assumed_state(self.assume_local),
-        );
+        ObjectFieldType::write_to_array_buf(gc, len, array_buf, idx, value, true, self.assumed);
         array
     }
 
@@ -4669,14 +4618,14 @@ impl BuiltinOp for ArraySetOp {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -4723,7 +4672,7 @@ fn set_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
     let body = expr_builtin(
         Box::new(ArraySetOp {
-            assume_local: false,
+            assumed: RcState::Unknown,
             array_name: FullName::local("array"),
             idx_name: FullName::local("idx"),
             value_name: FullName::local("value"),
@@ -4784,9 +4733,10 @@ pub struct ArraySwapOp {
     /// It is fixed where the primitive is registered: `Array::swap` sets it and
     /// `Array::unsafe_swap_bounds_unchecked` clears it.
     bounds_checked: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -4798,12 +4748,7 @@ impl BuiltinOp for ArraySwapOp {
         let j = gc.get_scoped_obj_field(&self.j_name, 0).into_int_value();
 
         // Force array to be unique.
-        let array = force_unique_or_assert(
-            gc,
-            array,
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
 
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         // `swap` bounds-checks unless `--no-runtime-check` is set; `unsafe_swap_bounds_unchecked`
@@ -4861,14 +4806,14 @@ impl BuiltinOp for ArraySwapOp {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -4905,7 +4850,7 @@ impl BuiltinOp for ArraySwapOp {
 fn swap_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let body = expr_builtin(
         Box::new(ArraySwapOp {
-            assume_local: false,
+            assumed: RcState::Unknown,
             array_name: FullName::local("array"),
             i_name: FullName::local("i"),
             j_name: FullName::local("j"),
@@ -4964,9 +4909,10 @@ pub struct ArrayPunchOp {
     idx_name: FullName,
     /// The local binding holding the array to punch.
     arr_name: FullName,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -4978,12 +4924,7 @@ impl BuiltinOp for ArrayPunchOp {
         let idx = idx_obj.extract_field(gc, 0).into_int_value();
 
         // The array has no hole yet, so this is an ordinary clone-if-shared.
-        let array = force_unique_or_assert(
-            gc,
-            array,
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
 
         // Move the element at `idx` out without retaining, leaving its slot as the hole; the
         // length is unchanged.
@@ -5045,14 +4986,14 @@ impl BuiltinOp for ArrayPunchOp {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -5147,7 +5088,7 @@ pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(IDX_NAME), var_local(ARR_NAME)],
         expr_builtin(
             Box::new(ArrayPunchOp {
-                assume_local: false,
+                assumed: RcState::Unknown,
                 force_unique,
                 idx_name: FullName::local(IDX_NAME),
                 arr_name: FullName::local(ARR_NAME),
@@ -5177,9 +5118,10 @@ pub struct PunchedArrayPlugOp {
     elem_name: FullName,
     /// The local binding holding the punched array.
     punched_name: FullName,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -5194,13 +5136,8 @@ impl BuiltinOp for PunchedArrayPlugOp {
         let idx = idx_obj.extract_field(gc, 0).into_int_value();
 
         // On a shared array, clone skipping the hole so this plug gets a private array.
-        let array = force_unique_or_assert_with_hole(
-            gc,
-            array,
-            Some(idx),
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
+        let array =
+            force_unique_or_assert_with_hole(gc, array, Some(idx), self.force_unique, self.assumed);
 
         // Write the element back into the hole (no bounds check, and no release of the hole slot).
         let buf = get_array_storage_buf(gc, &array);
@@ -5242,14 +5179,14 @@ impl BuiltinOp for PunchedArrayPlugOp {
         unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_ARRAY_IDX as usize], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -5300,7 +5237,7 @@ pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(ELEM_NAME), var_local(PUNCHED_NAME)],
         expr_builtin(
             Box::new(PunchedArrayPlugOp {
-                assume_local: false,
+                assumed: RcState::Unknown,
                 force_unique,
                 elem_name: FullName::local(ELEM_NAME),
                 punched_name: FullName::local(PUNCHED_NAME),
@@ -5596,9 +5533,10 @@ pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub struct StructGetOp {
     pub var_name: FullName,
     field_idx: usize,
-    /// Whether the objects this op reference-counts inside `generate` are known to be in the local
-    /// reference-counting state, so that those operations need no state dispatch.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the objects this op reference-counts inside `generate` are
+    /// known to be in, which those operations run under; `Unknown` has them read it.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
     /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
     /// container goes on holding it.
     #[serde(default)]
@@ -5611,7 +5549,7 @@ impl StructGetOp {
         StructGetOp {
             var_name: container.clone(),
             field_idx,
-            assume_local: false,
+            assumed: RcState::Unknown,
             lend: false,
         }
     }
@@ -5686,7 +5624,7 @@ impl BuiltinOp for StructGetOp {
         let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
         let field = ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
         if self.field_read(&container_ty, gc.type_env()) == ComponentRead::Retained {
-            gc.retain(field.clone(), assumed_state(self.assume_local));
+            gc.retain(field.clone(), self.assumed);
         }
         field
     }
@@ -5745,14 +5683,14 @@ impl BuiltinOp for StructGetOp {
         read_component_locality(result_ty, arg_tys, type_env, self.field_index())
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn lending(&self) -> Box<dyn BuiltinOp> {
@@ -6155,9 +6093,10 @@ pub struct CaptureProjectOp {
     pub cap_name: FullName,
     pub cap_idx: usize,
     pub cap_tys: Vec<Arc<TypeNode>>,
-    /// Whether the objects this op reference-counts inside `generate` are known to be in the local
-    /// reference-counting state, so that those operations need no state dispatch.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the objects this op reference-counts inside `generate` are
+    /// known to be in, which those operations run under; `Unknown` has them read it.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -6168,7 +6107,7 @@ impl BuiltinOp for CaptureProjectOp {
             self.cap_idx,
             &self.cap_tys,
             ty,
-            assumed_state(self.assume_local),
+            self.assumed,
         )
     }
 
@@ -6200,14 +6139,14 @@ impl BuiltinOp for CaptureProjectOp {
         ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container))
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn internal_rc_targets(
@@ -6281,9 +6220,10 @@ pub struct StructPunchOp {
     /// Whether a struct that is shared is cloned before the field is moved out. Where false, the
     /// operand is taken to be uniquely owned already.
     pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 impl StructPunchOp {
@@ -6318,12 +6258,7 @@ impl BuiltinOp for StructPunchOp {
         let struct_obj = gc.get_scoped_obj(&self.var_name);
 
         // Punching moves a field out of the struct, so the struct has to be uniquely owned.
-        let struct_obj = force_unique_or_assert(
-            gc,
-            struct_obj,
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
+        let struct_obj = force_unique_or_assert(gc, struct_obj, self.force_unique, self.assumed);
 
         // Move out struct field value without releasing the struct itself.
         let field = ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
@@ -6371,14 +6306,14 @@ impl BuiltinOp for StructPunchOp {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -6472,7 +6407,7 @@ pub fn struct_punch(
         vec![var_local(VAR_NAME)],
         expr_builtin(
             Box::new(StructPunchOp {
-                assume_local: false,
+                assumed: RcState::Unknown,
                 var_name: FullName::local(VAR_NAME),
                 field_idx: field_idx as usize,
                 force_unique,
@@ -6494,9 +6429,10 @@ pub struct StructPlugInOp {
     pub field_name: FullName,
     field_idx: usize,
     pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -6511,12 +6447,8 @@ impl BuiltinOp for StructPlugInOp {
         let field = gc.get_scoped_obj(&self.field_name);
 
         // Make the punched struct unique before plugging-in the field value.
-        let punched_struct = force_unique_or_assert(
-            gc,
-            punched_struct,
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
+        let punched_struct =
+            force_unique_or_assert(gc, punched_struct, self.force_unique, self.assumed);
 
         // Convert type of punched_struct into the struct type.
         let punched_value = punched_struct.value(gc);
@@ -6562,14 +6494,14 @@ impl BuiltinOp for StructPlugInOp {
         unique_check_on_boxed_leaf(PLUG_IN_PUNCHED_ARG, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -6736,7 +6668,7 @@ pub fn struct_plug_in(
             vec![var_local(FIELD_NAME)],
             expr_builtin(
                 Box::new(StructPlugInOp {
-                    assume_local: false,
+                    assumed: RcState::Unknown,
                     punched_struct_name: FullName::local(PUNCHED_STRUCT_NAME),
                     field_name: FullName::local(FIELD_NAME),
                     field_idx: field_idx as usize,
@@ -7500,9 +7432,10 @@ pub struct StructSetOp {
     /// When true, clone the struct first if it is shared, so the write lands in a uniquely owned
     /// struct. Set false only where the struct is statically known to be unique.
     pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -7513,17 +7446,12 @@ impl BuiltinOp for StructSetOp {
         let struct_obj = gc.get_scoped_obj(&self.struct_name);
 
         // Make struct object unique.
-        let struct_obj = force_unique_or_assert(
-            gc,
-            struct_obj,
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
+        let struct_obj = force_unique_or_assert(gc, struct_obj, self.force_unique, self.assumed);
 
         // Release old value
         let old_value =
             ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
-        gc.release(old_value, assumed_state(self.assume_local));
+        gc.release(old_value, self.assumed);
 
         // Set new value
         ObjectFieldType::move_into_struct_field(gc, struct_obj, self.field_idx as u32, &value)
@@ -7562,14 +7490,14 @@ impl BuiltinOp for StructSetOp {
         unique_check_on_boxed_leaf(STRUCT_SET_STRUCT_ARG, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -7651,7 +7579,7 @@ pub fn struct_set(
             vec![var_local(STRUCT_NAME)],
             expr_builtin(
                 Box::new(StructSetOp {
-                    assume_local: false,
+                    assumed: RcState::Unknown,
                     value_name: FullName::local(VALUE_NAME),
                     struct_name: FullName::local(STRUCT_NAME),
                     field_idx,
@@ -7870,9 +7798,10 @@ pub struct UnionAsOp {
     /// selected the variant, so that the read checks no tag.
     #[serde(default)]
     variant_known: bool,
-    /// Whether the objects this op reference-counts inside `generate` are known to be in the local
-    /// reference-counting state, so that those operations need no state dispatch.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the objects this op reference-counts inside `generate` are
+    /// known to be in, which those operations run under; `Unknown` has them read it.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
     /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
     /// container goes on holding it.
     #[serde(default)]
@@ -7887,7 +7816,7 @@ impl UnionAsOp {
             union_arg_name: union.clone(),
             field_idx: variant_idx,
             variant_known: false,
-            assume_local: false,
+            assumed: RcState::Unknown,
             lend: false,
         }
     }
@@ -7944,7 +7873,7 @@ impl BuiltinOp for UnionAsOp {
         // reference the reader then holds.
         let payload = ObjectFieldType::get_union_value_noretain_norelease(gc, obj, ty);
         if self.payload_read(&union_ty, gc.type_env()) == ComponentRead::Retained {
-            gc.retain(payload.clone(), assumed_state(self.assume_local));
+            gc.retain(payload.clone(), self.assumed);
         }
         payload
     }
@@ -8025,14 +7954,14 @@ impl BuiltinOp for UnionAsOp {
         read_component_locality(result_ty, arg_tys, type_env, self.variant_index())
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn lending(&self) -> Box<dyn BuiltinOp> {
@@ -8689,9 +8618,10 @@ pub struct IsUniqueOp {
     /// Set where the caller has proven the argument statically unique: the runtime uniqueness check
     /// is then known to succeed, so it is dropped and the returned flag is the constant `true`.
     pub(crate) assume_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 /// The operand `is_unique` reports on: the value whose reference count it tests and hands back.
@@ -8740,8 +8670,7 @@ impl BuiltinOp for IsUniqueOp {
         } else {
             let current_func = gc.current_function();
 
-            let (unique_bb, shared_bb) =
-                gc.build_branch_by_is_unique(obj_ptr, assumed_state(self.assume_local));
+            let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr, self.assumed);
             // Add continuing basic block.
             let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
@@ -8820,14 +8749,14 @@ impl BuiltinOp for IsUniqueOp {
         vec![]
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -8888,7 +8817,7 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_builtin(
             Box::new(IsUniqueOp {
-                assume_local: false,
+                assumed: RcState::Unknown,
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
             }),
@@ -8912,9 +8841,10 @@ pub struct ArrayIsStorageUniqueOp {
     /// As in `IsUniqueOp`: set where the caller proved the array statically unique, so the runtime
     /// check is dropped and the flag is the constant `true`.
     pub(crate) assume_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -8940,8 +8870,7 @@ impl BuiltinOp for ArrayIsStorageUniqueOp {
             let storage_ptr = get_array_storage(gc, &array).value(gc).into_pointer_value();
             let current_func = gc.current_function();
 
-            let (unique_bb, shared_bb) =
-                gc.build_branch_by_is_unique(storage_ptr, assumed_state(self.assume_local));
+            let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr, self.assumed);
             let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
             gc.builder().position_at_end(unique_bb);
@@ -9018,14 +8947,14 @@ impl BuiltinOp for ArrayIsStorageUniqueOp {
         vec![]
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -9071,7 +9000,7 @@ pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_builtin(
             Box::new(ArrayIsStorageUniqueOp {
-                assume_local: false,
+                assumed: RcState::Unknown,
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
             }),
@@ -9485,16 +9414,6 @@ const APPEND_SRC_ARG: usize = 1;
 /// The operand position of the array `_unsafe_copy_capacity_bounds_unchecked` copies from.
 const COPY_SRC_ARG: usize = 1;
 
-/// The reference-counting state an op's own checks and reference counting run under: `Local` where
-/// locality inference proved the objects they touch local, `Unknown` otherwise.
-fn assumed_state(assume_local: bool) -> RcState {
-    if assume_local {
-        RcState::Local
-    } else {
-        RcState::Unknown
-    }
-}
-
 /// Clone `val` when it is shared, so that a write into it is not observed elsewhere, or check the
 /// proof that let the clone go.
 ///
@@ -9819,9 +9738,10 @@ pub struct MutatePtrOp {
     /// When true, clone the value first if it is shared, so the function writes into a uniquely
     /// owned one. Set false only where the value is statically known to be unique.
     pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+    /// The reference-counting state the object this op's declared uniqueness check tests is known
+    /// to be in, which the check runs under; `Unknown` has it read the state.
+    #[serde(default)]
+    pub(crate) assumed: RcState,
 }
 
 #[typetag::serde]
@@ -9837,7 +9757,7 @@ impl BuiltinOp for MutatePtrOp {
         let ios = gc.get_scoped_obj(&self.ios_name);
 
         // Clone the value first if it is shared, so the function writes into a uniquely owned one.
-        let x = force_unique_or_assert(gc, x, self.force_unique, assumed_state(self.assume_local));
+        let x = force_unique_or_assert(gc, x, self.force_unique, self.assumed);
 
         // Apply the function to the pointer, threading `ios`.
         let ptr = get_lent_ptr(gc, &x);
@@ -9886,14 +9806,14 @@ impl BuiltinOp for MutatePtrOp {
         unique_check_on_boxed_leaf(LENT_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
+    fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assume_local = true;
+        c.assumed = state;
         Box::new(c)
     }
 
-    fn assumes_local(&self) -> bool {
-        self.assume_local
+    fn assumed_state(&self) -> RcState {
+        self.assumed
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -9984,7 +9904,7 @@ fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprN
                     env_name,
                     ios_name: FullName::local(IOS_NAME),
                     force_unique: true,
-                    assume_local: false,
+                    assumed: RcState::Unknown,
                 }),
                 ret_ty,
                 None,

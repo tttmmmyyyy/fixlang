@@ -956,7 +956,7 @@ mod tests {
     fn projecting_func(read_var: &RcVar, cap_idx: usize, cap_tys: Vec<Arc<TypeNode>>) -> RcFunc {
         let capture = var_of("cap", make_dynamic_object_ty());
         let proj = Box::new(CaptureProjectOp {
-            assume_local: false,
+            assumed: RcState::Unknown,
             cap_name: read_var.name.clone(),
             cap_idx,
             cap_tys,

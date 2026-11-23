@@ -3,11 +3,11 @@
 // The integration tests read the `--emit-rc-ir` dump, which tags each kind of annotated site: a
 // `Retain` / `Release` proved local with `@local`, one whose whole reachable graph is proved local
 // with `@deeplocal`, and one on a value read out of a global's graph with `@global`; an operation
-// whose internal reference counting is proved local with a trailing `@local` on its right-hand
-// side. A small program with named `let`s therefore asserts the analysis end to end. The negative
-// cases are the point: an operation
-// that reaches a global object may not be tagged local, and each case asserts on a site the dump
-// really contains, so one that stopped producing that site would fail rather than pass vacuously.
+// whose internal reference counting is proved local or global with the same trailing tag on its
+// right-hand side. A small program with named `let`s therefore asserts the analysis end to end.
+// The negative cases are the point: an operation that reaches a global object may not be tagged
+// local, and each case asserts on a site the dump really contains, so one that stopped producing
+// that site would fail rather than pass vacuously.
 //
 // The in-process tests run the same programs under `Configuration::develop_mode()`, where every
 // annotated site carries the assertion that its object really is in the state the annotation
@@ -171,8 +171,9 @@ mod integration_tests {
 
         // The reference counting an operation performs inside itself, on the same operation applied
         // to a local container and to the global. Appending to a fresh array retains the value it
-        // takes in, so appending the global keeps the dispatch while appending a number drops it.
-        assert_op_state(&dump, "array_append_value[unique]", "Main::g#", "");
+        // takes in, so appending the global counts a global object, which is skipped, while
+        // appending a number counts nothing and stays local.
+        assert_op_state(&dump, "array_append_value[unique]", "Main::g#", "global");
         let fresh = binding_vars(&dump, "fresh");
         assert_op_state(&dump, "array_append_value[unique]", &fresh[0], "local");
 
@@ -208,9 +209,9 @@ mod integration_tests {
         assert_op_state(&dump, "union_as_0", &local_holder[0], "local");
         assert_op_state(&dump, "union_payload_0", &local_holder[0], "local");
 
-        assert_op_state(&dump, "struct_get_0", "Main::gpair#", "");
-        assert_op_state(&dump, "struct_get_1", "Main::gpair#", "");
-        assert_op_state(&dump, "union_payload_0", "Main::gholder#", "");
+        assert_op_state(&dump, "struct_get_0", "Main::gpair#", "global");
+        assert_op_state(&dump, "struct_get_1", "Main::gpair#", "global");
+        assert_op_state(&dump, "union_payload_0", "Main::gholder#", "global");
     }
 
     /// Verifies that what a field getter or the variant arm of a `match` takes out of a global's

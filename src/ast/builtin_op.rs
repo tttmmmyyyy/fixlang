@@ -3,7 +3,7 @@ use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::generator::{Generator, Object};
 use crate::optimization::lambda_set::BuiltinFlow;
-use crate::rc_ir::ast::{FieldPath, RcTarget, UniqueCheckOperand};
+use crate::rc_ir::ast::{FieldPath, RcState, RcTarget, UniqueCheckOperand};
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::ExtShape;
 use crate::rc_ir::provenance::{LeafOrigin, Provenance};
@@ -142,20 +142,23 @@ pub trait BuiltinOp: DynClone + Send + Sync {
         None
     }
 
-    /// This op with every object it declared taken to be local: the one its uniqueness check tests,
-    /// and the ones `internal_rc_targets` names. `generate` then counts them and tests the count
-    /// without first reading the state. An op declaring either is asked for this, and every such op
-    /// overrides it.
+    /// This op with every object it declared taken to be in the state `state`: the one its
+    /// uniqueness check tests, and the ones `internal_rc_targets` names. `generate` then counts
+    /// them and tests the count under that state, without first reading it. An op declaring either
+    /// is asked for this, and every such op overrides it.
     ///
     /// A `generate` that emits a check or a reference count it does not declare leaves that one
     /// reading the state, so the declarations stay honest about what the annotation covers.
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
-        unreachable!("assuming_local called on an op that declares no uniqueness check and no reference counting")
+    fn assuming(&self, _state: RcState) -> Box<dyn BuiltinOp> {
+        unreachable!(
+            "assuming called on an op that declares no uniqueness check and no reference counting"
+        )
     }
 
-    /// Whether `assuming_local` was applied. The RC IR dump renders it.
-    fn assumes_local(&self) -> bool {
-        false
+    /// The state `assuming` was applied with, `Unknown` where it was not. The RC IR dump renders
+    /// it.
+    fn assumed_state(&self) -> RcState {
+        RcState::Unknown
     }
 
     /// This op with its runtime uniqueness branch dropped. Only an op that reports a branch through
@@ -221,10 +224,10 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     /// instantiated at. An op that counts none answers the empty list and is never annotated.
     ///
     /// **The declaration has to cover every retain and release `generate` emits under the state the
-    /// annotation carries** — that is, every one it counts through `assumed_state`. The annotation
+    /// annotation carries** — that is, every one it counts under `assumed_state`. The annotation
     /// says of all of them at once that the objects they touch are local, so one left out is the
     /// direction of error that corrupts memory. It is the same kind of hand-maintained claim as
-    /// `unique_check_operand`, and `assuming_local` is what carries the answer back.
+    /// `unique_check_operand`, and `assuming` is what carries the answer back.
     ///
     /// What the same `generate` reaches with `RcState::Unknown` pinned in is outside the declaration
     /// by construction: the annotation cannot reach it, so it goes on reading the state whatever

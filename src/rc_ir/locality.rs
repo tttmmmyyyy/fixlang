@@ -811,10 +811,12 @@ impl<'a> Walk<'a> {
             .annotation()
     }
 
-    /// The operation annotated as acting on local objects, where this clone's inputs prove every
-    /// object it touches inside `generate` local: the one its declared uniqueness check tests, and
-    /// the ones `internal_rc_targets` names. One annotation covers them all, so one unproven target
-    /// leaves the whole operation reading the state.
+    /// The operation annotated with the state of the objects it touches inside `generate`: the one
+    /// its declared uniqueness check tests, and the ones `internal_rc_targets` names. They are
+    /// global where the operation only counts references and every one it counts is to an object
+    /// of a global's graph, and local where this clone's inputs prove every one of them local. One
+    /// annotation covers them all, so one unproven target leaves the whole operation reading the
+    /// state.
     ///
     /// A check the same `generate` emits without declaring is not covered and goes on reading it.
     fn annotate_op(
@@ -843,6 +845,12 @@ impl<'a> Walk<'a> {
             });
             checked.chain(counted)
         };
+        // A uniqueness check asks for a count, which a global object does not keep. An operation
+        // that counts no boxed leaf has no object to be global.
+        let counts_a_leaf = consulted().next().is_some();
+        if check.is_none() && counts_a_leaf && consulted().all(|leaf| leaf.global) {
+            return Some(op.assuming(RcState::Global));
+        }
         let inputs = self.site_inputs(consulted())?;
         if let Some(check) = &check {
             let leaf = arg_shapes[check.container_index].leaf_at(&check.path);
@@ -866,7 +874,7 @@ impl<'a> Walk<'a> {
                 return None;
             }
         }
-        Some(op.assuming_local())
+        Some(op.assuming(RcState::Local))
     }
 
     /// Bind the fields a `DestructureUnboxed` names, each to the projection of the container's own

@@ -180,12 +180,7 @@ fn read_states(body: &RcExprNode, lent: &Set<FullName>) -> Map<FullName, RcState
             return;
         };
         if lent.contains(&x.name) {
-            let state = if op.assumes_local() {
-                RcState::Local
-            } else {
-                RcState::Unknown
-            };
-            states.insert(x.name.clone(), state);
+            states.insert(x.name.clone(), op.assumed_state());
         }
     });
     states

@@ -25,7 +25,7 @@ use crate::misc::{grow_stack, Map, Set};
 use crate::object::occupies_no_storage;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
+    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
 use std::mem;
 use std::sync::Arc;
@@ -348,7 +348,7 @@ impl<'a> Lowerer<'a> {
                 captures.iter().map(|(_, v)| v.ty.clone()).collect();
             for (i, (ast_name, _)) in captures.iter().enumerate() {
                 let op = Box::new(CaptureProjectOp {
-                    assume_local: false,
+                    assumed: RcState::Unknown,
                     cap_name: capture_var.name.clone(),
                     cap_idx: i,
                     cap_tys: capture_tys.clone(),

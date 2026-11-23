@@ -5,7 +5,7 @@ use crate::ast::name::{FullName, Name};
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
@@ -277,9 +277,10 @@ pub enum RcRhs {
 
 /// The reference-counting state dispatch of a `Retain` or `Release`. Lowering emits `Unknown`,
 /// which is always sound; locality inference specializes it.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 pub enum RcState {
     /// Read the object's refcount state at run time and dispatch three ways.
+    #[default]
     Unknown,
     /// Known local: non-atomic increment/decrement on the object itself, no state check. What it
     /// reaches is unknown, so the traverser a release runs at zero still dispatches per child.
