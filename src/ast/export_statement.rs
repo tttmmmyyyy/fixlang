@@ -17,7 +17,6 @@ use crate::generator::Object;
 use crate::object::create_obj;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::RcState;
 use std::sync::Arc;
 
 // The export statement.
@@ -177,7 +176,7 @@ impl ExportStatement {
                 // The result is `(IOState, a)`; the state holds no reference, so taking it out and
                 // leaving it unused drops nothing.
                 fix_value =
-                    ObjectFieldType::get_struct_fields(gc, &fix_value, &[0, 1], RcState::Unknown)
+                    ObjectFieldType::take_unboxed_struct_fields(gc, &fix_value, &[0, 1])
                         [1]
                     .clone();
             }

@@ -990,8 +990,9 @@ impl<'a> Lowerer<'a> {
                     }
                     fields.push((field_idx, field_var));
                 }
-                // Extract all fields in one step (mirroring the back end's `get_struct_fields`); RC
-                // insertion retains the container beforehand iff it is used after this destructure.
+                // Extract all fields in one step. RC insertion retains an unboxed container
+                // beforehand iff it is used after this destructure, and leaves a boxed one its own
+                // reference.
                 self.push_destructure(obj, fields, pat.info.source.clone(), bindings);
                 for (field_var, subpat) in nested {
                     bound_names.extend(self.destructure_pattern(subpat, &field_var, bindings));
