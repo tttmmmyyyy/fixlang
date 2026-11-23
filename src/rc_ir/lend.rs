@@ -83,13 +83,13 @@ fn lent_values(model: &BodyModel, body: &RcExprNode) -> Set<FullName> {
             anchors_of(model, value, &containers, &lent, &mut anchors);
         }
         let mut dependents: Map<FullName, Set<FullName>> = Map::default();
-        for (value, of) in &anchors {
-            match of {
+        for (value, value_anchors) in &anchors {
+            match value_anchors {
                 None => {
                     failing.insert(value.clone());
                 }
-                Some(of) => {
-                    for anchor in of {
+                Some(value_anchors) => {
+                    for anchor in value_anchors {
                         dependents
                             .entry(anchor.clone())
                             .or_default()
@@ -129,10 +129,10 @@ fn roots_consumed_in_part(model: &BodyModel, body: &RcExprNode) -> Set<FullName>
         if matches!(rhs, RcRhs::Match(..)) {
             return;
         }
-        let consumed = positions(model.rhs_consumed_leaves(rhs, &x.ty));
+        let positions = positions(model.rhs_consumed_leaves(rhs, &x.ty));
         for v in operands(rhs) {
             for unit in rc_units(&v.ty, model.type_env) {
-                if consumed_positions(model, &consumed, v, &unit).is_none() {
+                if consumed_positions(model, &positions, v, &unit).is_none() {
                     roots.extend(roots_under(model, &v.name, &v.ty, &unit));
                 }
             }
@@ -266,15 +266,15 @@ fn anchors_of(
     let answer = if roots.iter().all(|root| !root.is_local()) {
         Some(Set::default())
     } else if roots.iter().all(|root| lent.contains(root)) {
-        let mut of = Set::default();
+        let mut container_anchors = Set::default();
         let mut held = true;
         for root in &roots {
             match anchors_of(model, root, containers, lent, anchors) {
-                Some(more) => of.extend(more),
+                Some(more) => container_anchors.extend(more),
                 None => held = false,
             }
         }
-        held.then_some(of)
+        held.then_some(container_anchors)
     } else if sole_object(model, container).is_some_and(|(root, _)| !lent.contains(&root)) {
         Some(Set::from_iter([value.clone()]))
     } else {
@@ -446,9 +446,9 @@ impl Walk<'_, '_> {
         if count.is_some_and(|c| !c.broken) {
             return;
         }
-        let read = roots_under(self.model, &v.name, &v.ty, &vec![]);
+        let used = roots_under(self.model, &v.name, &v.ty, &vec![]);
         self.failing
-            .extend(read.into_iter().filter(|r| self.dependents.contains(r)));
+            .extend(used.into_iter().filter(|r| self.dependents.contains(r)));
     }
 }
 
@@ -464,15 +464,15 @@ struct Lender<'l, 'm> {
 
 impl Lender<'_, '_> {
     /// `node` with its lent reads lending, the reference counting of lent values dropped, and a
-    /// retain before each consume of a lent value. `returns` says whether the `Ret` ending `node`
-    /// returns from the body, which consumes the value; the `Ret` ending an arm of a match hands
-    /// the value to the variable the match binds, an alias.
-    fn rewrite(&self, node: &RcExprNode, returns: bool) -> RcExprNode {
-        grow_stack(|| self.rewrite_inner(node, returns))
+    /// retain before each consume of a lent value. `returns_from_func` says whether the `Ret` ending
+    /// `node` returns from the body, which consumes the value; the `Ret` ending an arm of a match
+    /// hands the value to the variable the match binds, an alias.
+    fn rewrite(&self, node: &RcExprNode, returns_from_func: bool) -> RcExprNode {
+        grow_stack(|| self.rewrite_inner(node, returns_from_func))
     }
 
     /// One node of `rewrite`, rebuilt over its rewritten continuation.
-    fn rewrite_inner(&self, node: &RcExprNode, returns: bool) -> RcExprNode {
+    fn rewrite_inner(&self, node: &RcExprNode, returns_from_func: bool) -> RcExprNode {
         let source = &node.source;
         match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => {
@@ -484,13 +484,13 @@ impl Lender<'_, '_> {
                     RcExpr::Let(
                         x.clone(),
                         RcRhs::Match(scrutinee.clone(), arms),
-                        self.rewrite(k, returns),
+                        self.rewrite(k, returns_from_func),
                     ),
                     source.clone(),
                 )
             }
             RcExpr::Let(x, rhs, k) => {
-                let lending = if self.lent.contains(&x.name) {
+                let new_rhs = if self.lent.contains(&x.name) {
                     let RcRhs::Builtin(op, args) = rhs else {
                         unreachable!(
                             "the lent `{}` is bound by something other than an op",
@@ -505,7 +505,7 @@ impl Lender<'_, '_> {
                     rhs.clone()
                 };
                 let bound = RcExprNode::new(
-                    RcExpr::Let(x.clone(), lending, self.rewrite(k, returns)),
+                    RcExpr::Let(x.clone(), new_rhs, self.rewrite(k, returns_from_func)),
                     source.clone(),
                 );
                 let consumed = self.model.rhs_consumed_leaves(rhs, &x.ty);
@@ -520,7 +520,7 @@ impl Lender<'_, '_> {
                     .iter()
                     .cloned()
                     .partition(|(_, f)| self.lent.contains(&f.name));
-                let mut out = self.rewrite(k, returns);
+                let mut out = self.rewrite(k, returns_from_func);
                 if !kept.is_empty() {
                     out = RcExprNode::new(
                         RcExpr::Destructure(container.clone(), kept, *state, out),
@@ -546,7 +546,7 @@ impl Lender<'_, '_> {
                     .into_iter()
                     .filter(|unit| !self.counts_lent(v, unit))
                     .collect();
-                kept.into_iter().rev().fold(self.rewrite(k, returns), |k, unit| {
+                kept.into_iter().rev().fold(self.rewrite(k, returns_from_func), |k, unit| {
                     let expr = if is_release {
                         RcExpr::Release(v.clone(), unit, *state, k)
                     } else {
@@ -556,9 +556,9 @@ impl Lender<'_, '_> {
                 })
             }
             RcExpr::Destructure(..) | RcExpr::Eval(..) => {
-                map_continuation(node, |k| self.rewrite(k, returns))
+                map_continuation(node, |k| self.rewrite(k, returns_from_func))
             }
-            RcExpr::Ret(v) if returns => {
+            RcExpr::Ret(v) if returns_from_func => {
                 let consumed = boxed_leaf_paths(&v.ty, self.model.type_env)
                     .into_iter()
                     .map(|leaf| (v.name.clone(), leaf))
