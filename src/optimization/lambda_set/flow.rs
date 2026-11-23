@@ -13,10 +13,10 @@ use crate::misc::Set;
 /// values are closures the operation builds or calls at run time by making it Dynamic
 /// (`make_own_dynamic`, `make_all_dynamic`). The places no function flows through — the functions
 /// of an operand the operation leaves where they are or drops, the places of the result it puts no
-/// function in — the rule declares with `no_flow`.
+/// function in — the rule declares with `no_other_flow`.
 ///
 /// A rule accounts for every slot of every operand and of the result in one of these ways, and
-/// `unaccounted` names a slot it left out. A slot left out is the mark of a flow the rule forgot,
+/// `describe_unaccounted_slot` names a slot it left out. A slot left out is the mark of a flow the rule forgot,
 /// which would leave the functions flowing there out of the set they reach.
 pub struct BuiltinFlow<'a, 'e> {
     /// The slots of the program's types.
@@ -85,7 +85,7 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
     /// Declares that no function flows through the slots of `ty` beyond the flows `same` declares
     /// there: the operation leaves the functions an operand holds there where they are or drops
     /// them, or puts no function in the result there.
-    pub fn no_flow(&mut self, ty: &AType) {
+    pub fn no_other_flow(&mut self, ty: &AType) {
         self.account(ty);
     }
 
@@ -129,7 +129,7 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
 
     /// A slot of an operand or of the result that the rule has not accounted for, named as the
     /// place it is at and the type there; `None` where the rule accounted for every slot.
-    pub fn unaccounted(&self) -> Option<String> {
+    pub fn describe_unaccounted_slot(&self) -> Option<String> {
         let (place_idx, ty, slot_idx) = self
             .operands
             .iter()

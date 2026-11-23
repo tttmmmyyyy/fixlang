@@ -503,12 +503,12 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 b.op.lambda_set_flow(&mut flow);
                 // A slot the rule left out would receive no set from the operation, so a function
                 // that flows there at run time would be one the inference never saw.
-                if let Some(slot) = flow.unaccounted() {
+                if let Some(slot) = flow.describe_unaccounted_slot() {
                     panic!(
                         "the lambda set flow of the builtin `{}` says nothing about {}: it \
                          declares where the functions there flow (`same`), that they are \
                          closures built at run time (`make_own_dynamic`), or that none flows \
-                         there (`no_flow`)",
+                         there (`no_other_flow`)",
                         b.op.name(),
                         slot
                     );

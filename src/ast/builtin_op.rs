@@ -127,8 +127,8 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     ///
     /// A rule accounts for every slot of every operand and of the result: by the flow it declares
     /// there (`BuiltinFlow::same`), by making it Dynamic, or by declaring that no function flows
-    /// there (`BuiltinFlow::no_flow`). The inference stops the compiler on a rule that leaves a
-    /// slot out (`BuiltinFlow::unaccounted`).
+    /// there (`BuiltinFlow::no_other_flow`). The inference stops the compiler on a rule that leaves a
+    /// slot out (`BuiltinFlow::describe_unaccounted_slot`).
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         flow.make_all_dynamic();
     }

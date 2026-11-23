@@ -714,8 +714,8 @@ main = (
         assert_eq!(classes_of("c6"), classes_of("c12"));
     }
 
-    /// A flow rule accounts for a slot by `same`, by `no_flow`, by `make_own_dynamic` or by
-    /// `make_all_dynamic`, and `BuiltinFlow::unaccounted` reports the rule until every slot of every
+    /// A flow rule accounts for a slot by `same`, by `no_other_flow`, by `make_own_dynamic` or by
+    /// `make_all_dynamic`, and `BuiltinFlow::describe_unaccounted_slot` reports the rule until every slot of every
     /// operand and of the result is accounted for. The operation here takes a struct of two
     /// function fields and a function taking a function, and gives a function.
     #[test]
@@ -754,11 +754,11 @@ main = println(((p.@f)(1) + h(p.@g)).to_string);
             let mut flow =
                 BuiltinFlow::new(&inf.layout, solver, operands, result, "op".to_string());
             declare(&mut flow);
-            flow.unaccounted().is_some()
+            flow.describe_unaccounted_slot().is_some()
         };
         // The whole of each place, each in its own way.
         let complete_rule = |flow: &mut BuiltinFlow| {
-            flow.no_flow(&flow.operand(0));
+            flow.no_other_flow(&flow.operand(0));
             let taken = flow.type_arg(&flow.operand(1), 0);
             flow.same(&taken, &flow.result());
             flow.make_own_dynamic(&flow.operand(1));
@@ -782,20 +782,20 @@ main = println(((p.@f)(1) + h(p.@g)).to_string);
         }));
         // The own slot of the second operand left out.
         assert!(reported(&|flow| {
-            flow.no_flow(&flow.operand(0));
+            flow.no_other_flow(&flow.operand(0));
             let taken = flow.type_arg(&flow.operand(1), 0);
             flow.same(&taken, &flow.result());
         }));
         // The function the second operand takes left out, with the result accounted for.
         assert!(reported(&|flow| {
-            flow.no_flow(&flow.operand(0));
+            flow.no_other_flow(&flow.operand(0));
             flow.make_own_dynamic(&flow.operand(1));
-            flow.no_flow(&flow.result());
+            flow.no_other_flow(&flow.result());
         }));
         // The result left out.
         assert!(reported(&|flow| {
-            flow.no_flow(&flow.operand(0));
-            flow.no_flow(&flow.operand(1));
+            flow.no_other_flow(&flow.operand(0));
+            flow.no_other_flow(&flow.operand(1));
         }));
     }
 }

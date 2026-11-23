@@ -3032,7 +3032,7 @@ impl BuiltinOp for ArrayUnsafeEmptyOp {
 
     /// The array comes back with no element.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
-        flow.no_flow(&flow.result());
+        flow.no_other_flow(&flow.result());
     }
 
     fn result_prov(
@@ -5454,7 +5454,7 @@ impl BuiltinOp for ArrayGetSizeOp {
 
     /// Only the size is read, and the elements stay in the array.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
-        flow.no_flow(&flow.operand(0));
+        flow.no_other_flow(&flow.operand(0));
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
@@ -5524,7 +5524,7 @@ impl BuiltinOp for ArrayGetCapacityOp {
 
     /// Only the capacity is read, and the elements stay in the array.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
-        flow.no_flow(&flow.operand(0));
+        flow.no_other_flow(&flow.operand(0));
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
@@ -5657,7 +5657,7 @@ impl BuiltinOp for StructGetOp {
         let s = flow.operand(0);
         let field = flow.field(&s, self.field_index());
         flow.same(&field, &flow.result());
-        flow.no_flow(&s);
+        flow.no_other_flow(&s);
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
@@ -7680,7 +7680,7 @@ impl BuiltinOp for MakeUnionOp {
         let result = flow.result();
         let payload = flow.field(&result, self.field_idx);
         flow.same(&payload, &flow.operand(0));
-        flow.no_flow(&result);
+        flow.no_other_flow(&result);
     }
 
     fn result_prov(
@@ -7870,7 +7870,7 @@ impl BuiltinOp for UnionAsOp {
         let u = flow.operand(0);
         let payload = flow.field(&u, self.field_idx);
         flow.same(&payload, &flow.result());
-        flow.no_flow(&u);
+        flow.no_other_flow(&u);
     }
 
     fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
@@ -8030,7 +8030,7 @@ impl BuiltinOp for UnionIsOp {
 
     /// Only the tag is read, and the payload stays in the union.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
-        flow.no_flow(&flow.operand(0));
+        flow.no_other_flow(&flow.operand(0));
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
@@ -8268,7 +8268,7 @@ impl BuiltinOp for UndefinedInternalOp {
 
     /// The op halts the program, so no value comes out of it.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
-        flow.no_flow(&flow.result());
+        flow.no_other_flow(&flow.result());
     }
 
     fn result_prov(
