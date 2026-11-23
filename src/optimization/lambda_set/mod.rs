@@ -76,10 +76,10 @@ pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, dev
 mod tests {
     use super::{
         concrete::{Elem, SetId},
-        flow::BuiltinFlow,
         infer::{infer, Analysis},
         slots::{AType, SlotLayout},
         specialize::{specialize, Specialization},
+        BuiltinFlow,
     };
     use crate::{
         ast::program::Program,
