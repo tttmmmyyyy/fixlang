@@ -1,0 +1,24 @@
+module Main;
+
+// A tree whose nodes are boxed, so a walk over it reads each child out of a boxed container.
+type Tree = box union { leaf : (), node : (Tree, Tree) };
+
+build : I64 -> Tree;
+build = |depth| (
+    if depth == 0 { Tree::leaf() } else { Tree::node $ (build(depth - 1), build(depth - 1)) }
+);
+
+// The walk only reads the tree. Each child is read out of the node the walk was handed, and the
+// node is named nowhere after the second call.
+count : Tree -> I64;
+count = |tree| match tree {
+    leaf(_) => 1,
+    node(children) => 1 + count(children.@0) + count(children.@1)
+};
+
+main : IO ();
+main = (
+    let tree = build(4);
+    // The tree is read again after the walk, so the walk is handed it borrowed.
+    println $ (count(tree) + count(tree)).to_string
+);

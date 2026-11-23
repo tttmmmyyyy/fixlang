@@ -528,6 +528,58 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that a value read out of a parameter the function borrows is held past a call it is
+    /// handed to, and is lent: the caller holds the parameter's object for the whole body, though
+    /// the body names the parameter nowhere after the call. `count` walks a tree of boxed nodes
+    /// and hands each child of the node it borrows to a call of itself, so both calls route to the
+    /// borrowing version, the arm reads the children by the lending form, and the borrowing
+    /// version counts no reference at all.
+    #[test]
+    fn test_a_value_read_out_of_a_borrowed_parameter_is_lent_to_a_borrowing_call() {
+        let (_temp_dir, project_dir) =
+            setup_case_projects(CASES, "routing_read_out_of_a_borrowed_parameter");
+        let dump = emit_main_rc_ir(&project_dir);
+        let count = func_block(&dump, "fn Main::count", |n| n.contains("#borrow"));
+        let body = count.join("\n");
+
+        let calls: Vec<&str> = count
+            .iter()
+            .copied()
+            .filter(|l| l.contains("= Main::count#"))
+            .collect();
+        assert_eq!(calls.len(), 2, "`count` calls itself twice:\n{}", body);
+        for call in &calls {
+            assert!(
+                call.contains("#borrow"),
+                "a call handed a child of the borrowed node should route to the borrowing \
+                 version:\n{}",
+                body
+            );
+        }
+        let read = count
+            .iter()
+            .find(|l| l.contains("= union_payload_1("))
+            .unwrap_or_else(|| panic!("`count` reads no payload of a node:\n{}", body));
+        assert!(
+            read.contains(" @lent"),
+            "the children read out of the borrowed node should be lent:\n{}",
+            read
+        );
+        let counted: Vec<&str> = count
+            .iter()
+            .copied()
+            .filter(|l| {
+                let l = l.trim_start();
+                l.starts_with("retain ") || l.starts_with("release ")
+            })
+            .collect();
+        assert!(
+            counted.is_empty(),
+            "the borrowing version of `count` should count no reference:\n{}",
+            body
+        );
+    }
+
     /// Verifies that a read lends its value where the container goes on holding it: the element read
     /// out of `rows` and the field read out of `table`, each handed to a call that borrows it while
     /// its container is read afterwards, are read by the lending form of the read, and `main` counts

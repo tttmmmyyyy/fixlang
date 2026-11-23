@@ -850,10 +850,11 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     fn rewrite_inner(&mut self, node: &RcExprNode, enclosing: Option<&After>) -> RcExprNode {
         match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
-                let (callee, key) = self.route(callee, args, &After { k, enclosing });
+                let in_tail = self.tail.contains(&x.name);
+                let (callee, key) = self.route(callee, args, &After { k, enclosing }, in_tail);
                 let (rc_before, rc_after) = self.call_rc(key.as_deref(), args);
                 assert!(
-                    rc_after.is_empty() || !self.tail.contains(&x.name),
+                    rc_after.is_empty() || !in_tail,
                     "a call in tail position was routed to a version that leaves a release after it"
                 );
                 let k = prepend_rc(rc_after, true, self.rewrite_in(k, enclosing));
@@ -895,18 +896,20 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     /// (`lendable`): the callee retargeted to that version, and the version's key. The key is `None`
     /// where the call keeps its callee, which then owns every position: the all-`Own` original of a
     /// function, or an indirect callee this leaves untouched. `after` is the code that runs after the
-    /// call, which tells an argument's last use from a use that outlives the call.
+    /// call, which tells an argument's last use from a use that outlives the call, and `in_tail`
+    /// says whether the call is in tail position.
     fn route(
         &mut self,
         callee: &RcVar,
         args: &[RcVar],
         after: &After,
+        in_tail: bool,
     ) -> (RcVar, Option<BorrowKey>) {
         let Some(fref) = specializable_callee(self.versions.prog, callee, &self.versions.borrowers)
         else {
             return (callee.clone(), None);
         };
-        let lendable = self.lendable(&fref, args, after);
+        let lendable = self.lendable(&fref, args, after, in_tail);
         match self.versions.request(&fref, lendable) {
             Some((version, key)) => {
                 let mut routed = callee.clone();
@@ -931,9 +934,14 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     ///
     /// The units of the first two kinds are lendable, and those of the third are not.
     /// `Versions::levelled_key` decides which lendable units the callee can borrow. A call in tail
-    /// position passes only values at their last use, so it lends no owned value, and no release is
-    /// left after a tail call.
-    fn lendable(&self, callee: &FuncRef, args: &[RcVar], after: &After) -> BorrowKey {
+    /// position (`in_tail`) lends no owned value, so no release is left after a tail call.
+    fn lendable(
+        &self,
+        callee: &FuncRef,
+        args: &[RcVar],
+        after: &After,
+        in_tail: bool,
+    ) -> BorrowKey {
         let params = &self.versions.prog.funcs[callee].params;
         // A function a call names directly takes no capture here (`Versions::borrowers`), so the call
         // passes one argument per parameter.
@@ -952,25 +960,28 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                 ownership_shape(&p.ty, self.type_env(), &|unit| {
                     Ownership::owned_if(
                         self.owns_unit(arg, unit)
-                            && !self.held_after(
-                                &(arg.name.clone(), unit.clone()),
-                                after,
-                                &mut Map::default(),
-                            ),
+                            && (in_tail
+                                || !self.held_after(
+                                    &(arg.name.clone(), unit.clone()),
+                                    after,
+                                    &mut Map::default(),
+                                )),
                     )
                 })
             })
             .collect()
     }
 
-    /// Whether the object at `value` is held by a variable the code after the call uses, whichever
-    /// object `value` turns out to be.
+    /// Whether the object at `value` is held past the call, whichever object `value` turns out to
+    /// be.
     ///
     /// Every name on the alias chain from `value` back to its object holds the reference `value`
     /// holds (`alias_step`): the container a field was destructured out of, the match binding an
     /// arm result flows into, the variable a move-bind renamed. A use of any of them after the call
     /// keeps the object alive past it. A value read out of a boxed container (`read_container`) is
-    /// held by the container's field as well, so it is held after the call when the container is.
+    /// held by the container's field as well, so it is held past the call when the container is:
+    /// one a variable used after the call holds, or one that outlives the body
+    /// (`outlives_the_body`).
     /// Where the value may be one of several objects — a match binding, or an op result whose
     /// leaves come from several operands — each of them has to be held, unless a use of the value
     /// itself holds whichever it is.
@@ -996,7 +1007,8 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                             var.to_string()
                         );
                         units.into_iter().all(|unit| {
-                            self.held_after(&(container.name.clone(), unit), after, held)
+                            self.outlives_the_body(container, &unit)
+                                || self.held_after(&(container.name.clone(), unit), after, held)
                         })
                     })
                 }
@@ -1024,6 +1036,16 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
             };
         held.insert(value.clone(), answer);
         answer
+    }
+
+    /// Whether the object at the unit `unit` of `var` lives for the whole body whichever object it
+    /// is: the object of a parameter this version borrows, which the caller holds throughout, or a
+    /// global's object, which is never freed.
+    fn outlives_the_body(&self, var: &RcVar, unit: &FieldPath) -> bool {
+        origin(self.vars, self.type_env(), &var.name, unit)
+            .candidates()
+            .iter()
+            .all(|(root, path)| !root.is_local() || !self.owns_object(root, path))
     }
 
     /// Whether this version owns the value at `arg@unit`: a leaf that comes from an owned parameter,
