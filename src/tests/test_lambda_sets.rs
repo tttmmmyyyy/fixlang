@@ -960,15 +960,16 @@ fn branching_chain_source(depth: usize) -> String {
     chain_of_two_lambda_calls_source(depth, ChainArgs::Curried, "I64", "g(x)", "")
 }
 
-/// About five times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes
-/// with the copy budget (`LS_COPY_BUDGET_BASE`) applied (11 billion on x86-64), and a fifth of what
-/// it executes with every copy made (286 billion).
+/// A bound on the instructions a build of one of the chains below executes: about five times what
+/// the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes with the copy budget
+/// (`LS_COPY_BUDGET_BASE`) applied (11.5 billion on x86-64), and a fifth of what it executes with
+/// every copy made (286 billion).
 const BRANCHING_CHAIN_MAX_INSTRUCTIONS: u64 = 50_000_000_000;
 
 /// The chain of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
-/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions. The copies of the functions far down the chain
-/// go past the copy budget (`LS_COPY_BUDGET_BASE`), and the sets given to those functions are
-/// represented by closures, which makes each of them one copy in the rewritten program.
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions. The functions far down the chain go past the
+/// copy budget (`LS_COPY_BUDGET_BASE`), so they are given closures, which makes each of them one
+/// copy.
 /// Where the machine does not let the test count instructions, the test checks the answer alone.
 #[test]
 fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bounded_work() {
@@ -997,7 +998,7 @@ const LONG_BRANCHING_CHAIN_OUTPUT: &str = "17458065";
 
 /// The chain of `branching_chain_source(LONG_BRANCHING_CHAIN_DEPTH)` builds in fewer than
 /// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions (18 billion on x86-64) and computes its value.
-/// The functions far down the chain are collapsed once they go past the copy budget
+/// The functions far down the chain are given closures once they go past the copy budget
 /// (`LS_COPY_BUDGET_BASE`), so the copies `specialize` lists stop doubling at each step.
 /// Where the machine does not let the test count instructions, the test checks the answer alone.
 #[test]
@@ -1049,6 +1050,73 @@ fn test_a_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_
     );
     assert_eq!(
         printed, RETURNING_BRANCHING_CHAIN_OUTPUT,
+        "the chain computed a wrong value"
+    );
+}
+
+/// What `wrapping_branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
+const WRAPPING_BRANCHING_CHAIN_OUTPUT: &str = "4361562";
+
+/// The chain of `returning_branching_chain_source`, where `f0` hands the function it was given to
+/// `wrap`, a function outside the chain, and returns the lambda `wrap` builds around it. `main`
+/// calls what `f{depth}` returns twice, so that the functions of the chain return a function once
+/// their calls are uncurried. `wrap` and `f0` recurse, which keeps their bodies out of their
+/// callers.
+fn wrapping_branching_chain_source(depth: usize) -> String {
+    let func_ty = "(I64 -> I64) -> I64 -> (I64 -> I64)";
+    let links: Vec<String> = (1..=depth)
+        .map(|i| {
+            format!(
+                "f{i} : {func_ty};\n\
+                 f{i} = |g, x| if x % 3 == 0 {{ f{next}(|y| g(y) + {i}, x / 3) }} \
+                 else {{ f{next}(|y| g(y) * {i}, x - 1) }};\n",
+                i = i,
+                func_ty = func_ty,
+                next = i - 1
+            )
+        })
+        .collect();
+    format!(
+        "module Main;\n\
+         \n\
+         wrap : (I64 -> I64) -> (I64 -> I64);\n\
+         wrap = |f| |y| if y < -1000000 {{ (wrap(f))(y + 1) }} else {{ f(y) + 1 }};\n\
+         f0 : {func_ty};\n\
+         f0 = |g, x| if x < -1000000 {{ f0(g, x + 1) }} else {{ wrap(g) }};\n\
+         {links}\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let n = *(pure(100) : IO I64);\n\
+         \x20   let h = f{depth}(|x| x + n, n);\n\
+         \x20   println((h(n) + h(n + 1)).to_string)\n\
+         );\n",
+        func_ty = func_ty,
+        links = links.join(""),
+        depth = depth
+    )
+}
+
+/// The chain of `wrapping_branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions (22.5 billion on x86-64) and computes its value.
+/// `f0` goes past the copy budget (`LS_COPY_BUDGET_BASE`), and the lambda `wrap` builds around the
+/// function `f0` hands it reaches `main` through the results of the chain: the sets `main` reads
+/// that lambda with are the ones the copy of `wrap` under `f0` builds it with.
+#[test]
+fn test_a_lambda_built_under_a_function_past_its_copy_budget_and_returned_up_a_chain_is_called() {
+    let description = format!(
+        "a chain of {} functions each returning the next with two lambdas, the last returning a \
+         lambda another function builds",
+        BRANCHING_CHAIN_DEPTH
+    );
+    let printed = build_within_instructions_and_run(
+        &wrapping_branching_chain_source(BRANCHING_CHAIN_DEPTH),
+        "max",
+        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
+        &description,
+    );
+    assert_eq!(
+        printed, WRAPPING_BRANCHING_CHAIN_OUTPUT,
         "the chain computed a wrong value"
     );
 }

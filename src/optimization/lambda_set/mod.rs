@@ -31,17 +31,18 @@ mod solver;
 mod specialize;
 
 use crate::{
-    ast::{program::Program, type_agreement::validate_types},
+    ast::{name::FullName, program::Program, type_agreement::validate_types},
     constants::DOT_FIXLANG,
     error::panic_if_err,
+    misc::Set,
     project_fs::{write_file_guarding_project_links, DOT_FIXLANG_LINK_HINT},
 };
 pub use flow::BuiltinFlow;
-use infer::infer;
+use infer::{infer, Analysis};
 use represent::represent;
 use rewrite::rewrite;
 use slots::SlotLayout;
-use specialize::specialize;
+use specialize::{specialize, Specialization};
 use std::{fs, path::PathBuf};
 
 /// Infers the lambda sets of `prg` and the copies they ask for, and rewrites the program by them.
@@ -52,8 +53,7 @@ use std::{fs, path::PathBuf};
 pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, develop_mode: bool) {
     let rewritten = {
         let layout = SlotLayout::new(&prg.type_env);
-        let mut analysis = infer(prg, &layout);
-        let spec = specialize(&mut analysis);
+        let (mut analysis, spec) = infer_within_copy_budgets(prg, &layout);
         if let Some(step) = dump_step {
             let text = dump::render(&mut analysis, &spec, &layout);
             let path = PathBuf::from(format!("{}/{}.lambda_sets.txt", DOT_FIXLANG, step));
@@ -72,13 +72,42 @@ pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, dev
     }
 }
 
+/// The lambda sets of `prg` and the copies they ask for, with no component asked for more bodies
+/// than its copy budget (`specialize`).
+///
+/// Inference starts with no component past its budget. Each time the listing of the copies stops
+/// at a component asked for more bodies than its budget, the program is inferred again with the
+/// symbols of that component among those past their budgets (`infer`), and the next listing asks
+/// that component for one body. Each round adds a component, so the rounds are at most as many as
+/// the components.
+fn infer_within_copy_budgets(prg: &Program, layout: &SlotLayout) -> (Analysis, Specialization) {
+    let mut past_copy_budget: Set<FullName> = Set::default();
+    loop {
+        let mut analysis = infer(prg, layout, &past_copy_budget);
+        match specialize(&mut analysis) {
+            Ok(spec) => return (analysis, spec),
+            Err(component) => {
+                let component = &analysis.components[component];
+                assert!(
+                    !component.past_copy_budget,
+                    "the component of `{}` is asked for more bodies than its budget, though it \
+                     was inferred as past it",
+                    component.symbols[0].to_string()
+                );
+                past_copy_budget.extend(component.symbols.iter().cloned());
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         concrete::{Elem, SetId},
-        infer::{infer, Analysis},
+        infer::Analysis,
+        infer_within_copy_budgets,
         slots::{AType, SlotLayout},
-        specialize::{specialize, Specialization},
+        specialize::Specialization,
     };
     use crate::{
         ast::program::Program,
@@ -120,8 +149,7 @@ mod tests {
         /// Infers the lambda sets of `prg` and the copies they ask for.
         fn new(prg: &'p Program) -> Self {
             let layout = SlotLayout::new(&prg.type_env);
-            let mut analysis = infer(prg, &layout);
-            let spec = specialize(&mut analysis);
+            let (analysis, spec) = infer_within_copy_budgets(prg, &layout);
             Inferred {
                 prg,
                 layout,
@@ -317,8 +345,8 @@ main = (
     }
 
     /// A `Std::fix` that `defunctionalize_fix` leaves applies the function it is given to a closure
-    /// the combinator builds at run time, so the set of that function holds Dynamic beside the
-    /// lambda passed.
+    /// the combinator builds at run time, so the set of that function holds Dynamic, and lists no
+    /// lambda beside it, though `main` passes one.
     #[test]
     fn test_a_function_given_to_fix_is_dynamic() {
         let prg = program_of(
@@ -338,7 +366,7 @@ main = (
         let mut inf = Inferred::new(&prg);
         let sets = inf.sets_at("run_fixed", &[0]);
         assert_eq!(sets.len(), 1);
-        assert_eq!(sorted(inf.writing_symbols(sets[0])), vec![None, main_lam()]);
+        assert_eq!(inf.writing_symbols(sets[0]), vec![None]);
     }
 
     /// The runtime runs the entry `IO` value, and C code calls an exported function through each

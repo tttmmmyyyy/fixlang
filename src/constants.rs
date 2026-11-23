@@ -235,10 +235,10 @@ pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 6;
 /// once those passes take linear time, up to `MAX_UNION_VARIANTS`.
 pub const MAX_LS_UNION_VARIANTS: usize = 32;
 const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
-/// How many copies of a component lambda set specialization may list (`specialize`), beyond one
-/// copy for each reference (`Component::sites`) on the chains of references from the entry to the
-/// component. Past this budget, the sets the copies of the component give to its
-/// `Component::body_params` are represented by closures, and the rewrite makes one copy of it.
+/// How many bodies of a component lambda set specialization may ask for (`specialize`), beyond
+/// one for each reference (`Component::sites`) on the chains of references from the entry to the
+/// component. The bodies of a component are the distinct lists of sets its copies give
+/// `Component::body_params`.
 ///
 /// A component is copied once per distinct way it is called:
 /// - A chain of functions, each handing the function it was given to the next, called from many
@@ -252,8 +252,9 @@ const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
 ///   function far down the chain grow exponentially with the length of the chain above it, while
 ///   the references on the way grow linearly, so the copies pass the budget within a few steps.
 ///
-/// A component asked for past its budget is collapsed (`specialize`): its copies are given closures
-/// for the functions its bodies depend on, so they share one body and ask for no further copies.
+/// A component asked for more bodies than its budget is inferred again with closures for the
+/// functions its bodies depend on (`infer`), so that it has one body and asks for no further
+/// copies.
 pub const LS_COPY_BUDGET_BASE: usize = 64;
 /// The index of the function pointer among a closure's fields.
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;

@@ -42,6 +42,9 @@ pub enum PendingElem {
 /// whose lambda captures a function of that set does. Such a set is an infinite tree, held as a
 /// cycle. Two sets are the same set when they unfold to the same tree. The store holds each set
 /// once, however it is written, so a copy of a symbol can be keyed on the sets it is given.
+///
+/// A set holding `Elem::Dynamic` holds nothing else: its values are closures whatever lambdas
+/// build them, so one set stands for them all.
 pub struct SetStore {
     /// The elements of each set, sorted.
     sets: Vec<Vec<Elem>>,
@@ -102,7 +105,8 @@ impl SetStore {
 
     /// The sets the equations of `system` define, held in the store. An equation lists the
     /// elements of its set, which may refer to sets of the store and to the sets of any equation
-    /// of the system, its own included.
+    /// of the system, its own included. An equation listing `PendingElem::Dynamic` lists nothing
+    /// else.
     pub fn intern(&mut self, system: Vec<Vec<PendingElem>>) -> Vec<SetId> {
         let n = system.len();
         let mut graph = Graph::new((0..n).collect::<Vec<usize>>());
@@ -149,6 +153,10 @@ impl SetStore {
     fn insert(&mut self, mut elems: Vec<Elem>, on_cycle: bool) -> SetId {
         elems.sort();
         elems.dedup();
+        assert!(
+            !elems.contains(&Elem::Dynamic) || elems.len() == 1,
+            "a set holds lambdas beside Dynamic"
+        );
         if let Some(id) = self.id_of.get(&elems) {
             assert!(
                 !on_cycle,

@@ -94,8 +94,12 @@ pub struct Component {
     pub scheme: LambdaSetScheme,
     /// The parameters the bodies of the symbols depend on, in increasing order, as indices into
     /// `params`: those the terms of the bodies reach (`term_params`). Two copies that give these
-    /// the same sets have the same bodies.
+    /// the same sets have the same bodies, and ask for the same copies of the components `sites`
+    /// refer to.
     pub body_params: Vec<usize>,
+    /// Whether the component was inferred as past its copy budget (`infer`): the variables of
+    /// `body_params` then hold `Member::Dynamic`, so every reference gives them a set of closures.
+    pub past_copy_budget: bool,
     /// For each symbol, in the order of `symbols`, the nodes of its body. The component of the
     /// entry has the nodes of each of its roots instead, the entry first.
     pub node_types: Vec<Vec<NodeType>>,
@@ -108,6 +112,14 @@ pub struct Component {
     pub vars: Vec<SetVar>,
     /// The position of each variable of `vars` there.
     pub var_index: Map<SetVar, usize>,
+}
+
+impl Component {
+    /// The body a copy giving the parameters the sets `args` has: the sets it gives `body_params`,
+    /// in order. Copies of one body share their code in the rewritten program.
+    pub fn body_of<T: Copy>(&self, args: &[T]) -> Vec<T> {
+        self.body_params.iter().map(|p| args[*p]).collect()
+    }
 }
 
 /// What inference records of a node of an expression or of a pattern.
@@ -218,8 +230,13 @@ impl Analysis {
     }
 }
 
-/// Infers the lambda sets of `prg`.
-pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
+/// Infers the lambda sets of `prg`. Each component holding a symbol listed in `past_copy_budget` is
+/// inferred as one the program asks for more bodies than its copy budget (`specialize`): the
+/// variables of its `Component::body_params` are given `Member::Dynamic`. A reference to the
+/// component gets them holding it, and the variables the reference unifies them with hold it too,
+/// so the functions the bodies of the component depend on are closures wherever they are built,
+/// passed and called.
+pub fn infer(prg: &Program, layout: &SlotLayout, past_copy_budget: &Set<FullName>) -> Analysis {
     let mut analysis = Analysis {
         components: vec![],
         component_of: Map::default(),
@@ -227,7 +244,8 @@ pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
         solver: Solver::new(),
     };
     for symbols in components_callees_first(prg) {
-        let component = infer_component(prg, layout, &mut analysis, symbols, vec![]);
+        let is_past = symbols.iter().any(|s| past_copy_budget.contains(s));
+        let component = infer_component(prg, layout, &mut analysis, symbols, vec![], is_past);
         analysis.components.push(component);
     }
     let mut roots = vec![];
@@ -237,7 +255,7 @@ pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
     for export in &prg.export_statements {
         roots.push((export.value_expr.clone().unwrap(), DynamicKind::Export));
     }
-    let entry_component = infer_component(prg, layout, &mut analysis, vec![], roots);
+    let entry_component = infer_component(prg, layout, &mut analysis, vec![], roots, false);
     analysis.components.push(entry_component);
     // The variables of each component, as the roots they are once every component is inferred: a
     // component inferred later can unify a pinned variable of an earlier one, which can make
@@ -293,13 +311,15 @@ fn components_callees_first(prg: &Program) -> Vec<Vec<FullName>> {
 
 /// Infers the component of `symbols`, given the components it refers to in `analysis`. The
 /// component of the entry holds no symbol and gives `roots` instead: the expressions the runtime
-/// reads, each with what makes its type Dynamic.
+/// reads, each with what makes its type Dynamic. `past_copy_budget` says whether the component is
+/// inferred as past its copy budget (`infer`).
 fn infer_component(
     prg: &Program,
     layout: &SlotLayout,
     analysis: &mut Analysis,
     symbols: Vec<FullName>,
     roots: Vec<(Arc<ExprNode>, DynamicKind)>,
+    past_copy_budget: bool,
 ) -> Component {
     let id = analysis.components.len();
     for s in &symbols {
@@ -369,6 +389,7 @@ fn infer_component(
         vars_holding_current,
         sites,
         node_types,
+        past_copy_budget,
     )
 }
 
@@ -854,7 +875,8 @@ fn instantiate(scheme: &LambdaSetScheme, solver: &mut Solver) -> Vec<SetVar> {
 /// The component inferred from the annotated `types` of its `symbols`, the `terms` of its lambdas
 /// and bodies, the variables `vars_holding_current` its lambdas were added to, its references
 /// `sites`, and the nodes of its bodies: the parameters are found, each lambda is given the ones
-/// it depends on, and the scheme is built.
+/// it depends on, and the scheme is built. With `past_copy_budget`, the parameters the bodies depend
+/// on are given `Member::Dynamic` first (`infer`), which the scheme then carries to every reference.
 fn generalize(
     analysis: &mut Analysis,
     symbols: Vec<FullName>,
@@ -863,6 +885,7 @@ fn generalize(
     vars_holding_current: Vec<SetVar>,
     sites: Vec<Site>,
     node_types: Vec<Vec<NodeType>>,
+    past_copy_budget: bool,
 ) -> Component {
     let solver = &mut analysis.solver;
     let term_of_lam: Map<LamId, usize> = terms
@@ -912,6 +935,12 @@ fn generalize(
             if lambda.is_body() {
                 lambda.param_deps = body_params.clone();
             }
+        }
+    }
+    if past_copy_budget {
+        solver.set_current_symbol(symbols.first().cloned());
+        for p in &body_params {
+            solver.make_dynamic(params[*p], DynamicKind::CopyBudget);
         }
     }
     let roots_holding_current: Set<SetVar> = vars_holding_current
@@ -1060,6 +1089,7 @@ fn generalize(
             slot_classes,
         },
         body_params,
+        past_copy_budget,
         node_types,
         lams,
         vars: vec![],
