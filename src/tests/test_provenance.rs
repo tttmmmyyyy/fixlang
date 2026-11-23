@@ -146,8 +146,19 @@ mod integration_tests {
     /// `is_retain_of("  retain v1.0 @local", "v1")` is `true`, and
     /// `is_retain_of("  retain v12 @local", "v1")` is `false`.
     fn is_retain_of(line: &str, var: &str) -> bool {
+        is_rc_of(line, "retain ", var)
+    }
+
+    /// Whether an RC IR line releases the variable `var` or one of its fields.
+    fn is_release_of(line: &str, var: &str) -> bool {
+        is_rc_of(line, "release ", var)
+    }
+
+    /// Whether an RC IR line is the reference-count node `keyword` opens, `"retain "` or
+    /// `"release "`, on the variable `var` or one of its fields.
+    fn is_rc_of(line: &str, keyword: &str, var: &str) -> bool {
         line.trim_start()
-            .strip_prefix("retain ")
+            .strip_prefix(keyword)
             .and_then(|rest| rest.split_whitespace().next())
             .is_some_and(|target| target.split('.').next() == Some(var))
     }
@@ -556,17 +567,9 @@ mod integration_tests {
                      lent:\n{}",
                     read
                 );
-                let counted = main.iter().any(|l| {
-                    let t = l.trim_start();
-                    ["retain ", "release "].iter().any(|op| {
-                        t.strip_prefix(op).is_some_and(|rest| {
-                            rest == array
-                                || rest
-                                    .strip_prefix(array)
-                                    .is_some_and(|tail| tail.starts_with([' ', '.']))
-                        })
-                    })
-                });
+                let counted = main
+                    .iter()
+                    .any(|l| is_retain_of(l, array) || is_release_of(l, array));
                 assert!(
                     !counted,
                     "`main` should count no reference of the lent `{}`:\n{}",
