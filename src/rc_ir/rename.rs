@@ -106,7 +106,9 @@ fn assign_fresh_names_to_binders_inner(
             match rhs {
                 RcRhs::Match(_, arms) => {
                     for arm in arms {
-                        assign_fresh_name(&arm.payload.name, suffix, renaming);
+                        if let Some(payload) = &arm.payload {
+                            assign_fresh_name(&payload.name, suffix, renaming);
+                        }
                         assign_fresh_names_to_binders(&arm.body, suffix, renaming);
                     }
                 }
@@ -204,9 +206,11 @@ fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
             rename_var(scrut, renaming),
             arms.iter()
                 .map(|arm| MatchArm {
-                    payload_state: arm.payload_state,
                     tag: arm.tag,
-                    payload: rename_var(&arm.payload, renaming),
+                    payload: arm
+                        .payload
+                        .as_ref()
+                        .map(|payload| rename_var(payload, renaming)),
                     body: rename_expr(&arm.body, renaming),
                 })
                 .collect(),

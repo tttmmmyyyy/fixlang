@@ -573,9 +573,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Generate a `Match`. `tail` selects direct returns in each arm (no merge) versus a phi that
-    /// yields the match value. The scrutinee's per-arm container release and dead-branch releases are
-    /// already explicit `Release` nodes in the arm bodies; here only the payload retain-getter is
-    /// baked in (mirroring `get_union_value`).
+    /// yields the match value. Every release is an explicit `Release` node in the arm bodies.
     fn eval_rc_match(
         &mut self,
         result: &RcVar,
@@ -585,7 +583,6 @@ impl<'c, 'm> Generator<'c, 'm> {
         func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) -> Option<Object<'c>> {
         let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
-        let scrut_is_boxed = scrut_obj.ty.is_box(self.type_env());
 
         let current_func = self.current_function();
         let cont_bb = if tail {
@@ -632,29 +629,26 @@ impl<'c, 'm> Generator<'c, 'm> {
         for (i, arm) in arms.iter().enumerate() {
             self.builder().position_at_end(arm_bbs[i]);
 
-            // Bind the arm payload: a variant arm extracts (and, for a boxed union, retains) the
-            // variant value; a catch-all arm binds the whole scrutinee.
-            let payload_obj = match arm.tag {
-                Some(_) => {
-                    let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
-                    let value = ObjectFieldType::get_union_value_noretain_norelease(
+            // Bind the variable the arm binds: a variant arm moves the variant's value out of the
+            // scrutinee, and a catch-all arm binds the whole scrutinee.
+            if let Some(payload) = &arm.payload {
+                let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
+                let payload_obj = match arm.tag {
+                    Some(_) => ObjectFieldType::get_union_value_noretain_norelease(
                         self,
                         scrut_obj,
-                        &arm.payload.ty,
-                    );
-                    if scrut_is_boxed {
-                        let one = self.context.i64_type().const_int(1, false);
-                        self.build_retain(value.clone(), one, arm.payload_state);
-                    }
-                    value
-                }
-                None => self.get_scoped_obj_noretain(&scrut.name),
-            };
-            self.scope_push(&arm.payload.name, &payload_obj);
-            self.emit_debug_local_variable(&arm.payload, &payload_obj);
+                        &payload.ty,
+                    ),
+                    None => scrut_obj,
+                };
+                self.scope_push(&payload.name, &payload_obj);
+                self.emit_debug_local_variable(payload, &payload_obj);
+            }
 
             let arm_obj = self.eval_rc_expr(&arm.body, tail, func_vals);
-            self.scope_pop(&arm.payload.name);
+            if let Some(payload) = &arm.payload {
+                self.scope_pop(&payload.name);
+            }
 
             // A non-tail arm that produced a value branches to the merge block and feeds the phi. An
             // arm that returned (tail) yields `None` and contributes nothing; a diverging arm feeds

@@ -35,7 +35,7 @@
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
-use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp, StructGetOp};
+use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp, StructGetOp, UnionAsOp};
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
@@ -157,8 +157,9 @@ fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
 }
 
 /// case-of-known-constructor on a union: `let x = union_tag(payload); let m = match x { .. }; k`,
-/// where `x` is consumed only by the match, collapses to the `tag` arm — its payload bound to the
-/// construction's operand, its result flowing into `m` — dropping both the construction and the match.
+/// where `x` is read only by the match and by what binds the payload in its arms, collapses to the
+/// `tag` arm — its payload bound to the construction's operand, its result flowing into `m` —
+/// dropping both the construction and the match.
 fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     let RcExpr::Let(x, rhs, k) = node.expr.as_ref() else {
         return None;
@@ -168,13 +169,60 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     // Pick the arm for the known tag. A catch-all arm binds the whole union, so the construction
     // stays to build it; skip when only a catch-all matches.
     let arm = arms.iter().find(|arm| arm.tag == Some(variant))?;
-    if !consumed_only_by_its_match(x, k) {
+    if !read_only_by_its_match(x, k, arms) {
         return None;
     }
-    let body = substitute_expr(&arm.body, &single_subst(&arm.payload.name, &operand.name));
+    let body = with_payload_bound(arm, x, operand);
     Some(replace_tail(&body, &mut |arm_result| {
         substitute_expr(k2, &single_subst(&m.name, &arm_result.name))
     }))
+}
+
+/// Whether `rhs` reads the payload of a variant out of the union named `union`, known to hold that
+/// variant: what a variant arm over a boxed union binds its payload with.
+fn is_payload_read_of(rhs: &RcRhs, union: &FullName) -> bool {
+    let RcRhs::Builtin(op, args) = rhs else {
+        return false;
+    };
+    op.as_any()
+        .downcast_ref::<UnionAsOp>()
+        .is_some_and(|read| read.variant_is_known() && args[0].name == *union)
+}
+
+/// The variables the body of `arm`, an arm of a match on the boxed union `scrut`, binds to the
+/// payload it reads out of `scrut`.
+fn payload_reads(arm: &MatchArm, scrut: &RcVar) -> Set<FullName> {
+    let mut reads = Set::default();
+    for_each_node(&arm.body, &mut |n| {
+        if let RcExpr::Let(p, rhs, _) = n.expr.as_ref() {
+            if is_payload_read_of(rhs, &scrut.name) {
+                reads.insert(p.name.clone());
+            }
+        }
+    });
+    reads
+}
+
+/// The body of `arm`, a variant arm of a match on `scrut`, with the payload it matches being
+/// `operand`: the variable the arm binds over an unboxed union, and each variable its body reads
+/// the payload into over a boxed one, whose read is dropped.
+fn with_payload_bound(arm: &MatchArm, scrut: &RcVar, operand: &RcVar) -> RcExprNode {
+    match &arm.payload {
+        Some(payload) => substitute_expr(&arm.body, &single_subst(&payload.name, &operand.name)),
+        None => {
+            let reads = payload_reads(arm, scrut);
+            let subst = reads
+                .iter()
+                .map(|read| (read.clone(), operand.name.clone()))
+                .collect();
+            substitute_expr(&without_bindings(&arm.body, &reads), &subst)
+        }
+    }
+}
+
+/// The number of nodes `with_payload_bound` leaves of `arm`.
+fn size_with_payload_bound(arm: &MatchArm, scrut: &RcVar) -> u64 {
+    node_count(&arm.body) - payload_reads(arm, scrut).len() as u64
 }
 
 /// The match on `x` that `k` starts with, `let m = match x { arms }; k2`, as `m`, `arms` and `k2`.
@@ -191,13 +239,16 @@ fn match_on<'a>(
     Some((m, arms, k2))
 }
 
-/// Whether the match `k` starts with is the only consumer of `x` in `k`, so that a rewrite dropping
-/// what built `x` drops that match with it and leaves nothing else reading `x`.
+/// Whether the match `k` starts with, whose arms are `arms`, is the only reader of `x` in `k`,
+/// together with the reads of the payload in its arms where `x` is a boxed union. A rewrite
+/// dropping what built `x` then drops that match and those reads with it and leaves nothing else
+/// reading `x`.
 ///
 /// This walks the whole of `k`, which is the rest of the function, so a rewrite asks it last: asked
 /// first at every match on a match, it would make a pass over a function quadratic in its length.
-fn consumed_only_by_its_match(x: &RcVar, k: &RcExprNode) -> bool {
-    count_value_uses(&x.name, k) == 1
+fn read_only_by_its_match(x: &RcVar, k: &RcExprNode, arms: &[MatchArm]) -> bool {
+    let payload_reads: usize = arms.iter().map(|arm| payload_reads(arm, x).len()).sum();
+    count_value_uses(&x.name, k) == 1 + payload_reads
 }
 
 /// case-of-known-constructor on a struct: `let x = make_struct(a, b, ..); destructure x { .i -> fi };
@@ -307,7 +358,7 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
         if let Some(tag) = arm.tag {
             outer_arm_of_variant
                 .entry(tag)
-                .or_insert_with(|| (arm, node_count(&arm.body)));
+                .or_insert_with(|| (arm, size_with_payload_bound(arm, s)));
         }
     }
     // Measure before building. Copying an outer arm into every tail is what this rewrite spends, so
@@ -326,7 +377,7 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     if new_arms_size >= replaced_size {
         return None;
     }
-    if !consumed_only_by_its_match(s, k) {
+    if !read_only_by_its_match(s, k, outer_arms) {
         return None;
     }
     let mut new_arms = Vec::with_capacity(inner_arms.len());
@@ -341,8 +392,11 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
             // Fresh binders per arm, so an outer arm two inner arms reach does not put one name in
             // two places.
             *counter += 1;
-            let moved = clone_fresh(&outer.body, &copy_suffix(PASS_TAG, &counter.to_string()));
-            substitute_expr(&moved, &single_subst(&outer.payload.name, &operand.name))
+            let moved = outer.with_body(clone_fresh(
+                &outer.body,
+                &copy_suffix(PASS_TAG, &counter.to_string()),
+            ));
+            with_payload_bound(&moved, s, operand)
         });
         new_arms.push(arm.with_body(body));
     }

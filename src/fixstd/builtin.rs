@@ -7864,66 +7864,123 @@ pub fn union_as(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
     (expr, scm)
 }
 
-/// Reads the payload of a given variant out of a union value, aborting the program where the union
-/// holds another variant and runtime checks are on.
+/// Reads the payload of a given variant out of a union value. Where runtime checks are on and the
+/// variant is not known to be the one the union holds, it aborts the program on another variant.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct UnionAsOp {
     /// The local binding holding the union to read.
     union_arg_name: FullName,
     /// The variant read, as its index among the union's variants.
     field_idx: usize,
+    /// Whether the union is known to hold the variant read, as it is in the arm of a `match` that
+    /// selected the variant, so that the read checks no tag.
+    #[serde(default)]
+    variant_known: bool,
     /// Whether the objects this op reference-counts inside `generate` are known to be in the local
     /// reference-counting state, so that those operations need no state dispatch.
     pub(crate) assume_local: bool,
+    /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
+    /// container goes on holding it.
+    #[serde(default)]
+    pub(crate) lend: bool,
 }
 
 impl UnionAsOp {
+    /// The read of the payload of the variant `variant_idx` out of the union `union` names, which
+    /// aborts the program on another variant where runtime checks are on.
+    pub fn of_variant(union: &FullName, variant_idx: usize) -> Self {
+        UnionAsOp {
+            union_arg_name: union.clone(),
+            field_idx: variant_idx,
+            variant_known: false,
+            assume_local: false,
+            lend: false,
+        }
+    }
+
+    /// The read of the payload of the variant `variant_idx` out of the union `union` names, which
+    /// is known to hold that variant.
+    pub fn of_known_variant(union: &FullName, variant_idx: usize) -> Self {
+        UnionAsOp {
+            variant_known: true,
+            ..Self::of_variant(union, variant_idx)
+        }
+    }
+
     /// The index of the variant whose payload this operation reads.
     pub fn variant_index(&self) -> usize {
         self.field_idx
     }
 
-    /// Whether reading a payload of type `payload_ty` only borrows the union. A fully unboxed payload
-    /// holds no reference, so the value read out of it takes nothing from the union.
-    ///
-    /// A payload that does hold one is read by taking ownership of the union instead: as a borrow the
-    /// result would alias the union's leaf, and reference-count insertion releases a *variable* at its
-    /// last use without following aliases.
-    fn borrows_union(payload_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
-        payload_ty.is_fully_unboxed(type_env)
+    /// Whether the union is known to hold the variant this operation reads.
+    pub(crate) fn variant_is_known(&self) -> bool {
+        self.variant_known
     }
+
+    /// How this op takes the payload out of a union of type `union_ty`.
+    fn payload_read(&self, union_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> PayloadRead {
+        let payload_ty = &union_ty.field_types(type_env)[self.field_idx];
+        if payload_ty.is_fully_unboxed(type_env) {
+            PayloadRead::Copied
+        } else if !union_ty.is_box(type_env) {
+            PayloadRead::Moved
+        } else if self.lend {
+            PayloadRead::Lent
+        } else {
+            PayloadRead::Retained
+        }
+    }
+}
+
+/// How a payload read takes the payload out of the union it reads, which decides what it counts and
+/// whether it borrows the union.
+#[derive(PartialEq)]
+enum PayloadRead {
+    /// The payload holds no reference, so it is copied out of the borrowed union and nothing is
+    /// counted.
+    Copied,
+    /// The payload is moved out of an unboxed union, which the read consumes: the references the
+    /// union held are the payload's from there on, and nothing is counted.
+    Moved,
+    /// The payload is read out of a borrowed boxed union and retained, so the reader holds a
+    /// reference of its own and the union keeps the one it holds.
+    Retained,
+    /// The payload is read out of a borrowed boxed union that goes on holding it for the reader, so
+    /// nothing is counted (`BuiltinOp::lending`).
+    Lent,
 }
 
 #[typetag::serde]
 impl BuiltinOp for UnionAsOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // The value of `as` is the variant payload, so `ty` is the payload's type.
-        let borrows = Self::borrows_union(ty, gc.type_env());
-        let obj = if borrows {
-            gc.get_scoped_obj_noretain(&self.union_arg_name)
-        } else {
-            gc.get_scoped_obj(&self.union_arg_name)
-        };
+        let union_ty = gc.get_scoped_type(&self.union_arg_name);
+        let obj = gc.get_scoped_obj_noretain(&self.union_arg_name);
 
-        if gc.config.runtime_check() {
+        if gc.config.runtime_check() && !self.variant_known {
             let expected_tag = union_tag_value(gc.context, self.field_idx);
 
             // If tag mismatch, panic.
             ObjectFieldType::panic_if_union_tag_mismatch(gc, obj.clone(), expected_tag);
         }
 
-        // If tag match, return the field value. A borrowed read extracts the payload without touching
-        // the union's reference count; reference-count insertion releases the union at its last use.
-        if borrows {
-            ObjectFieldType::get_union_value_noretain_norelease(gc, obj, ty)
-        } else {
-            ObjectFieldType::get_union_value(gc, obj, ty, assumed_state(self.assume_local))
+        // The payload's bits are the same however it is taken out; a retaining read adds the
+        // reference the reader then holds.
+        let payload = ObjectFieldType::get_union_value_noretain_norelease(gc, obj, ty);
+        if self.payload_read(&union_ty, gc.type_env()) == PayloadRead::Retained {
+            gc.retain(payload.clone(), assumed_state(self.assume_local));
         }
+        payload
     }
 
     fn name(&self) -> String {
         format!(
-            "union_as_{}({})",
+            "{}_{}({})",
+            if self.variant_known {
+                "union_payload"
+            } else {
+                "union_as"
+            },
             self.field_idx,
             self.union_arg_name.to_string()
         )
@@ -7940,8 +7997,9 @@ impl BuiltinOp for UnionAsOp {
     }
 
     fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
-        // `as` takes exactly the union, so `arg_tys[0]` is it; its variant `field_idx` is the payload.
-        i == 0 && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
+        // `as` takes exactly the union, so `arg_tys[0]` is it. Every read but the one moving the
+        // payload out of an unboxed union leaves the union with what it held.
+        i == 0 && self.payload_read(&arg_tys[0], type_env) != PayloadRead::Moved
     }
 
     fn result_held_by_operand(
@@ -8001,15 +8059,23 @@ impl BuiltinOp for UnionAsOp {
         self.assume_local
     }
 
+    fn lending(&self) -> Option<Box<dyn BuiltinOp>> {
+        let mut c = self.clone();
+        c.lend = true;
+        Some(Box::new(c))
+    }
+
+    fn lends(&self) -> bool {
+        self.lend
+    }
+
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
-        // `as` takes exactly the union, so `arg_tys[0]` is it. A borrowed read counts nothing;
-        // otherwise `get_union_value` retains the payload out of a boxed union and releases the
-        // union.
-        let payload_ty = &arg_tys[0].field_types(type_env)[self.field_idx];
-        if Self::borrows_union(payload_ty, type_env) {
-            return vec![];
+        // `as` takes exactly the union, so `arg_tys[0]` is it. Only the retaining read counts, and
+        // it counts the payload alone.
+        match self.payload_read(&arg_tys[0], type_env) {
+            PayloadRead::Retained => vec![RcTarget::Result(vec![])],
+            PayloadRead::Copied | PayloadRead::Moved | PayloadRead::Lent => vec![],
         }
-        vec![RcTarget::Result(vec![]), RcTarget::Operand(0, vec![])]
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -8024,13 +8090,11 @@ pub fn union_as_body(
     field_idx: usize,
     field_ty: Arc<TypeNode>,
 ) -> Arc<ExprNode> {
-    let union_arg_name = FullName::local(union_arg_name);
     expr_builtin(
-        Box::new(UnionAsOp {
-            assume_local: false,
-            union_arg_name,
+        Box::new(UnionAsOp::of_variant(
+            &FullName::local(union_arg_name),
             field_idx,
-        }),
+        )),
         field_ty,
         None,
     )

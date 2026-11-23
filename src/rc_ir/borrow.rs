@@ -543,7 +543,8 @@ fn binds_a_destructor(node: &RcExprNode) -> bool {
                 || match rhs {
                     RcRhs::Match(_, arms) => arms
                         .iter()
-                        .any(|arm| mentions_a_destructor(&arm.payload.ty)),
+                        .filter_map(|arm| arm.payload.as_ref())
+                        .any(|payload| mentions_a_destructor(&payload.ty)),
                     RcRhs::Var(..) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Builtin(..) => {
                         false
                     }

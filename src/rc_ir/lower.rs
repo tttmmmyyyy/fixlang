@@ -18,14 +18,14 @@ use crate::ast::types::{TyCon, TypeNode};
 use crate::constants::{BOOL_FALSE_TAG, BOOL_TRUE_TAG, CAP_NAME};
 use crate::fixstd::builtin::{
     make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp, MakeStructOp,
-    NoStorageValueOp, StructGetOp,
+    NoStorageValueOp, StructGetOp, UnionAsOp,
 };
 use crate::hash::md5_hex;
 use crate::misc::{grow_stack, Map, Set};
 use crate::object::occupies_no_storage;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
+    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
 use std::mem;
 use std::sync::Arc;
@@ -694,15 +694,13 @@ impl<'a> Lowerer<'a> {
         let cond_var = self.lower_to_var(cond, bindings);
         let payload_tys = cond_var.ty.field_types(self.type_env);
         let then_arm = MatchArm {
-            payload_state: RcState::Unknown,
             tag: Some(BOOL_TRUE_TAG),
-            payload: self.fresh_var("unit", payload_tys[BOOL_TRUE_TAG].clone(), None),
+            payload: Some(self.fresh_var("unit", payload_tys[BOOL_TRUE_TAG].clone(), None)),
             body: self.lower_body(then_expr),
         };
         let else_arm = MatchArm {
-            payload_state: RcState::Unknown,
             tag: Some(BOOL_FALSE_TAG),
-            payload: self.fresh_var("unit", payload_tys[BOOL_FALSE_TAG].clone(), None),
+            payload: Some(self.fresh_var("unit", payload_tys[BOOL_FALSE_TAG].clone(), None)),
             body: self.lower_body(else_expr),
         };
         let result = self.fresh_var("if", ty, source.clone());
@@ -740,10 +738,12 @@ impl<'a> Lowerer<'a> {
     }
 
     /// Lower one arm of a match on `scrutinee`. A union pattern gives an arm the variant's tag
-    /// selects, whose payload variable holds that variant's contents; a variable or struct pattern
-    /// gives the default arm, taken for every value the tagged arms leave, and its payload is the
-    /// whole scrutinee. The pattern's variables are bound while the arm's body is lowered and
-    /// closed after it, so each body is lowered under its own pattern's bindings alone.
+    /// selects. Over an unboxed union the arm binds the payload, moved out of the scrutinee; over a
+    /// boxed union the arm's body opens by reading the payload out of the scrutinee with a
+    /// `UnionAsOp`, which borrows it. A variable or struct pattern gives the default arm, taken for
+    /// every value the tagged arms leave, which binds the whole scrutinee. The pattern's variables
+    /// are bound while the arm's body is lowered and closed after it, so each body is lowered under
+    /// its own pattern's bindings alone.
     fn lower_match_arm(
         &mut self,
         scrutinee: &RcVar,
@@ -770,54 +770,88 @@ impl<'a> Lowerer<'a> {
                 if let Pattern::Var(v, _) = &subpat.pattern {
                     payload.debug_name = Some(v.name.to_string());
                 }
-                // Destructure the payload's subpattern, then lower the arm body under those bindings.
                 let mut arm_bindings = vec![];
+                let bound_by_arm = if scrutinee.ty.is_box(self.type_env) {
+                    let read = UnionAsOp::of_known_variant(&scrutinee.name, variant_idx);
+                    arm_bindings.push(PendingBinding::Let(
+                        payload.clone(),
+                        RcRhs::Builtin(Box::new(read), vec![scrutinee.clone()]),
+                        pat.info.source.clone(),
+                    ));
+                    None
+                } else {
+                    Some(payload.clone())
+                };
+                // Destructure the payload's subpattern, then lower the arm body under those bindings.
                 let bound_names = self.destructure_pattern(subpat, &payload, &mut arm_bindings);
                 let ret_var = self.lower_to_var(body, &mut arm_bindings);
                 for name in &bound_names {
                     self.unbind(name);
                 }
                 MatchArm {
-                    payload_state: RcState::Unknown,
                     tag: Some(variant_idx),
-                    payload,
+                    payload: bound_by_arm,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
             }
             Pattern::Var(v, _) => {
                 // A catch-all arm binds the whole scrutinee to its source variable.
-                let mut payload =
+                let mut whole =
                     self.fresh_var(&v.name.name, scrutinee.ty.clone(), pat.info.source.clone());
-                payload.debug_name = Some(v.name.to_string());
-                self.bind(&v.name, payload.clone());
-                let body = self.lower_body(body);
+                whole.debug_name = Some(v.name.to_string());
+                let mut arm_bindings = vec![];
+                let bound_by_arm =
+                    self.bind_whole_scrutinee(scrutinee, &whole, pat, &mut arm_bindings);
+                self.bind(&v.name, whole);
+                let ret_var = self.lower_to_var(body, &mut arm_bindings);
                 self.unbind(&v.name);
                 MatchArm {
-                    payload_state: RcState::Unknown,
                     tag: None,
-                    payload,
-                    body,
+                    payload: bound_by_arm,
+                    body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
             }
             Pattern::Struct(_, _, _) => {
                 // A struct/tuple pattern in a `match` is a single non-variant (default) arm that
                 // binds the whole scrutinee and destructures it.
-                let payload =
-                    self.fresh_var("scrut", scrutinee.ty.clone(), pat.info.source.clone());
+                let whole = self.fresh_var("scrut", scrutinee.ty.clone(), pat.info.source.clone());
                 let mut arm_bindings = vec![];
-                let bound_names = self.destructure_pattern(pat, &payload, &mut arm_bindings);
+                let bound_by_arm =
+                    self.bind_whole_scrutinee(scrutinee, &whole, pat, &mut arm_bindings);
+                let bound_names = self.destructure_pattern(pat, &whole, &mut arm_bindings);
                 let ret_var = self.lower_to_var(body, &mut arm_bindings);
                 for name in &bound_names {
                     self.unbind(name);
                 }
                 MatchArm {
-                    payload_state: RcState::Unknown,
                     tag: None,
-                    payload,
+                    payload: bound_by_arm,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
             }
         }
+    }
+
+    /// Binds `whole` to the whole of `scrutinee` in a default arm, and returns the variable the arm
+    /// itself binds. A match consumes an unboxed scrutinee into the variable its arm binds, so
+    /// `whole` is that variable; a match borrows a boxed scrutinee, so the arm's body opens by
+    /// moving the scrutinee into `whole`.
+    fn bind_whole_scrutinee(
+        &mut self,
+        scrutinee: &RcVar,
+        whole: &RcVar,
+        pat: &PatternNode,
+        arm_bindings: &mut Vec<PendingBinding>,
+    ) -> Option<RcVar> {
+        if !scrutinee.ty.is_box(self.type_env) {
+            return Some(whole.clone());
+        }
+        arm_bindings.push(PendingBinding::Let(
+            whole.clone(),
+            RcRhs::Var(scrutinee.clone()),
+            pat.info.source.clone(),
+        ));
+        None
     }
 
     /// Lower a struct or tuple literal: the field expressions are lowered in declaration order,

@@ -1,10 +1,10 @@
 // Memory-safety tests for `match`: on a boxed union with a boxed payload, and on a scrutinee an arm
 // body reads.
-// Matching a boxed union extracts the payload with `get_union_value`, whose boxed path retains the
-// payload and releases the scrutinee container. With a boxed payload, an arm that drops the payload,
-// and a scrutinee still used after the match, must leave every value released exactly once — checked
-// under valgrind. `test_match_option` matches the unboxed `Std::Option`, so the boxed-union
-// container's retain/release is never exercised; these tests use an explicit `box union`.
+// A variant arm of a match on a boxed union reads the payload out of the scrutinee, which the match
+// borrows, and the scrutinee is released where it is last used. With a boxed payload, an arm that
+// drops the payload, and a scrutinee still used after the match, must leave every value released
+// exactly once — checked under valgrind. `test_match_option` matches the unboxed `Std::Option`,
+// whose payload the arm moves out of the scrutinee; these tests use an explicit `box union`.
 
 #[cfg(test)]
 mod union_match_tests {

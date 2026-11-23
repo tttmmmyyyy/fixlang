@@ -548,9 +548,25 @@ impl<'a, 'b> Validator<'a, 'b> {
                 // Each arm's payload is in scope only within that arm's body, so bind it, check the
                 // body, and unbind it before the next sibling arm.
                 for arm in arms {
-                    self.bind(&arm.payload.name);
+                    // A match consumes an unboxed scrutinee into the variable each arm binds,
+                    // and borrows a boxed one, which its arms read with ops.
+                    if arm.payload.is_some() == scrutinee.ty.is_box(self.type_env) {
+                        panic!(
+                            "[RC IR validate] {}: an arm of the match on `{}`, of type `{}`, binds \
+                             a variable over a boxed scrutinee, or none over an unboxed one, in `{}`",
+                            self.stage,
+                            scrutinee.name.to_string(),
+                            scrutinee.ty.to_string(),
+                            self.location,
+                        );
+                    }
+                    if let Some(payload) = &arm.payload {
+                        self.bind(&payload.name);
+                    }
                     self.check_expr(&arm.body);
-                    self.scope.remove(&arm.payload.name);
+                    if let Some(payload) = &arm.payload {
+                        self.scope.remove(&payload.name);
+                    }
                 }
             }
         }
@@ -818,15 +834,13 @@ mod tests {
         // let m = match s { _ -> c; 1 -> p }; ret m   (a catch-all arm before a tagged arm)
         let arms = vec![
             MatchArm {
-                payload_state: RcState::Unknown,
                 tag: None,
-                payload: var("c"),
+                payload: Some(var("c")),
                 body: node(RcExpr::Ret(var("c"))),
             },
             MatchArm {
-                payload_state: RcState::Unknown,
                 tag: Some(1),
-                payload: var("p"),
+                payload: Some(var("p")),
                 body: node(RcExpr::Ret(var("p"))),
             },
         ];

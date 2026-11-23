@@ -4,8 +4,8 @@
 // `Retain` / `Release` proved local with `@local`, one whose whole reachable graph is proved local
 // with `@deeplocal`, and one on a value read out of a global's graph with `@global`; an operation
 // whose internal reference counting is proved local with a trailing `@local` on its right-hand
-// side; and likewise a `destructure` and a boxed-union `case` arm. A small program with named
-// `let`s therefore asserts the analysis end to end. The negative cases are the point: an operation
+// side. A small program with named `let`s therefore asserts the analysis end to end. The negative
+// cases are the point: an operation
 // that reaches a global object may not be tagged local, and each case asserts on a site the dump
 // really contains, so one that stopped producing that site would fail rather than pass vacuously.
 //
@@ -111,46 +111,6 @@ mod integration_tests {
         }
     }
 
-    /// Assert that every arm of the `match` on `scrutinee` carries the state tag `expected` (the
-    /// empty string for one that must keep the runtime dispatch), and that there is at least one arm
-    /// to judge. The scrutinee is a variable of the dump, or the prefix a global's mangled name
-    /// starts with. An arm's tag says whether the payload it binds out of the container is local.
-    fn assert_match_arm_state(dump: &str, scrutinee: &str, expected: &str) {
-        let arms = match_arm_lines(dump, scrutinee);
-        assert!(
-            !arms.is_empty(),
-            "no arm of a `match` on `{}` in the RC IR dump, so this case asserts nothing:\n{}",
-            scrutinee,
-            dump
-        );
-        for arm in &arms {
-            let tag = arm.split_once('@').map_or("", |(_, t)| t.trim_end());
-            assert_eq!(
-                tag, expected,
-                "the arms of the match on `{}` should be tagged {:?}, but one reads:\n{}",
-                scrutinee, expected, arm
-            );
-        }
-    }
-
-    /// The `case` lines of the first `match` on `scrutinee` — a variable of the dump, or the prefix a
-    /// global's mangled name starts with.
-    fn match_arm_lines<'a>(dump: &'a str, scrutinee: &str) -> Vec<&'a str> {
-        // The printer opens the match on the `let` line that binds its result, indents each arm one
-        // level further, and closes it with a `}` back at the `let`'s own indentation. So the arms
-        // are the `case` lines one level in, between the head and that `}`.
-        let indent_of = |line: &str| line.len() - line.trim_start().len();
-        let mut lines = dump
-            .lines()
-            .skip_while(|line| !line.contains(&format!("= match {}", scrutinee)));
-        let head = lines.next().unwrap_or("");
-        let arm_indent = indent_of(head) + 4;
-        lines
-            .take_while(|line| line.trim_end() != format!("{}}}", " ".repeat(indent_of(head))))
-            .filter(|line| indent_of(line) == arm_indent && line.trim_start().starts_with("case "))
-            .collect()
-    }
-
     /// Assert that every reference-counting operation on the value bound as `source_name` carries
     /// the state tag `expected` (the empty string for an operation that must keep the runtime
     /// dispatch), and that there is at least one such operation to judge.
@@ -231,9 +191,10 @@ mod integration_tests {
     }
 
     /// Verifies the annotation of an operation's internal reference counting on the two shapes that
-    /// take a boxed value out of a boxed container — a struct field and a union payload. The source
-    /// writes each shape once and reaches it twice, with a container built here and with a global,
-    /// so the pair turns on the container's locality alone.
+    /// take a boxed value out of a boxed container — a struct field and a union payload, read by
+    /// `as` and by the variant arm of a `match`. The source writes each shape once and reaches it
+    /// twice, with a container built here and with a global, so the pair turns on the container's
+    /// locality alone.
     #[test]
     fn test_locality_of_a_read_out_of_a_boxed_container() {
         let (_temp_dir, project_dir) = setup_case_projects(CASES, "containers");
@@ -245,26 +206,11 @@ mod integration_tests {
         assert_op_state(&dump, "struct_get_0", &local_pair[0], "local");
         assert_op_state(&dump, "struct_get_1", &local_pair[0], "local");
         assert_op_state(&dump, "union_as_0", &local_holder[0], "local");
+        assert_op_state(&dump, "union_payload_0", &local_holder[0], "local");
 
         assert_op_state(&dump, "struct_get_0", "Main::gpair#", "");
         assert_op_state(&dump, "struct_get_1", "Main::gpair#", "");
-        assert_op_state(&dump, "union_as_0", "Main::gholder#", "");
-    }
-
-    /// Verifies the annotation of the node that takes a value out of a boxed container without an
-    /// operation, the variant arm of a `match`. The take-out rule decides it: only a container
-    /// whose whole reachable graph is proved local hands out a local payload, and only a global
-    /// container a global one, whose counting the node drops. The node emits no run-time state
-    /// check where it is right, so the dump is the only place a wrong answer here shows up.
-    #[test]
-    fn test_locality_of_a_match_arm_taking_out_of_a_boxed_container() {
-        let (_temp_dir, project_dir) = setup_case_projects(CASES, "containers");
-        let dump = emit_main_rc_ir(&project_dir);
-
-        let local_holder = binding_vars(&dump, "local_holder");
-
-        assert_match_arm_state(&dump, &local_holder[0], "local");
-        assert_match_arm_state(&dump, "Main::gholder#", "global");
+        assert_op_state(&dump, "union_payload_0", "Main::gholder#", "");
     }
 
     /// Verifies that what a field getter or the variant arm of a `match` takes out of a global's
@@ -281,9 +227,9 @@ mod integration_tests {
             .filter_map(|line| line.trim_start().strip_prefix("let "))
             .filter_map(|rest| rest.split_whitespace().next().map(str::to_string))
             .collect();
-        let payloads: Vec<String> = match_arm_lines(&dump, "Main::gholder#")
+        let payloads: Vec<String> = op_lines(&dump, "union_payload_0", "Main::gholder#")
             .into_iter()
-            .filter_map(|line| line.trim_start().strip_prefix("case 0("))
+            .filter_map(|line| line.trim_start().strip_prefix("let "))
             .filter_map(|rest| rest.split_whitespace().next().map(str::to_string))
             .collect();
         for (what, vars) in [

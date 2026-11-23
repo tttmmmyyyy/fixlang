@@ -39,7 +39,6 @@ use crate::rc_ir::ast::{
 };
 use crate::rc_ir::leaf_map::{boxed_leaf_paths, LeafKey, LeafMap};
 use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneKey, CloneRegistry};
-use std::iter;
 use std::sync::Arc;
 
 /// What is proved about one boxed leaf, once the enclosing function's inputs are concrete. A
@@ -870,19 +869,6 @@ impl<'a> Walk<'a> {
         Some(op.assuming_local())
     }
 
-    /// The annotation of a node that takes values out of the boxed container whose leaf is
-    /// `container`, retaining them. The take-out rule decides it: the values are local only where the
-    /// container is `DeepLocal`, and global where the container is.
-    fn annotate_take_out(&mut self, container: &LeafCond) -> RcState {
-        if container.global {
-            return RcState::Global;
-        }
-        match self.site_inputs(iter::once(container)) {
-            Some(inputs) if container.resolve(inputs) == Locality::DeepLocal => RcState::Local,
-            _ => RcState::Unknown,
-        }
-    }
-
     /// Bind the fields a `DestructureUnboxed` names, each to the projection of the container's own
     /// leaves.
     fn bind_destructured_fields(&mut self, container: &RcVar, fields: &[(usize, RcVar)]) {
@@ -893,45 +879,27 @@ impl<'a> Walk<'a> {
         }
     }
 
-    /// Walk a `match`: bind each arm's payload, walk the arm, and join the arms' values. A variant
-    /// arm of a boxed union reads its payload out of the container by the take-out rule; of an
-    /// unboxed union it projects the scrutinee's variant. A catch-all arm binds the scrutinee itself.
+    /// Walk a `match`: bind the variable each arm binds, walk the arm, and join the arms' values. A
+    /// variant arm of an unboxed union projects the scrutinee's variant, and a catch-all arm binds
+    /// the scrutinee itself.
     fn walk_match(&mut self, scrut: &RcVar, arms: &[MatchArm]) -> (ExtShape, Vec<MatchArm>) {
         let scrut_shape = self.shape_of(scrut);
-        let boxed = scrut.ty.is_box(self.type_env);
         let mut joined: Option<ExtShape> = None;
         let mut out = Vec::with_capacity(arms.len());
         for arm in arms {
-            let payload_shape = match arm.tag {
-                Some(tag) => {
-                    if boxed {
-                        let cond = LeafCond::take_out_of(scrut_shape.leaf_at(&[]));
-                        ExtShape::uniform(&arm.payload.ty, self.type_env, cond)
-                    } else {
-                        scrut_shape.project(tag)
-                    }
-                }
-                None => scrut_shape.clone(),
-            };
-            // A variant arm of a boxed union retains the payload out of the container. A catch-all
-            // arm binds the scrutinee itself and retains nothing.
-            let payload_state = if arm.tag.is_some() && boxed {
-                self.annotate_take_out(scrut_shape.leaf_at(&[]))
-            } else {
-                RcState::Unknown
-            };
-            self.env.insert(arm.payload.name.clone(), payload_shape);
+            if let Some(payload) = &arm.payload {
+                let payload_shape = match arm.tag {
+                    Some(tag) => scrut_shape.project(tag),
+                    None => scrut_shape.clone(),
+                };
+                self.env.insert(payload.name.clone(), payload_shape);
+            }
             let (arm_shape, body) = self.walk(&arm.body);
             joined = Some(match joined {
                 None => arm_shape,
                 Some(acc) => acc.join(&arm_shape),
             });
-            out.push(MatchArm {
-                tag: arm.tag,
-                payload: arm.payload.clone(),
-                payload_state,
-                body,
-            });
+            out.push(arm.with_body(body));
         }
         // A match has at least one arm (an `if` lowers to two, a union match to one per variant).
         let joined = joined.unwrap_or_else(|| unreachable!("a match has at least one arm"));

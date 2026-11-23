@@ -129,12 +129,14 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
                 RcRhs::Match(scrut, arms) => {
                     let mut arm_results = vec![];
                     for arm in arms {
-                        vars.bindings.insert(
-                            arm.payload.name.clone(),
-                            Binding::Payload(scrut.clone(), arm.tag),
-                        );
-                        vars.var_tys
-                            .insert(arm.payload.name.clone(), arm.payload.ty.clone());
+                        if let Some(payload) = &arm.payload {
+                            vars.bindings.insert(
+                                payload.name.clone(),
+                                Binding::Payload(scrut.clone(), arm.tag),
+                            );
+                            vars.var_tys
+                                .insert(payload.name.clone(), payload.ty.clone());
+                        }
                         collect_bindings(&arm.body, vars);
                         arm_results.push(returned_var(&arm.body).clone());
                     }
@@ -383,14 +385,13 @@ pub(crate) fn alias_step(
         Some(Binding::Payload(scrut, variant)) => match variant {
             // A catch-all binds the whole scrutinee: the same object.
             None => AliasStep::Projects((scrut.name.clone(), path.to_vec())),
-            // An unboxed union's payload is the scrutinee's variant slot — an alias; a boxed union's
-            // payload is read out (retained) — a producer.
-            Some(tag) if !scrut.ty.is_box(type_env) => {
+            // A variant arm moves the payload out of an unboxed union: the scrutinee's variant
+            // slot, an alias.
+            Some(tag) => {
                 let mut scrut_path = vec![*tag];
                 scrut_path.extend_from_slice(path);
                 AliasStep::Projects((scrut.name.clone(), scrut_path))
             }
-            Some(_) => AliasStep::Stops,
         },
     }
 }

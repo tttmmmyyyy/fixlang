@@ -225,21 +225,19 @@ pub enum RcTarget {
     Contents(usize, FieldPath),
 }
 
-/// One arm of a `Match`: the variant it matches, the variable its payload is bound to, the state of
-/// the payload it retains out of a boxed union, and the arm body, whose value is its final `Ret`.
-/// `tag` is `Some` for a variant arm, whose payload is that variant's value; it is `None` for a
-/// catch-all arm, whose payload is the whole scrutinee.
+/// One arm of a `Match`: the variant it matches, the variable it binds, and the arm body, whose
+/// value is its final `Ret`. `tag` is `Some` for a variant arm and `None` for a catch-all arm.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
 #[derive(Clone, Serialize)]
 pub struct MatchArm {
     /// The variant number this arm matches, or `None` for a catch-all arm.
     pub tag: Option<usize>,
-    /// The variable `body` reads the matched value through.
-    pub payload: RcVar,
-    /// What is known about the payload a variant arm of a boxed union retains out of the container.
-    /// A catch-all arm binds the scrutinee itself and retains nothing, so its state is `Unknown`.
-    pub payload_state: RcState,
+    /// The variable the arm binds, which the match moves an unboxed scrutinee into: the payload of
+    /// the variant for a variant arm, and the whole scrutinee for a catch-all arm. An arm over a
+    /// boxed scrutinee binds none: the match borrows the scrutinee, and the arm's body reads it
+    /// with ops, as every read out of a boxed container is.
+    pub payload: Option<RcVar>,
     /// The expression this arm evaluates to, in the scope extended with `payload`.
     pub body: RcExprNode,
 }
@@ -635,7 +633,7 @@ fn for_each_var_of_rhs(rhs: &RcRhs, visit: &mut impl FnMut(&RcVar)) {
         RcRhs::Match(scrutinee, arms) => {
             visit(scrutinee);
             for arm in arms {
-                visit(&arm.payload);
+                arm.payload.iter().for_each(&mut *visit);
             }
         }
     }

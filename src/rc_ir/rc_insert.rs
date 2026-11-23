@@ -299,11 +299,15 @@ impl<'a> RcInserter<'a> {
         let mut live_after_match = live_cont.clone();
         live_after_match.remove(&x.name);
 
+        // A match on an unboxed scrutinee consumes it at an arm's head, where the variable the arm
+        // binds carries it away. A match on a boxed scrutinee borrows it to read the tag, and the
+        // arms read it as they read any variable of the enclosing scope.
+        let consumes_scrut = !scrut.ty.is_box(self.type_env);
+
         // The local variables live at an arm's head: those some arm uses from the enclosing scope,
-        // plus those live after the match. The match consumes the scrutinee at an arm's head — a
-        // variant arm releases the container, and otherwise the payload carries the scrutinee away —
-        // so this, rather than the liveness after the match, is the liveness that follows that
-        // consumption. Both the dead-branch releases and the scrutinee retain read it.
+        // plus those live after the match, plus a borrowed scrutinee, which reaches every arm. For
+        // a consumed scrutinee this, rather than the liveness after the match, is the liveness that
+        // follows the consumption. Both the dead-branch releases and the scrutinee retain read it.
         let free_in_arms: Vec<Set<FullName>> =
             arms.iter().map(|arm| self.arm_free_locals(arm)).collect();
         let mut live_at_arm_head: Set<FullName> = live_after_match.clone();
@@ -312,10 +316,9 @@ impl<'a> RcInserter<'a> {
                 live_at_arm_head.insert(n.clone());
             }
         }
-
-        // A boxed union scrutinee's container is released in each arm (mirrors `get_union_value`);
-        // an unbox union cancels (payload retain and container release cancel), so nothing.
-        let release_container = scrut.ty.is_box(self.type_env);
+        if !consumes_scrut {
+            insert_if_local(&mut live_at_arm_head, &scrut.name);
+        }
 
         let mut new_arms = vec![];
         let mut live_before_arms: Set<FullName> = Set::default();
@@ -323,8 +326,8 @@ impl<'a> RcInserter<'a> {
             let payload = arm.payload.clone();
             let (body, body_live) = self.insert_into_expr(arm.body, &live_after_match);
 
-            // Dead-branch (rule c): variables used in another arm but not this one, and dead after
-            // the match, are released at this arm's head.
+            // Dead-branch (rule c): variables live at the arm's head that this arm does not use,
+            // and dead after the match, are released at this arm's head.
             let mut head = vec![];
             for n in &live_at_arm_head {
                 if !used.contains(n) && !live_after_match.contains(n) {
@@ -338,25 +341,22 @@ impl<'a> RcInserter<'a> {
                     }
                 }
             }
-            // Then the scrutinee container release (boxed union), for a variant arm only. A
-            // catch-all arm binds the whole scrutinee as its payload, so the scrutinee flows into the
-            // arm and is disposed through the payload, not by a container release here.
-            if release_container && arm.tag.is_some() && self.needs_rc(&scrut) {
-                head.push(scrut.clone());
-            }
-            // Then release the payload if the arm body never uses it.
-            if !body_live.contains(&payload.name) && self.needs_rc(&payload) {
-                head.push(payload.clone());
+            // Then release the variable the arm binds if the arm body never uses it.
+            if let Some(payload) = &payload {
+                if !body_live.contains(&payload.name) && self.needs_rc(payload) {
+                    head.push(payload.clone());
+                }
             }
             let body = build_releases(head, body);
 
             for n in &body_live {
                 live_before_arms.insert(n.clone());
             }
-            live_before_arms.remove(&payload.name);
+            if let Some(payload) = &payload {
+                live_before_arms.remove(&payload.name);
+            }
 
             new_arms.push(MatchArm {
-                payload_state: arm.payload_state,
                 tag: arm.tag,
                 payload,
                 body,
@@ -374,12 +374,17 @@ impl<'a> RcInserter<'a> {
             RcExpr::Let(x.clone(), RcRhs::Match(scrut.clone(), new_arms), cont),
             source,
         );
-        // The scrutinee is owned, and the match consumes it at an arm's head, so a use of it inside an
-        // arm body is a use after that consumption just as a use after the match is: retain it when
-        // either occurs. One reference covers both — an arm that uses the scrutinee consumes the extra
-        // reference, an arm that does not releases it by the dead-branch rule above, and an arm whose
-        // body uses a scrutinee that also outlives the match retains it again at that use.
-        let node = self.retain_if_live(&scrut, &live_at_arm_head, node);
+        // A consumed scrutinee is owned, and the match consumes it at an arm's head, so a use of it
+        // inside an arm body is a use after that consumption just as a use after the match is:
+        // retain it when either occurs. One reference covers both — an arm that uses the scrutinee
+        // consumes the extra reference, an arm that does not releases it by the dead-branch rule
+        // above, and an arm whose body uses a scrutinee that also outlives the match retains it
+        // again at that use.
+        let node = if consumes_scrut {
+            self.retain_if_live(&scrut, &live_at_arm_head, node)
+        } else {
+            node
+        };
 
         let mut live_before = live_before_arms;
         live_before.remove(&x.name);
@@ -388,10 +393,12 @@ impl<'a> RcInserter<'a> {
     }
 
     /// The local variables an arm references from the enclosing scope (its free locals minus the
-    /// payload the arm binds).
+    /// variable the arm binds).
     fn arm_free_locals(&self, arm: &MatchArm) -> Set<FullName> {
         let mut free = free_locals(&arm.body);
-        free.remove(&arm.payload.name);
+        if let Some(payload) = &arm.payload {
+            free.remove(&payload.name);
+        }
         free
     }
 
@@ -514,7 +521,9 @@ fn collect_referenced_and_bound(
                 RcRhs::Match(scrut, arms) => {
                     insert_if_local(refs, &scrut.name);
                     for arm in arms {
-                        bound.insert(arm.payload.name.clone());
+                        if let Some(payload) = &arm.payload {
+                            bound.insert(payload.name.clone());
+                        }
                         collect_referenced_and_bound(&arm.body, refs, bound);
                     }
                 }
@@ -569,7 +578,9 @@ fn collect_vars(node: &RcExprNode, vars: &mut Map<FullName, RcVar>) {
                 RcRhs::Match(scrut, arms) => {
                     record_if_local(vars, scrut);
                     for arm in arms {
-                        record_if_local(vars, &arm.payload);
+                        if let Some(payload) = &arm.payload {
+                            record_if_local(vars, payload);
+                        }
                         collect_vars(&arm.body, vars);
                     }
                 }

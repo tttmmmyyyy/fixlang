@@ -685,20 +685,16 @@ impl<'a> Interpreter<'a> {
         let mut joined_env: Option<Map<FullName, Provenance>> = None;
         for arm in arms {
             let mut arm_env = self.refine_by_unique_flag(scrut, arm, env);
-            // The payload is the variant's value (a tagged arm) or the whole scrutinee (catch-all). A
-            // variant payload of an unboxed union is projected from the scrutinee's expanded shape; of
-            // a boxed union it is read out of the shared container, so its every boxed leaf is `Unknown`.
-            let payload_prov = match arm.tag {
-                Some(tag) => {
-                    if scrut.ty.is_box(self.type_env) {
-                        Provenance::uniform(&arm.payload.ty, self.type_env, LeafOrigin::Unknown)
-                    } else {
-                        scrut_prov.project(tag)
-                    }
-                }
-                None => scrut_prov.clone(),
-            };
-            self.record(&arm.payload, &payload_prov, &mut arm_env);
+            // The variable an arm binds is the variant's value, projected from the scrutinee's
+            // expanded shape (a variant arm of an unboxed union), or the whole scrutinee (a
+            // catch-all).
+            if let Some(payload) = &arm.payload {
+                let payload_prov = match arm.tag {
+                    Some(tag) => scrut_prov.project(tag),
+                    None => scrut_prov.clone(),
+                };
+                self.record(payload, &payload_prov, &mut arm_env);
+            }
             let (arm_prov, arm_exit) = self.interpret(&arm.body, arm_env);
             joined_result = Some(match joined_result {
                 None => arm_prov,

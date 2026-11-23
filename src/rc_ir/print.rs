@@ -252,12 +252,15 @@ fn rhs_to_string(rhs: &RcRhs, level: usize, ann: Annotations) -> String {
                     Some(tag) => tag.to_string(),
                     None => "_".to_string(),
                 };
+                let payload = match &arm.payload {
+                    Some(payload) => var_to_string(payload, ann),
+                    None => String::new(),
+                };
                 out.push_str(&format!(
-                    "{}case {}({}):{}\n",
+                    "{}case {}({}):\n",
                     indent(level + 1),
                     variant,
-                    var_to_string(&arm.payload, ann),
-                    state_to_string(&arm.payload_state)
+                    payload
                 ));
                 out.push_str(&expr_to_string(&arm.body, level + 2, ann));
             }

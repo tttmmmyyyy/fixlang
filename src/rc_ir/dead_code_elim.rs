@@ -261,8 +261,7 @@ mod tests {
                 at(4),
                 vec![MatchArm {
                     tag: Some(0),
-                    payload: local("payload"),
-                    payload_state: RcState::Unknown,
+                    payload: Some(local("payload")),
                     body: node(RcExpr::Ret(at(5))),
                 }],
             ),
