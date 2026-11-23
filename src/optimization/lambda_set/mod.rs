@@ -77,6 +77,7 @@ pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, dev
 mod tests {
     use super::{
         concrete::{Elem, SetId},
+        flow::BuiltinFlow,
         infer::{infer, Analysis},
         slots::{AType, SlotLayout},
         specialize::{specialize, Specialization},
@@ -712,5 +713,90 @@ main = (
             inf.analysis.components[c].scheme.classes.len()
         };
         assert_eq!(classes_of("c6"), classes_of("c12"));
+    }
+
+    /// A flow rule accounts for a slot by `same`, by `no_flow`, by `make_own_dynamic` or by
+    /// `make_all_dynamic`, and `BuiltinFlow::unaccounted` reports the rule until every slot of every
+    /// operand and of the result is accounted for. The operation here takes a struct of two
+    /// function fields and a function taking a function, and gives a function.
+    #[test]
+    fn test_a_flow_rule_is_reported_until_it_accounts_for_every_slot() {
+        let prg = program_of(
+            r#"
+module Main;
+
+type P = box struct { f : I64 -> I64, g : I64 -> I64 };
+
+p : P;
+p = P { f : |x| x + 1, g : |x| x * 2 };
+
+h : (I64 -> I64) -> I64;
+h = |f| f(3);
+
+main : IO ();
+main = println(((p.@f)(1) + h(p.@g)).to_string);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let p_ty = inf.type_of("p").ty;
+        let h_ty = inf.type_of("h").ty;
+        let f_ty = inf.layout.type_arg(&inf.type_of("h"), 0).ty;
+        // Whether a rule declaring what `declare` does leaves a slot unaccounted for.
+        let mut reported = |declare: &dyn Fn(&mut BuiltinFlow)| {
+            let solver = &mut inf.analysis.solver;
+            let operands = vec![
+                inf.layout.fresh(&p_ty, solver),
+                inf.layout.fresh(&h_ty, solver),
+            ];
+            let result = inf.layout.fresh(&f_ty, solver);
+            assert_eq!(operands[0].slots.len(), 2);
+            assert_eq!(operands[1].slots.len(), 2);
+            assert_eq!(result.slots.len(), 1);
+            let mut flow =
+                BuiltinFlow::new(&inf.layout, solver, operands, result, "op".to_string());
+            declare(&mut flow);
+            flow.unaccounted().is_some()
+        };
+        // The whole of each place, each in its own way.
+        let whole = |flow: &mut BuiltinFlow| {
+            flow.no_flow(&flow.operand(0));
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&taken, &flow.result());
+            flow.make_own_dynamic(&flow.operand(1));
+        };
+        assert!(!reported(&whole));
+        assert!(!reported(&|flow| flow.make_all_dynamic()));
+        assert!(reported(&|_| {}));
+        // The first operand left out.
+        assert!(reported(&|flow| {
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&taken, &flow.result());
+            flow.make_own_dynamic(&flow.operand(1));
+        }));
+        // One field of the first operand left out.
+        assert!(reported(&|flow| {
+            let field = flow.field(&flow.operand(0), 0);
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&field, &taken);
+            flow.same(&taken, &flow.result());
+            flow.make_own_dynamic(&flow.operand(1));
+        }));
+        // The own slot of the second operand left out.
+        assert!(reported(&|flow| {
+            flow.no_flow(&flow.operand(0));
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&taken, &flow.result());
+        }));
+        // The function the second operand takes left out, with the result accounted for.
+        assert!(reported(&|flow| {
+            flow.no_flow(&flow.operand(0));
+            flow.make_own_dynamic(&flow.operand(1));
+            flow.no_flow(&flow.result());
+        }));
+        // The result left out.
+        assert!(reported(&|flow| {
+            flow.no_flow(&flow.operand(0));
+            flow.no_flow(&flow.operand(1));
+        }));
     }
 }
