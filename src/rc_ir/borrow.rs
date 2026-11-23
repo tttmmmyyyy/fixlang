@@ -1481,12 +1481,9 @@ impl BodyModel<'_> {
         rhs: &RcRhs,
         result_ty: &Arc<TypeNode>,
     ) -> Vec<VarPath> {
-        // An indirect callee owns every position.
-        let owns = |p: Option<&RcVar>, leaf: &FieldPath| {
-            p.is_none_or(|p| {
-                self.owned_units
-                    .contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))
-            })
+        let owns = |p: &RcVar, leaf: &FieldPath| {
+            self.owned_units
+                .contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))
         };
         let mut consumed = vec![];
         rhs_consumes(

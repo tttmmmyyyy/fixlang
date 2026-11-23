@@ -546,30 +546,13 @@ pub(crate) fn collect_consumes(
     type_env: &TypeEnv,
     out: &mut Vec<VarPath>,
 ) {
-    // An indirect callee owns every position.
-    let owns = |p: Option<&RcVar>, leaf: &FieldPath| {
-        p.is_none_or(|p| own.contains(&(p.name.clone(), leaf.clone())))
-    };
+    let owns = |p: &RcVar, leaf: &FieldPath| own.contains(&(p.name.clone(), leaf.clone()));
     collect_consumes_go(node, vars, prog, type_env, &owns, out);
 }
 
-/// Collect the leaves consumed in a body other than by an argument of a call: a captured value, an
-/// operand an op owns, a called closure, and a returned value. Alias edges are not consumes here,
-/// as in `collect_consumes`.
-pub(crate) fn collect_consumes_outside_call_arguments(
-    node: &RcExprNode,
-    vars: &VarTable,
-    prog: &RcProgram,
-    type_env: &TypeEnv,
-    out: &mut Vec<VarPath>,
-) {
-    collect_consumes_go(node, vars, prog, type_env, &|_, _| false, out);
-}
-
 /// Collect the leaves an expression and its continuation consume. `owns` answers whether a callee's
-/// parameter leaf is owned, or with `None` whether an indirect callee's is, which decides whether the
-/// argument at that position is consumed.
-fn collect_consumes_go<F: Fn(Option<&RcVar>, &FieldPath) -> bool>(
+/// parameter leaf is owned, which decides whether the argument at that position is consumed.
+fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
     node: &RcExprNode,
     vars: &VarTable,
     prog: &RcProgram,
@@ -616,11 +599,11 @@ pub(crate) fn names_every_field(
 }
 
 /// The leaves an `App`, `Builtin`, or `Closure` right-hand side consumes: an owning argument
-/// position (`owns` decides, for the callee's parameter leaf, or with `None` for an indirect
-/// callee's), a captured value, and the closure callee. A `Var` move and a `Match` consume nothing here — a move is an alias, and a match's
+/// position (`owns` decides, for the callee's parameter leaf), a captured value, and the closure
+/// callee. A `Var` move and a `Match` consume nothing here — a move is an alias, and a match's
 /// consumes live in its arms. `result_ty` is the type the right-hand side binds, needed to read an
 /// op's passthrough.
-pub(crate) fn rhs_consumes<F: Fn(Option<&RcVar>, &FieldPath) -> bool>(
+pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
     rhs: &RcRhs,
     result_ty: &Arc<TypeNode>,
     vars: &VarTable,
@@ -639,14 +622,14 @@ pub(crate) fn rhs_consumes<F: Fn(Option<&RcVar>, &FieldPath) -> bool>(
         RcRhs::App(callee, args) => {
             // Calling a closure consumes it (the callee releases its capture).
             push_boxed_leaves(&callee.name, &callee.ty, type_env, out);
-            // Each argument at an owning position of the callee is consumed.
+            // Each argument at an owning position of the callee is consumed. An unresolved (indirect)
+            // callee owns every position.
             let callee_params = resolve_callee_params(callee, vars, prog);
             for (i, a) in args.iter().enumerate() {
                 for leaf in boxed_leaf_paths(&a.ty, type_env) {
                     // `i` ranges over the arguments and `args.len() <= params.len()` (no over-
                     // application), so `params[i]` is in range.
-                    let param = callee_params.map(|params| &params[i]);
-                    if owns(param, &leaf) {
+                    if callee_params.is_none_or(|params| owns(&params[i], &leaf)) {
                         out.push((a.name.clone(), leaf));
                     }
                 }

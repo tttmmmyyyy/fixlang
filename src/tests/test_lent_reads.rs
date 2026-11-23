@@ -1,5 +1,5 @@
-//! Values read out of a boxed container without a retain (`borrow_ify`'s `lent_reads`), which hold
-//! no reference of their own while the code holds the container.
+//! Values read out of a boxed container without a retain (`lend::lend_reads`), which hold no
+//! reference of their own while the container's object holds them.
 
 #[cfg(test)]
 mod lent_reads_tests {

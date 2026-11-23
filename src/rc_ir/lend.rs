@@ -1,15 +1,16 @@
 //! Lending reads: a value read out of a boxed container is read without a retain where the
 //! container's object holds it for as long as the code uses it. Such a value is *lent*: it holds no
-//! reference of its own, so its reference counting goes, and where the code hands it to a callee
-//! that owns it, a retain right before the call gives the callee the reference it takes.
+//! reference of its own, so its reference counting goes, and where the code consumes it, by handing
+//! it to a callee or an op that owns it, capturing it, or returning it, a retain right before gives
+//! the consumer the reference it takes.
 //!
 //! A read lends its value `a`, read out of the container `c` whose object is `o`, where
 //!
-//! 1. the body consumes `a`, through its aliases, only as an argument of a call;
-//! 2. no unit of any variable may be `a` on one path and a value this body does not lend on
-//!    another, so each reference-count node and each call argument either counts a lent value or
-//!    counts none;
-//! 3. `o` stays referenced while the code uses `a`: walking forward from the read along every
+//! 1. each unit that may be `a` is lent whole on every path: no unit of any variable may be `a` on
+//!    one path and a value this body does not lend on another, and no op consumes some leaves of
+//!    such a unit while passing the others through to its result. So each reference-count node and
+//!    each consume, which count a unit at a time, either count a lent value or count none;
+//! 2. `o` stays referenced while the code uses `a`: walking forward from the read along every
 //!    path, a lower bound of `o`'s reference count (`Count`) stays at least 1 up to and including
 //!    each use of `a` and of its aliases. The bound starts at 1, since the read itself reads `o`,
 //!    rises by a retain of a value that is `o` on every path, and falls by each consume and release
@@ -28,12 +29,13 @@ use crate::ast::types::TypeNode;
 use crate::fixstd::builtin::StructGetOp;
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
-    map_children, FieldPath, RcExpr, RcExprNode, RcProgram, RcRhs, RcState, RcVar, VarPath,
+    for_each_node, map_continuation, FieldPath, RcExpr, RcExprNode, RcProgram, RcRhs, RcState,
+    RcVar, VarPath,
 };
 use crate::rc_ir::borrow::{rewrite_bodies, BodyModel};
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
-    all_owned_units, collect_consumes_outside_call_arguments, rc_units, read_container, units_under,
+    all_owned_units, origin, rc_units, read_container, units_under, Origin,
 };
 use std::sync::Arc;
 
@@ -54,8 +56,9 @@ pub(crate) fn lend_reads(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         Lender {
             model: &model,
             lent: &lent,
+            states: read_states(body, &lent),
         }
-        .rewrite(body)
+        .rewrite(body, true)
     })
 }
 
@@ -69,13 +72,24 @@ fn lent_values(model: &BodyModel, body: &RcExprNode) -> Set<FullName> {
         return Set::default();
     }
     let mut lent: Set<FullName> = containers.keys().cloned().collect();
-    let mut consumed = vec![];
-    collect_consumes_outside_call_arguments(body, model.vars, model.prog, type_env, &mut consumed);
-    for (var, leaf) in &consumed {
-        for (root, _) in model.leaf_objects(var, leaf) {
-            lent.remove(&root);
+    for_each_node(body, &mut |node| {
+        let RcExpr::Let(x, rhs, _) = node.expr.as_ref() else {
+            return;
+        };
+        if matches!(rhs, RcRhs::Match(..)) {
+            return;
         }
-    }
+        let consumed = positions(model.rhs_consumed_leaves(rhs, &x.ty));
+        for v in operands(rhs) {
+            for unit in rc_units(&v.ty, type_env) {
+                if consumed_positions(model, &consumed, v, &unit).is_none() {
+                    for root in roots_under(model, &v.name, &v.ty, &unit) {
+                        lent.remove(&root);
+                    }
+                }
+            }
+        }
+    });
     loop {
         let mut failing = Set::default();
         for (name, ty) in &model.vars.var_tys {
@@ -143,6 +157,67 @@ fn reads(model: &BodyModel) -> Map<FullName, RcVar> {
         .collect()
 }
 
+/// The state each read of a value of `lent` retains its value in.
+fn read_states(body: &RcExprNode, lent: &Set<FullName>) -> Map<FullName, RcState> {
+    let mut states = Map::default();
+    for_each_node(body, &mut |node| match node.expr.as_ref() {
+        RcExpr::Let(x, RcRhs::Builtin(op, _), _) if lent.contains(&x.name) => {
+            let state = if op.assumes_local() {
+                RcState::Local
+            } else {
+                RcState::Unknown
+            };
+            states.insert(x.name.clone(), state);
+        }
+        RcExpr::Destructure(_, fields, state, _) => {
+            for (_, field) in fields {
+                if lent.contains(&field.name) {
+                    states.insert(field.name.clone(), *state);
+                }
+            }
+        }
+        _ => {}
+    });
+    states
+}
+
+/// How many positions consume each of the leaves `consumed` lists once per position.
+fn positions(consumed: Vec<VarPath>) -> Map<VarPath, usize> {
+    let mut positions = Map::default();
+    for leaf in consumed {
+        *positions.entry(leaf).or_default() += 1;
+    }
+    positions
+}
+
+/// How many positions consume the unit `unit` of `v`, given how many consume each leaf
+/// (`positions`). `None` where they consume some leaves of the unit more often than others, so no
+/// number of retains of the unit matches them.
+fn consumed_positions(
+    model: &BodyModel,
+    positions: &Map<VarPath, usize>,
+    v: &RcVar,
+    unit: &FieldPath,
+) -> Option<usize> {
+    let mut counts = boxed_leaf_paths(&v.ty, model.type_env)
+        .into_iter()
+        .filter(|leaf| leaf.starts_with(unit))
+        .map(|leaf| positions.get(&(v.name.clone(), leaf)).copied().unwrap_or(0));
+    let first = counts.next().unwrap_or(0);
+    counts.all(|count| count == first).then_some(first)
+}
+
+/// The variables a right-hand side other than a `Match` reads.
+fn operands(rhs: &RcRhs) -> Vec<&RcVar> {
+    match rhs {
+        RcRhs::Var(y) => vec![y],
+        RcRhs::App(callee, args) => std::iter::once(callee).chain(args).collect(),
+        RcRhs::Closure(_, caps) => caps.iter().collect(),
+        RcRhs::Builtin(_, args) => args.iter().collect(),
+        RcRhs::Match(..) => unreachable!("a match is walked by its arms"),
+    }
+}
+
 /// Records in `anchors` the reads whose container's object holds the lent value named `value`:
 /// the read of `value` itself where its container is one object this body does not lend, the
 /// anchors of its container where the container is lent, and none where the container is a global.
@@ -189,7 +264,8 @@ fn sole_object(model: &BodyModel, container: &RcVar) -> Option<VarPath> {
 }
 
 /// The roots of the objects the boxed leaves of the unit `unit` of the variable named `name`, of
-/// type `ty`, may belong to.
+/// type `ty`, may belong to. A match binding joining several objects is a name for them and no
+/// object itself, so it is not among the roots.
 fn roots_under(
     model: &BodyModel,
     name: &FullName,
@@ -200,6 +276,12 @@ fn roots_under(
         .into_iter()
         .filter(|leaf| leaf.starts_with(unit))
         .flat_map(|leaf| model.leaf_objects(name, &leaf))
+        .filter(|(root, path)| {
+            matches!(
+                origin(model.vars, model.type_env, root, path),
+                Origin::Exactly(_)
+            )
+        })
         .map(|(root, _)| root)
         .collect()
 }
@@ -233,7 +315,7 @@ impl Count {
     }
 }
 
-/// The walk of one body checking condition 3 of the module documentation for the values read,
+/// The walk of one body checking condition 2 of the module documentation for the values read,
 /// directly or through lent containers, out of the container the read of `read` reads.
 struct Walk<'w, 'm> {
     /// What the body's nodes act on.
@@ -264,14 +346,7 @@ impl Walk<'_, '_> {
             RcExpr::Let(x, rhs, k) => {
                 let consumed = self.model.rhs_consumed_objects(rhs, &x.ty);
                 let count = count.map(|c| c.moved(-self.occurrences(&consumed)));
-                let operands: Vec<&RcVar> = match rhs {
-                    RcRhs::Var(y) => vec![y],
-                    RcRhs::App(callee, args) => std::iter::once(callee).chain(args).collect(),
-                    RcRhs::Closure(_, caps) => caps.iter().collect(),
-                    RcRhs::Builtin(_, args) => args.iter().collect(),
-                    RcRhs::Match(..) => unreachable!("a match is walked by its own arm"),
-                };
-                for v in operands {
+                for v in operands(rhs) {
                     self.check_use(v, count);
                 }
                 let count = if x.name == *self.read {
@@ -365,66 +440,53 @@ struct Lender<'l, 'm> {
     model: &'l BodyModel<'m>,
     /// The values the body lends (`lent_values`).
     lent: &'l Set<FullName>,
+    /// The state each lent value's read retained it in (`read_states`).
+    states: Map<FullName, RcState>,
 }
 
 impl Lender<'_, '_> {
     /// `node` with its lent reads lending, the reference counting of lent values dropped, and a
-    /// retain before each call taking a lent value at an owning position.
-    fn rewrite(&self, node: &RcExprNode) -> RcExprNode {
-        grow_stack(|| self.rewrite_inner(node))
+    /// retain before each consume of a lent value. `returns` says whether the `Ret` ending `node`
+    /// returns from the body, which consumes the value; the `Ret` ending an arm of a match hands
+    /// the value to the variable the match binds, an alias.
+    fn rewrite(&self, node: &RcExprNode, returns: bool) -> RcExprNode {
+        grow_stack(|| self.rewrite_inner(node, returns))
     }
 
     /// One node of `rewrite`, rebuilt over its rewritten continuation.
-    fn rewrite_inner(&self, node: &RcExprNode) -> RcExprNode {
+    fn rewrite_inner(&self, node: &RcExprNode, returns: bool) -> RcExprNode {
         let source = &node.source;
         match node.expr.as_ref() {
-            RcExpr::Let(x, RcRhs::Builtin(op, args), k) if self.lent.contains(&x.name) => {
-                let op = op
-                    .lending()
-                    .expect("`lent_values` lends the results of ops that have a lending form");
+            RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => {
+                let arms = arms
+                    .iter()
+                    .map(|arm| arm.with_body(self.rewrite(&arm.body, false)))
+                    .collect();
                 RcExprNode::new(
-                    RcExpr::Let(x.clone(), RcRhs::Builtin(op, args.clone()), self.rewrite(k)),
+                    RcExpr::Let(
+                        x.clone(),
+                        RcRhs::Match(scrutinee.clone(), arms),
+                        self.rewrite(k, returns),
+                    ),
                     source.clone(),
                 )
             }
-            RcExpr::Let(x, rhs @ RcRhs::App(callee, args), k) => {
-                // A unit takes one retain per owning position it is passed at, however many leaves
-                // it has, so each consumed leaf is counted once per position it is consumed at.
-                let mut consumed: Map<VarPath, usize> = Map::default();
-                for leaf in self.model.rhs_consumed_leaves(rhs, &x.ty) {
-                    *consumed.entry(leaf).or_default() += 1;
-                }
-                let mut operands: Vec<&RcVar> = vec![];
-                for v in std::iter::once(callee).chain(args) {
-                    if !operands.iter().any(|seen| seen.name == v.name) {
-                        operands.push(v);
+            RcExpr::Let(x, rhs, k) => {
+                let lending = match rhs {
+                    RcRhs::Builtin(op, args) if self.lent.contains(&x.name) => {
+                        let op = op.lending().expect(
+                            "`lent_values` lends the results of ops that have a lending form",
+                        );
+                        RcRhs::Builtin(op, args.clone())
                     }
-                }
-                let mut retains: Vec<(RcVar, FieldPath)> = vec![];
-                for v in operands {
-                    for unit in rc_units(&v.ty, self.model.type_env) {
-                        if !self.counts_lent(v, &unit) {
-                            continue;
-                        }
-                        let positions = boxed_leaf_paths(&v.ty, self.model.type_env)
-                            .into_iter()
-                            .filter(|leaf| leaf.starts_with(&unit))
-                            .map(|leaf| consumed.get(&(v.name.clone(), leaf)).copied().unwrap_or(0))
-                            .max()
-                            .unwrap_or(0);
-                        retains.extend(std::iter::repeat_n((v.clone(), unit.clone()), positions));
-                    }
-                }
-                let call = RcExprNode::new(
-                    RcExpr::Let(x.clone(), rhs.clone(), self.rewrite(k)),
+                    _ => rhs.clone(),
+                };
+                let bound = RcExprNode::new(
+                    RcExpr::Let(x.clone(), lending, self.rewrite(k, returns)),
                     source.clone(),
                 );
-                retains.into_iter().rev().fold(call, |k, (arg, unit)| {
-                    RcExprNode::new(
-                        RcExpr::Retain(arg, unit, RcState::Unknown, k),
-                        source.clone(),
-                    )
-                })
+                let consumed = self.model.rhs_consumed_leaves(rhs, &x.ty);
+                self.retained_before(bound, &operands(rhs), consumed)
             }
             RcExpr::Destructure(container, fields, state, k)
                 if fields.iter().any(|(_, f)| self.lent.contains(&f.name)) =>
@@ -435,7 +497,7 @@ impl Lender<'_, '_> {
                     .iter()
                     .cloned()
                     .partition(|(_, f)| self.lent.contains(&f.name));
-                let mut out = self.rewrite(k);
+                let mut out = self.rewrite(k, returns);
                 if !kept.is_empty() {
                     out = RcExprNode::new(
                         RcExpr::Destructure(container.clone(), kept, *state, out),
@@ -461,7 +523,7 @@ impl Lender<'_, '_> {
                     .into_iter()
                     .filter(|unit| !self.counts_lent(v, unit))
                     .collect();
-                kept.into_iter().rev().fold(self.rewrite(k), |k, unit| {
+                kept.into_iter().rev().fold(self.rewrite(k, returns), |k, unit| {
                     let expr = if is_release {
                         RcExpr::Release(v.clone(), unit, *state, k)
                     } else {
@@ -470,13 +532,61 @@ impl Lender<'_, '_> {
                     RcExprNode::new(expr, source.clone())
                 })
             }
-            RcExpr::Let(..) | RcExpr::Destructure(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => {
-                map_children(node, |child| self.rewrite(child))
+            RcExpr::Destructure(..) | RcExpr::Eval(..) => {
+                map_continuation(node, |k| self.rewrite(k, returns))
             }
+            RcExpr::Ret(v) if returns => {
+                let consumed = boxed_leaf_paths(&v.ty, self.model.type_env)
+                    .into_iter()
+                    .map(|leaf| (v.name.clone(), leaf))
+                    .collect();
+                self.retained_before(node.clone(), &[v], consumed)
+            }
+            RcExpr::Ret(_) => node.clone(),
         }
     }
 
-    /// Whether the unit `unit` of `v` counts a lent value. By condition 2 of the module
+    /// `node`, which consumes the leaves `consumed` of `operands`, after a retain of each lent unit
+    /// among them: one retain per position consuming the unit, however many leaves it has.
+    fn retained_before(
+        &self,
+        node: RcExprNode,
+        operands: &[&RcVar],
+        consumed: Vec<VarPath>,
+    ) -> RcExprNode {
+        let positions = positions(consumed);
+        let mut seen: Set<&FullName> = Set::default();
+        let mut retains: Vec<(RcVar, FieldPath, RcState)> = vec![];
+        for v in operands {
+            if !seen.insert(&v.name) {
+                continue;
+            }
+            for unit in rc_units(&v.ty, self.model.type_env) {
+                let roots = roots_under(self.model, &v.name, &v.ty, &unit);
+                if !roots.iter().any(|root| self.lent.contains(root)) {
+                    continue;
+                }
+                let count = consumed_positions(self.model, &positions, v, &unit)
+                    .expect("`lent_values` lends no unit consumed in part");
+                // The retain counts the reference the read counted, in the state the read
+                // counted it in where every read the unit may be agrees on one.
+                let mut states = roots.iter().map(|root| self.states[root]);
+                let first = states.next().expect("a lent unit has a root");
+                let state = if states.all(|state| state == first) {
+                    first
+                } else {
+                    RcState::Unknown
+                };
+                retains.extend(std::iter::repeat_n(((*v).clone(), unit.clone(), state), count));
+            }
+        }
+        let source = node.source.clone();
+        retains.into_iter().rev().fold(node, |k, (v, unit, state)| {
+            RcExprNode::new(RcExpr::Retain(v, unit, state, k), source.clone())
+        })
+    }
+
+    /// Whether the unit `unit` of `v` counts a lent value. By condition 1 of the module
     /// documentation, a unit that may be a lent value is one on every path.
     fn counts_lent(&self, v: &RcVar, unit: &FieldPath) -> bool {
         roots_under(self.model, &v.name, &v.ty, unit)
