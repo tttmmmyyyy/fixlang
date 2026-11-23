@@ -64,6 +64,17 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
     out
 }
 
+/// The boxed leaves of a value of type `ty` under `path`.
+pub(crate) fn boxed_leaves_under<'p>(
+    ty: &Arc<TypeNode>,
+    path: &'p [usize],
+    type_env: &TypeEnv,
+) -> impl Iterator<Item = FieldPath> + 'p {
+    boxed_leaf_paths(ty, type_env)
+        .into_iter()
+        .filter(move |leaf| leaf.starts_with(path))
+}
+
 /// The boxed leaf paths that `boxed_leaf_paths` has worked out under one `TypeEnv`, by type. A later
 /// call for the same type reads its answer from here. The `TypeEnv` holds it, and only
 /// `boxed_leaf_paths` reads or writes it.

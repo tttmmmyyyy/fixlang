@@ -12,7 +12,7 @@
 //!   leaves of such a unit while passing the others through to its result. So each reference-count
 //!   node and each consume, which count a unit at a time, either count a lent value or count none.
 //! - *Held while used*: `o` stays referenced while the code uses `a`. Walking forward from the read
-//!   along every path, a lower bound of `o`'s reference count (`Count`) stays at least 1 up to and
+//!   along every path, a lower bound of `o`'s reference count (`CountBound`) stays at least 1 up to and
 //!   including each use of `a` and of its aliases. The bound starts at 1, since the read itself
 //!   reads `o`, rises by a retain of a value that is `o` on every path, and falls by each consume
 //!   and release of a value that may be `o` on some path (`BodyModel`, the model `cancel` reads).
@@ -34,7 +34,7 @@ use crate::rc_ir::ast::{
     RcVar, VarPath,
 };
 use crate::rc_ir::borrow::{rewrite_bodies, BodyModel};
-use crate::rc_ir::leaf_map::boxed_leaf_paths;
+use crate::rc_ir::leaf_map::{boxed_leaf_paths, boxed_leaves_under};
 use crate::rc_ir::ownership::{
     all_owned_units, origin, rc_units, read_container, units_under, Origin,
 };
@@ -69,7 +69,7 @@ pub(crate) fn lend_reads(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 /// documentation, checked again until the set is stable, since a value taken out of the set can
 /// fail a condition another value passed.
 fn lent_values(model: &BodyModel, body: &RcExprNode) -> Set<FullName> {
-    let containers = reads(model);
+    let containers = read_containers(model);
     if containers.is_empty() {
         return Set::default();
     }
@@ -107,7 +107,7 @@ fn lent_values(model: &BodyModel, body: &RcExprNode) -> Set<FullName> {
             let mut walk = Walk {
                 model,
                 object,
-                read: anchor,
+                anchor,
                 dependents,
                 failing: &mut failing,
             };
@@ -133,10 +133,10 @@ fn roots_consumed_in_part(model: &BodyModel, body: &RcExprNode) -> Set<FullName>
         if matches!(rhs, RcRhs::Match(..)) {
             return;
         }
-        let positions = positions(model.rhs_consumed_leaves(rhs, &x.ty));
+        let position_counts = count_consuming_positions(model.rhs_consumed_leaves(rhs, &x.ty));
         for v in operands(rhs) {
             for unit in rc_units(&v.ty, model.type_env) {
-                if consumed_positions(model, &positions, v, &unit).is_none() {
+                if consuming_position_count(model, &position_counts, v, &unit).is_none() {
                     roots.extend(roots_under(model, &v.name, &v.ty, &unit));
                 }
             }
@@ -162,7 +162,7 @@ fn lent_beside_unlent(model: &BodyModel, lent: &Set<FullName>) -> Set<FullName> 
 
 /// The values a body reads out of a boxed container (`read_container`), each mapped to that
 /// container. A fully unboxed value holds no reference and is left out.
-fn reads(model: &BodyModel) -> Map<FullName, RcVar> {
+fn read_containers(model: &BodyModel) -> Map<FullName, RcVar> {
     model
         .vars
         .var_tys
@@ -201,25 +201,25 @@ fn read_states(body: &RcExprNode, lent: &Set<FullName>) -> Map<FullName, RcState
 
 /// How many operand positions consume each leaf. `consumed` lists a leaf once for each position
 /// that consumes it.
-fn positions(consumed: Vec<VarPath>) -> Map<VarPath, usize> {
-    let mut positions = Map::default();
+fn count_consuming_positions(consumed: Vec<VarPath>) -> Map<VarPath, usize> {
+    let mut counts = Map::default();
     for leaf in consumed {
-        *positions.entry(leaf).or_default() += 1;
+        *counts.entry(leaf).or_default() += 1;
     }
-    positions
+    counts
 }
 
 /// How many positions consume the unit `unit` of `v`, given how many consume each leaf
-/// (`positions`). `None` where they consume some leaves of the unit more often than others, so no
+/// (`position_counts`). `None` where they consume some leaves of the unit more often than others, so no
 /// number of retains of the unit matches them.
-fn consumed_positions(
+fn consuming_position_count(
     model: &BodyModel,
-    positions: &Map<VarPath, usize>,
+    position_counts: &Map<VarPath, usize>,
     v: &RcVar,
     unit: &FieldPath,
 ) -> Option<usize> {
     let mut counts = boxed_leaves_under(&v.ty, unit, model.type_env)
-        .map(|leaf| positions.get(&(v.name.clone(), leaf)).copied().unwrap_or(0));
+        .map(|leaf| position_counts.get(&(v.name.clone(), leaf)).copied().unwrap_or(0));
     let first = counts.next().unwrap_or_else(|| {
         panic!(
             "the unit {:?} of `{}` has no boxed leaf",
@@ -228,17 +228,6 @@ fn consumed_positions(
         )
     });
     counts.all(|count| count == first).then_some(first)
-}
-
-/// The boxed leaves of a value of type `ty` under `path`.
-fn boxed_leaves_under<'p>(
-    ty: &Arc<TypeNode>,
-    path: &'p [usize],
-    type_env: &TypeEnv,
-) -> impl Iterator<Item = FieldPath> + 'p {
-    boxed_leaf_paths(ty, type_env)
-        .into_iter()
-        .filter(move |leaf| leaf.starts_with(path))
 }
 
 /// The variables a right-hand side other than a `Match` reads.
@@ -274,7 +263,7 @@ fn anchors_of(
         let mut container_anchors = Set::default();
         let mut held = true;
         for root in &roots {
-            match anchors_of(model, root, containers, lent, anchors) {
+            match grow_stack(|| anchors_of(model, root, containers, lent, anchors)) {
                 Some(more) => container_anchors.extend(more),
                 None => held = false,
             }
@@ -323,7 +312,7 @@ fn roots_under(
 
 /// A lower bound of the reference count of an object, along a path forward from a read out of it.
 #[derive(Clone, Copy)]
-struct Count {
+struct CountBound {
     /// The bound at this point.
     low: i64,
     /// Whether the bound has fallen below 1 since the read: from there on the object may be freed,
@@ -331,27 +320,27 @@ struct Count {
     broken: bool,
 }
 
-impl Count {
+impl CountBound {
     /// The bound at a read out of the object, which the read itself reads.
-    fn at_read() -> Count {
-        Count {
+    fn at_read() -> CountBound {
+        CountBound {
             low: 1,
             broken: false,
         }
     }
 
     /// The bound after the reference count changes by `delta`.
-    fn moved(self, delta: i64) -> Count {
+    fn moved(self, delta: i64) -> CountBound {
         let low = self.low + delta;
-        Count {
+        CountBound {
             low,
             broken: self.broken || low < 1,
         }
     }
 
     /// The bound where several paths join: the weakest of their bounds.
-    fn weakest(paths: impl Iterator<Item = Count>) -> Option<Count> {
-        paths.reduce(|a, b| Count {
+    fn weakest(paths: impl Iterator<Item = CountBound>) -> Option<CountBound> {
+        paths.reduce(|a, b| CountBound {
             low: a.low.min(b.low),
             broken: a.broken || b.broken,
         })
@@ -359,16 +348,16 @@ impl Count {
 }
 
 /// The walk of one body checking the *held while used* condition of the module documentation for
-/// the values read, directly or through lent containers, out of the container the read of `read`
-/// reads.
+/// the values read, directly or through lent containers, out of the container the read of
+/// `anchor` reads.
 struct Walk<'w, 'm> {
     /// What the body's nodes act on.
     model: &'w BodyModel<'m>,
-    /// The object of the container `read` is read out of.
+    /// The object of the container `anchor` is read out of.
     object: VarPath,
     /// The value whose read the walk counts from.
-    read: &'w FullName,
-    /// The lent values the object holds: `read` and the values read out of it, transitively.
+    anchor: &'w FullName,
+    /// The lent values the object holds: `anchor` and the values read out of it, transitively.
     dependents: &'w Set<FullName>,
     /// Where the walk adds each dependent used where the bound is broken.
     failing: &'w mut Set<FullName>,
@@ -377,15 +366,15 @@ struct Walk<'w, 'm> {
 impl Walk<'_, '_> {
     /// Walks `node` and its continuation from the bound `count`, `None` before the read, and
     /// returns the bound where the body or arm ends.
-    fn walk(&mut self, node: &RcExprNode, count: Option<Count>) -> Option<Count> {
+    fn walk(&mut self, node: &RcExprNode, count: Option<CountBound>) -> Option<CountBound> {
         grow_stack(|| match node.expr.as_ref() {
             RcExpr::Let(_, RcRhs::Match(scrutinee, arms), k) => {
                 self.check_use(scrutinee, count);
-                let ends: Vec<Option<Count>> =
+                let ends: Vec<Option<CountBound>> =
                     arms.iter().map(|arm| self.walk(&arm.body, count)).collect();
                 // An arm the read is not on reaches the continuation with no value of the walk
                 // bound, so the continuation goes on from the arms the read is on.
-                self.walk(k, Count::weakest(ends.into_iter().flatten()))
+                self.walk(k, CountBound::weakest(ends.into_iter().flatten()))
             }
             RcExpr::Let(x, rhs, k) => {
                 let consumed = self.model.rhs_consumed_objects(rhs, &x.ty);
@@ -393,8 +382,8 @@ impl Walk<'_, '_> {
                 for v in operands(rhs) {
                     self.check_use(v, count);
                 }
-                let count = if x.name == *self.read {
-                    Some(Count::at_read())
+                let count = if x.name == *self.anchor {
+                    Some(CountBound::at_read())
                 } else {
                     count
                 };
@@ -402,8 +391,8 @@ impl Walk<'_, '_> {
             }
             RcExpr::Destructure(container, fields, _, k) => {
                 self.check_use(container, count);
-                let count = if fields.iter().any(|(_, f)| f.name == *self.read) {
-                    Some(Count::at_read())
+                let count = if fields.iter().any(|(_, f)| f.name == *self.anchor) {
+                    Some(CountBound::at_read())
                 } else {
                     count
                 };
@@ -451,7 +440,7 @@ impl Walk<'_, '_> {
 
     /// Adds to `failing` each dependent a use of `v` reads where the bound is `count`, unless the
     /// bound holds there.
-    fn check_use(&mut self, v: &RcVar, count: Option<Count>) {
+    fn check_use(&mut self, v: &RcVar, count: Option<CountBound>) {
         if count.is_some_and(|c| !c.broken) {
             return;
         }
@@ -588,7 +577,7 @@ impl Lender<'_, '_> {
         operands: &[&RcVar],
         consumed: Vec<VarPath>,
     ) -> RcExprNode {
-        let positions = positions(consumed);
+        let position_counts = count_consuming_positions(consumed);
         let mut seen: Set<&FullName> = Set::default();
         let mut retains: Vec<(RcVar, FieldPath, RcState)> = vec![];
         for v in operands {
@@ -600,7 +589,7 @@ impl Lender<'_, '_> {
                 if !roots.iter().any(|root| self.lent.contains(root)) {
                     continue;
                 }
-                let count = consumed_positions(self.model, &positions, v, &unit)
+                let count = consuming_position_count(self.model, &position_counts, v, &unit)
                     .expect("`lent_values` lends no unit consumed in part");
                 // The retain counts the reference the read counted, in the state the read
                 // counted it in where every read the unit may be agrees on one.
