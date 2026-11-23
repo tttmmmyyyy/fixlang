@@ -399,6 +399,27 @@ pub(crate) fn alias_step(
     }
 }
 
+/// The boxed container the binding of `var` reads its value out of, where the read can lend the
+/// value (`lend::lend_reads`): the container of a `Destructure` field, or the operand an op reads
+/// its result out of (`BuiltinOp::result_held_by_operand`), borrows, and has a lending form for
+/// (`BuiltinOp::lending`). The container's field goes on holding the value for as long as the
+/// container is alive and unchanged.
+pub(crate) fn read_container<'a>(
+    vars: &'a VarTable,
+    type_env: &TypeEnv,
+    var: &FullName,
+) -> Option<&'a RcVar> {
+    match vars.bindings.get(var)? {
+        Binding::Field(container, _) if container.ty.is_box(type_env) => Some(container),
+        Binding::Builtin(op, args, _) => {
+            let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+            let j = op.result_held_by_operand(&arg_tys, type_env)?;
+            (op.borrows_operand(j, &arg_tys, type_env) && op.lending().is_some()).then(|| &args[j])
+        }
+        _ => None,
+    }
+}
+
 /// Where the leaves beneath `path` of a `Builtin` op's result come from, for a path whose own record
 /// does not name an object.
 ///

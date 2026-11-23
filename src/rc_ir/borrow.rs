@@ -56,8 +56,8 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
     acted_references, alias_step, all_owned_units, collect_consumes, origin, rc_units,
-    rhs_consumes, truncate_to_unit, unit_step, units_under, AliasStep, References, UnitStep,
-    VarTable,
+    read_container, rhs_consumes, truncate_to_unit, unit_step, units_under, AliasStep, References,
+    UnitStep, VarTable,
 };
 use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneKey, CloneRegistry};
 use std::sync::Arc;
@@ -967,7 +967,8 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     /// Every name on the alias chain from `value` back to its object holds the reference `value`
     /// holds (`alias_step`): the container a field was destructured out of, the match binding an
     /// arm result flows into, the variable a move-bind renamed. A use of any of them after the call
-    /// keeps the object alive past it. Where the value may be one of several objects — a match
+    /// keeps the object alive past it. A value read out of a boxed container (`read_container`) is
+    /// held by the container's field as well, so it is held after the call when the container is. Where the value may be one of several objects — a match
     /// binding, or an op result whose leaves come from several operands — each of them has to be
     /// held, unless a use of the value itself holds whichever it is.
     ///
@@ -982,7 +983,15 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         let (var, path) = value;
         let answer = after.uses(var)
             || match alias_step(self.vars, self.type_env(), var, path) {
-                AliasStep::Stops => false,
+                AliasStep::Stops => {
+                    read_container(self.vars, self.type_env(), var).is_some_and(|container| {
+                        rc_units(&container.ty, self.type_env())
+                            .into_iter()
+                            .all(|unit| {
+                                self.held_after(&(container.name.clone(), unit), after, held)
+                            })
+                    })
+                }
                 AliasStep::Projects(source) => self.held_after(&source, after, held),
                 AliasStep::Gathers(gathered) => {
                     // A leaf produced here belongs to this value alone, and a value with no leaf

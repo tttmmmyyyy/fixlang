@@ -28,13 +28,12 @@ use crate::ast::types::TypeNode;
 use crate::fixstd::builtin::StructGetOp;
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
-    for_each_node, map_children, FieldPath, RcExpr, RcExprNode, RcProgram, RcRhs, RcState, RcVar,
-    VarPath,
+    map_children, FieldPath, RcExpr, RcExprNode, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
 use crate::rc_ir::borrow::{rewrite_bodies, BodyModel};
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
-    all_owned_units, collect_consumes_outside_call_arguments, rc_units, units_under,
+    all_owned_units, collect_consumes_outside_call_arguments, rc_units, read_container, units_under,
 };
 use std::sync::Arc;
 
@@ -65,7 +64,7 @@ pub(crate) fn lend_reads(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 /// fail a condition another value passed.
 fn lent_values(model: &BodyModel, body: &RcExprNode) -> Set<FullName> {
     let type_env = model.type_env;
-    let containers = reads(body, type_env);
+    let containers = reads(model);
     if containers.is_empty() {
         return Set::default();
     }
@@ -129,36 +128,19 @@ fn lent_values(model: &BodyModel, body: &RcExprNode) -> Set<FullName> {
     }
 }
 
-/// The values `body` reads out of a boxed container, each mapped to that container: the fields a
-/// `Destructure` binds out of a boxed struct, and the results of the ops reading them out of an
-/// operand they borrow (`BuiltinOp::result_held_by_operand`) that have a lending form
-/// (`BuiltinOp::lending`). A fully unboxed value holds no reference, so none of those is among them.
-fn reads(body: &RcExprNode, type_env: &TypeEnv) -> Map<FullName, RcVar> {
-    let mut containers = Map::default();
-    for_each_node(body, &mut |node| match node.expr.as_ref() {
-        RcExpr::Destructure(container, fields, _, _) if container.ty.is_box(type_env) => {
-            for (_, field) in fields {
-                if !field.ty.is_fully_unboxed(type_env) {
-                    containers.insert(field.name.clone(), container.clone());
-                }
-            }
-        }
-        RcExpr::Let(x, RcRhs::Builtin(op, args), _) if !x.ty.is_fully_unboxed(type_env) => {
-            let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-            if let Some(j) = op.result_held_by_operand(&arg_tys, type_env) {
-                if op.borrows_operand(j, &arg_tys, type_env) && op.lending().is_some() {
-                    containers.insert(x.name.clone(), args[j].clone());
-                }
-            }
-        }
-        RcExpr::Let(..)
-        | RcExpr::Destructure(..)
-        | RcExpr::Retain(..)
-        | RcExpr::Release(..)
-        | RcExpr::Eval(..)
-        | RcExpr::Ret(..) => {}
-    });
-    containers
+/// The values a body reads out of a boxed container (`read_container`), each mapped to that
+/// container. A fully unboxed value holds no reference, so none of those is among them.
+fn reads(model: &BodyModel) -> Map<FullName, RcVar> {
+    model
+        .vars
+        .var_tys
+        .iter()
+        .filter(|(_, ty)| !ty.is_fully_unboxed(model.type_env))
+        .filter_map(|(name, _)| {
+            let container = read_container(model.vars, model.type_env, name)?;
+            Some((name.clone(), container.clone()))
+        })
+        .collect()
 }
 
 /// Records in `anchors` the reads whose container's object holds the lent value named `value`:
