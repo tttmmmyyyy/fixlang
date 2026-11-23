@@ -1,7 +1,7 @@
 // Memory-safety tests for struct-pattern destructuring of a boxed struct with boxed fields, and for a
 // parameter whose only use is such a destructure.
-// Destructuring a boxed container retains each extracted field out of it
-// (`read_boxed_struct_fields`) and leaves the container its own reference, released at its last use.
+// A struct pattern over a boxed container reads each field it names with a getter, which retains
+// the field and leaves the container its own reference, released at its last use.
 // With boxed fields, a field the continuation drops, and a container still used after the
 // destructure, must leave every value released exactly once — checked under valgrind.
 // `test_basic`'s boxed-struct pattern test uses unboxed `I64` fields, which do not exercise the

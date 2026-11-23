@@ -41,13 +41,12 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 | `App(callee, args)` | callee の全 boxed leaf（closure の捕捉）＋ callee のその位置が `Own` である引数 leaf |
 | `Closure(f, caps)` | 各 capture の全 boxed leaf |
 | `Llvm(gen, args)` | `borrows_operand(i)` が偽のオペランドのうち、`result_prov` が `Arg(i, π)` として素通しを宣言していない leaf |
-| `Match`（boxed union の variant アーム） | scrutinee コンテナ。ただし RC 挿入が**明示 `Release` ノード**を各アーム先頭に置く |
 | `Release(v, π)` | その unit 1 個 |
 
 **読むだけ（消費しない）**
 
 - `Var(y)`（move-bind）= 別名。codegen でも同一 LLVM 値。
-- `Match` ノード自体（消費は各アームの中）。
+- `Match`。boxed の scrutinee はタグを読むだけで、アームは payload を `UnionAsOp` で読む。unbox の scrutinee はアームが束縛する変数へ move される（別名）。
 - `DestructureUnboxed`。unbox コンテナの leaf はフィールド変数へ move される（別名）。boxed struct のパターン分解は getter（`StructGetOp`）の列に下ろされる。
 - `Retain`/`Release` ノードに現れる変数。
 - `borrows_operand(i)` が真のオペランド（read getter 群）。
@@ -55,7 +54,7 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 
 **ノードに現れない暗黙の RC**（検査を書くときに必ず要る）
 
-- boxed union の variant アーム: payload を retain する。
+- boxed コンテナから読む op（`StructGetOp`、`UnionAsOp`、配列の要素読み出し）: 読んだ値を retain する。貸し出し形は retain しない。
 - `DestructureUnboxed` / unbox union・catch-all の payload: **別名**であって新しい参照ではない。
 
 ## 3. 別名関係（`origin`）
@@ -64,9 +63,9 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 辺は次のとおり:
 
 - `Binding::Move(y)` -> `y`。
-- `Binding::Field(container, idx)`: **unbox コンテナのときだけ**別名（boxed は retain するので producer）。
-- `Binding::Payload(scrut, variant)`: catch-all は scrutinee そのもの、**unbox union の variant** は別名、
-  **boxed union の variant** は producer。
+- `Binding::Field(container, idx)`: 別名。`DestructureUnboxed` は unbox コンテナだけを分解する。
+- `Binding::Payload(scrut, variant)`: 別名。catch-all は scrutinee そのもの、variant は unbox union の
+  その variant の位置。アームが変数を束縛するのは unbox の scrutinee のときだけである。
 - `Binding::Llvm`: `result_prov` の leaf が単一の `Arg(j, p)` なら引数 `j` の別名。leaf でない path は
   その下の leaf 群から決める（`gather_leaves_under` と `origin_of_gathered`）。unbox union の構築
   （`InlineLLVMMakeUnionBody`）もこの規則で解ける。whole-union path の下の leaf は、構築された variant

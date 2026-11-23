@@ -5,8 +5,8 @@
 //! patterns desugared to `Match`, and struct/tuple `let`-patterns desugared to a `DestructureUnboxed` node
 //! over an unboxed container and to field getters over a boxed one.
 //! Every argument is owned and there are NO explicit `Retain`/`Release` nodes yet; reference-counting
-//! insertion is a separate backward pass. The one reference-counting effect already present is the
-//! retain baked into the boxed capture getter, per the retain-getter model.
+//! insertion is a separate backward pass. The reference-counting effect already present is the
+//! retain of a value read out of a boxed container by a getter, a payload read or a capture read.
 
 use crate::ast::builtin_op::BuiltinOpExpr;
 use crate::ast::expr::{Expr, ExprNode, FieldSrc, Var};

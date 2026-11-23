@@ -5590,8 +5590,8 @@ pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// Reads the field at `field_idx` out of the boxed struct `var_name` names: the body of the field
-/// getter `@f` of a boxed struct.
+/// Reads the field at `field_idx` out of the boxed struct `var_name` names: what the field getter
+/// `@f` of a boxed struct and a struct pattern over one read a field with.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StructGetOp {
     pub var_name: FullName,
@@ -5622,7 +5622,7 @@ impl StructGetOp {
     }
 
     /// How this getter takes its field out of a container of type `container_ty`.
-    fn field_read(&self, container_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> FieldRead {
+    fn field_read(&self, container_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> ComponentRead {
         assert!(
             container_ty.is_box(type_env),
             "a getter of field {} reads a boxed struct, and the getter of the unboxed `{}` takes it \
@@ -5632,26 +5632,41 @@ impl StructGetOp {
         );
         let field_ty = &container_ty.field_types(type_env)[self.field_idx];
         if field_ty.is_fully_unboxed(type_env) {
-            FieldRead::Moved
+            ComponentRead::Copied
         } else if self.lend {
-            FieldRead::Lent
+            ComponentRead::Lent
         } else {
-            FieldRead::Retained
+            ComponentRead::Retained
         }
     }
 }
 
-/// How a field getter takes its field out of the boxed struct it reads, which decides what it counts.
-/// Either way the read needs the struct alive for as long as it takes to read it and nothing more.
-enum FieldRead {
-    /// The field holds no reference, so it is moved out and nothing is counted.
+/// How a read takes a component — a struct's field, a union's payload — out of its container,
+/// which decides what the read counts and whether it borrows the container.
+#[derive(PartialEq)]
+enum ComponentRead {
+    /// The component holds no reference, so it is copied out of the borrowed container and nothing
+    /// is counted.
+    Copied,
+    /// The component is moved out of an unboxed container, which the read consumes: the references
+    /// the container held are the component's from there on, and nothing is counted.
     Moved,
-    /// The field is moved out of a boxed container and retained, so the reader holds a reference of
-    /// its own and the container keeps the one it holds.
+    /// The component is read out of a borrowed boxed container and retained, so the reader holds a
+    /// reference of its own and the container keeps the one it holds.
     Retained,
-    /// The field is read out of a boxed container that goes on holding it for the reader, so
-    /// nothing is counted (`BuiltinOp::lending`).
+    /// The component is read out of a borrowed boxed container that goes on holding it for the
+    /// reader, so nothing is counted (`BuiltinOp::lending`).
     Lent,
+}
+
+impl ComponentRead {
+    /// The values a read of this kind reference-counts inside `generate`.
+    fn internal_rc_targets(&self) -> Vec<RcTarget> {
+        match self {
+            ComponentRead::Retained => vec![RcTarget::Result(vec![])],
+            ComponentRead::Copied | ComponentRead::Moved | ComponentRead::Lent => vec![],
+        }
+    }
 }
 
 #[typetag::serde]
@@ -5668,19 +5683,12 @@ impl BuiltinOp for StructGetOp {
                 container_ty.to_string()
             );
         }
-        match self.field_read(&container_ty, gc.type_env()) {
-            FieldRead::Moved | FieldRead::Lent => {
-                let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
-                ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32)
-            }
-            FieldRead::Retained => {
-                let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
-                let field =
-                    ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
-                gc.retain(field.clone(), assumed_state(self.assume_local));
-                field
-            }
+        let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
+        let field = ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
+        if self.field_read(&container_ty, gc.type_env()) == ComponentRead::Retained {
+            gc.retain(field.clone(), assumed_state(self.assume_local));
         }
+        field
     }
 
     fn name(&self) -> String {
@@ -5758,13 +5766,8 @@ impl BuiltinOp for StructGetOp {
     }
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
-        // A read that moves the field out or lends it counts nothing, and one that retains the
-        // field counts it alone. A field getter takes exactly the container, so `arg_tys[0]` is
-        // it.
-        match self.field_read(&arg_tys[0], type_env) {
-            FieldRead::Moved | FieldRead::Lent => vec![],
-            FieldRead::Retained => vec![RcTarget::Result(vec![])],
-        }
+        // A field getter takes exactly the container, so `arg_tys[0]` is it.
+        self.field_read(&arg_tys[0], type_env).internal_rc_targets()
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7909,36 +7912,18 @@ impl UnionAsOp {
     }
 
     /// How this op takes the payload out of a union of type `union_ty`.
-    fn payload_read(&self, union_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> PayloadRead {
+    fn payload_read(&self, union_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> ComponentRead {
         let payload_ty = &union_ty.field_types(type_env)[self.field_idx];
         if payload_ty.is_fully_unboxed(type_env) {
-            PayloadRead::Copied
+            ComponentRead::Copied
         } else if !union_ty.is_box(type_env) {
-            PayloadRead::Moved
+            ComponentRead::Moved
         } else if self.lend {
-            PayloadRead::Lent
+            ComponentRead::Lent
         } else {
-            PayloadRead::Retained
+            ComponentRead::Retained
         }
     }
-}
-
-/// How a payload read takes the payload out of the union it reads, which decides what it counts and
-/// whether it borrows the union.
-#[derive(PartialEq)]
-enum PayloadRead {
-    /// The payload holds no reference, so it is copied out of the borrowed union and nothing is
-    /// counted.
-    Copied,
-    /// The payload is moved out of an unboxed union, which the read consumes: the references the
-    /// union held are the payload's from there on, and nothing is counted.
-    Moved,
-    /// The payload is read out of a borrowed boxed union and retained, so the reader holds a
-    /// reference of its own and the union keeps the one it holds.
-    Retained,
-    /// The payload is read out of a borrowed boxed union that goes on holding it for the reader, so
-    /// nothing is counted (`BuiltinOp::lending`).
-    Lent,
 }
 
 #[typetag::serde]
@@ -7958,7 +7943,7 @@ impl BuiltinOp for UnionAsOp {
         // The payload's bits are the same however it is taken out; a retaining read adds the
         // reference the reader then holds.
         let payload = ObjectFieldType::get_union_value_noretain_norelease(gc, obj, ty);
-        if self.payload_read(&union_ty, gc.type_env()) == PayloadRead::Retained {
+        if self.payload_read(&union_ty, gc.type_env()) == ComponentRead::Retained {
             gc.retain(payload.clone(), assumed_state(self.assume_local));
         }
         payload
@@ -7990,7 +7975,7 @@ impl BuiltinOp for UnionAsOp {
     fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
         // `as` takes exactly the union, so `arg_tys[0]` is it. Every read but the one moving the
         // payload out of an unboxed union leaves the union with what it held.
-        i == 0 && self.payload_read(&arg_tys[0], type_env) != PayloadRead::Moved
+        i == 0 && self.payload_read(&arg_tys[0], type_env) != ComponentRead::Moved
     }
 
     fn operand_holding_result(
@@ -8061,12 +8046,9 @@ impl BuiltinOp for UnionAsOp {
     }
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
-        // `as` takes exactly the union, so `arg_tys[0]` is it. Only the retaining read counts, and
-        // it counts the payload alone.
-        match self.payload_read(&arg_tys[0], type_env) {
-            PayloadRead::Retained => vec![RcTarget::Result(vec![])],
-            PayloadRead::Copied | PayloadRead::Moved | PayloadRead::Lent => vec![],
-        }
+        // `as` takes exactly the union, so `arg_tys[0]` is it.
+        self.payload_read(&arg_tys[0], type_env)
+            .internal_rc_targets()
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -8246,7 +8228,7 @@ impl BuiltinOp for UnionModOp {
         // Implement match_bb
         gc.builder().position_at_end(match_bb);
         let field_ty = union_ty.field_types(gc.type_env())[self.field_idx].clone();
-        let value = ObjectFieldType::get_union_value(gc, obj.clone(), &field_ty, RcState::Unknown);
+        let value = ObjectFieldType::get_union_value(gc, obj.clone(), &field_ty);
         let value = gc
             .apply_lambda(modifier.clone(), vec![value], false)
             .unwrap();

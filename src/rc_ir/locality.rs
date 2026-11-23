@@ -764,8 +764,8 @@ impl<'a> Walk<'a> {
     /// the inputs, when any leaf it consults says so. That is exactly what the clone gate asks of a
     /// body: a site whose leaves all answer unconditionally answers the same under every key, so
     /// cloning the body for it buys nothing. Every kind of site goes through here, because a body
-    /// whose only annotatable site is an operation's internal reference counting, a `DestructureUnboxed`, or
-    /// a boxed-union `Match` is as worth cloning as one holding a `Retain`.
+    /// whose only annotatable site is an operation's internal reference counting is as worth
+    /// cloning as one holding a `Retain`.
     fn site_inputs<'l>(
         &mut self,
         leaves: impl Iterator<Item = &'l LeafCond>,

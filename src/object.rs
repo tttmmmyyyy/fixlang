@@ -927,14 +927,13 @@ impl ObjectFieldType {
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         variant_ty: &Arc<TypeNode>,
-        state: RcState,
     ) -> Object<'c> {
         let value =
             ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), variant_ty);
         if union.is_box(gc.type_env()) {
             // If the union is boxed, retain the value and release the union.
-            gc.retain(value.clone(), state);
-            gc.release(union, state);
+            gc.retain(value.clone(), RcState::Unknown);
+            gc.release(union, RcState::Unknown);
         } else {
             // If the union is unbox, retaining and releasing cancel each other out, so does nothing.
         }

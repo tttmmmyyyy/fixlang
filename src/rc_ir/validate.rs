@@ -11,7 +11,9 @@
 //! binding in scope, or to a global — a function or a global value, both referenceable by name (a
 //! direct call names its callee by that name); every `Retain`/`Release` names one
 //! reference-counting unit of its variable; a function carries a capture parameter exactly for the
-//! closure ABI; every match has at least one arm, with any catch-all arm last; a `Builtin`
+//! closure ABI; every match has at least one arm, with any catch-all arm last, and its arms bind
+//! a variable exactly over an unboxed scrutinee; a read of a payload known to be the variant the
+//! union holds sits in the arm that selected that variant; a `Builtin`
 //! operation's embedded operand names match its argument list; a closure value stores the capture
 //! layout its target function projects; the container of a `DestructureUnboxed` is unboxed, and
 //! the node names each of its fields; and no `Release` names a value its read lends.
@@ -19,7 +21,7 @@
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::fixstd::builtin::{CaptureProjectOp, NoStorageValueOp};
+use crate::fixstd::builtin::{CaptureProjectOp, NoStorageValueOp, UnionAsOp};
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar};
 use crate::rc_ir::ownership::{names_every_field, rc_units};
@@ -207,6 +209,10 @@ struct Validator<'a, 'b> {
     /// reference of its own, so nothing releases it: a release naming one would drop the
     /// reference its container holds.
     lent: Set<FullName>,
+    /// The variant each scrutinee is known to hold at the node being checked: the tag of the arm
+    /// the node is in, for every match around it. A read that checks no tag
+    /// (`UnionAsOp::variant_is_known`) reads the variant recorded here.
+    selected_variants: Map<FullName, usize>,
     /// The names currently in scope, which a use must resolve to.
     scope: Set<FullName>,
 }
@@ -237,6 +243,7 @@ impl<'a, 'b> Validator<'a, 'b> {
             bound_in,
             made_without_storage: Set::default(),
             lent: Set::default(),
+            selected_variants: Map::default(),
             scope: Set::default(),
         }
     }
@@ -474,6 +481,23 @@ impl<'a, 'b> Validator<'a, 'b> {
                 }
             }
             RcRhs::Builtin(op, args) => {
+                // A payload read that checks no tag sits in the arm that selected its variant, on
+                // that match's scrutinee: anywhere else it would read whatever variant the union
+                // holds as the one it names.
+                if let Some(read) = op.as_any().downcast_ref::<UnionAsOp>() {
+                    let selected = args
+                        .first()
+                        .and_then(|union| self.selected_variants.get(&union.name));
+                    if read.variant_is_known() && selected != Some(&read.variant_index()) {
+                        panic!(
+                            "[RC IR validate] {}: `{}` reads a variant no enclosing match arm \
+                             selected in `{}`",
+                            self.stage,
+                            op.name(),
+                            self.location,
+                        );
+                    }
+                }
                 // The op embeds its operand names — code generation resolves the operands from
                 // them — while the `args` list carries the same names, in the same order, for the
                 // reference-counting analyses. Lowering builds one from the other and renaming rewrites
@@ -563,7 +587,16 @@ impl<'a, 'b> Validator<'a, 'b> {
                     if let Some(payload) = &arm.payload {
                         self.bind(&payload.name);
                     }
+                    let outer_selection = arm
+                        .tag
+                        .and_then(|tag| self.selected_variants.insert(scrutinee.name.clone(), tag));
                     self.check_expr(&arm.body);
+                    if arm.tag.is_some() {
+                        match outer_selection {
+                            Some(tag) => self.selected_variants.insert(scrutinee.name.clone(), tag),
+                            None => self.selected_variants.remove(&scrutinee.name),
+                        };
+                    }
                     if let Some(payload) = &arm.payload {
                         self.scope.remove(&payload.name);
                     }
@@ -586,7 +619,7 @@ mod tests {
     };
     use crate::fixstd::builtin::{
         builtin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_ptr_ty,
-        CaptureProjectOp, NullPtrLitOp, StructGetOp,
+        CaptureProjectOp, NullPtrLitOp, StructGetOp, UnionAsOp,
     };
     use crate::misc::{Map, Set};
     use crate::rc_ir::ast::{
@@ -900,6 +933,21 @@ mod tests {
             )),
         ));
         check(&body, &["c"]);
+    }
+
+    /// A payload read that checks no tag is caught outside the arm that selected its variant:
+    /// there the union may hold another variant, which the read would take for the one it names.
+    #[test]
+    #[should_panic(expected = "reads a variant no enclosing match arm selected")]
+    fn rejects_a_known_variant_read_outside_its_arm() {
+        // let p = <read of variant 0, known>(u); ret p   (u is a parameter; no match selects it)
+        let read = UnionAsOp::of_known_variant(&FullName::local("u"), 0);
+        let body = node(RcExpr::Let(
+            var("p"),
+            RcRhs::Builtin(Box::new(read), vec![var("u")]),
+            node(RcExpr::Ret(var("p"))),
+        ));
+        check(&body, &["u"]);
     }
 
     /// A lifted closure function `f` reading captured value `cap_idx` of a capture object laid out as
