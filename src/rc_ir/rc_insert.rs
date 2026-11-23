@@ -178,7 +178,7 @@ impl<'a> RcInserter<'a> {
         live_after: &Set<FullName>,
     ) -> (RcExprNode, Set<FullName>) {
         let (cont, live_cont) = self.insert_into_expr(cont, live_after);
-        let cont = if x.name.is_local() && !live_cont.contains(&x.name) && self.needs_rc(&x) {
+        let cont = if self.dies_borrowed(&x, &live_cont) {
             build_releases(vec![x.clone()], cont)
         } else {
             cont
@@ -267,11 +267,7 @@ impl<'a> RcInserter<'a> {
             }
         }
         let boxed = container.ty.is_box(self.type_env);
-        if boxed
-            && container.name.is_local()
-            && !live_cont.contains(&container.name)
-            && self.needs_rc(&container)
-        {
+        if boxed && self.dies_borrowed(&container, &live_cont) {
             dead.push(container.clone());
         }
         let cont = build_releases(dead, cont);
@@ -414,6 +410,12 @@ impl<'a> RcInserter<'a> {
     /// `Retain`/`Release` would generate no code and is omitted.
     fn needs_rc(&self, var: &RcVar) -> bool {
         !var.ty.is_fully_unboxed(self.type_env)
+    }
+
+    /// Whether `var`, borrowed by a construct whose continuation has `live` live, is released after
+    /// it: a local that needs reference counting and is dead in `live`.
+    fn dies_borrowed(&self, var: &RcVar, live: &Set<FullName>) -> bool {
+        var.name.is_local() && !live.contains(&var.name) && self.needs_rc(var)
     }
 
     /// Wrap `node` in a `Retain` of `var` iff `var` is a local that needs reference counting and is
