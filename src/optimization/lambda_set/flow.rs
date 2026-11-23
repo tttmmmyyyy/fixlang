@@ -11,13 +11,13 @@ use crate::misc::Set;
 ///
 /// A rule declares a flow by making two places the same (`same`), and declares a place whose
 /// values are closures the operation builds or calls at run time by making it Dynamic
-/// (`make_own_dynamic`, `make_all_dynamic`). The places no function flows through — the functions
-/// of an operand the operation leaves where they are or drops, the places of the result it puts no
-/// function in — the rule declares with `no_other_flow`.
+/// (`make_own_dynamic`, `make_all_dynamic`). With `no_other_flow` it declares the places no
+/// function flows through: where the operation leaves or drops the functions of an operand, and
+/// where it puts no function in the result.
 ///
 /// A rule accounts for every slot of every operand and of the result in one of these ways, and
-/// `describe_unaccounted_slot` names a slot it left out. A slot left out is the mark of a flow the rule forgot,
-/// which would leave the functions flowing there out of the set they reach.
+/// `describe_unaccounted_slot` names a slot it left out. A function that flows through such a slot
+/// at run time is missing from the lambda set of the place it reaches.
 pub struct BuiltinFlow<'a, 'e> {
     /// The slots of the program's types.
     layout: &'a SlotLayout<'e>,
@@ -127,8 +127,15 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
         self.accounted.extend(ty.slots.iter().copied());
     }
 
-    /// A slot of an operand or of the result that the rule has not accounted for, named as the
-    /// place it is at and the type there; `None` where the rule accounted for every slot.
+    /// A slot of an operand or of the result that the rule has not accounted for, named by its
+    /// index, the operand or result it belongs to, and the type there.
+    ///
+    /// # Returns
+    /// `None` where the rule accounted for every slot.
+    ///
+    /// # Examples
+    /// A rule that leaves out the second slot of its first operand, of type `Main::P`, gives
+    /// ``slot 1 of operand 0, of type `Main::P` ``.
     pub fn describe_unaccounted_slot(&self) -> Option<String> {
         let (place_idx, ty, slot_idx) = self
             .operands

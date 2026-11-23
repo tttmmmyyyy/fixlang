@@ -715,9 +715,9 @@ main = (
     }
 
     /// A flow rule accounts for a slot by `same`, by `no_other_flow`, by `make_own_dynamic` or by
-    /// `make_all_dynamic`, and `BuiltinFlow::describe_unaccounted_slot` reports the rule until every slot of every
-    /// operand and of the result is accounted for. The operation here takes a struct of two
-    /// function fields and a function taking a function, and gives a function.
+    /// `make_all_dynamic`, and `BuiltinFlow::describe_unaccounted_slot` reports the rule until every
+    /// slot of every operand and of the result is accounted for. The operation here takes a struct
+    /// of two function fields and a function taking a function, and gives a function.
     #[test]
     fn test_a_flow_rule_is_reported_until_it_accounts_for_every_slot() {
         let prg = program_of(
@@ -756,7 +756,7 @@ main = println(((p.@f)(1) + h(p.@g)).to_string);
             declare(&mut flow);
             flow.describe_unaccounted_slot().is_some()
         };
-        // The whole of each place, each in its own way.
+        // A rule that accounts for every slot, using a different declaration for each place.
         let complete_rule = |flow: &mut BuiltinFlow| {
             flow.no_other_flow(&flow.operand(0));
             let taken = flow.type_arg(&flow.operand(1), 0);
