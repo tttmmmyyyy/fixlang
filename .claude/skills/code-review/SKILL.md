@@ -985,6 +985,8 @@ The other conventions here mostly *rewrite* existing comments; this one *adds* t
 
 Every Rust item — `struct`, `enum`, `union`, their fields and variants, `trait`, trait method, free function, and `impl`-block method — must carry a `///` doc comment. **This applies to both `pub` and private items.**
 
+A method in a trait `impl` block is the exception: the trait's declaration of the method carries its doc comment, and each implementation would repeat it. An implementation states what is particular to it — why this type answers as it does — in comments inside its body.
+
 The test for what a comment should contain, in one line: **leave out what the name and signature already make obvious, and put in the meaning they leave unsaid that a reader of this item would want to know.** Each rule below is that one test applied to a specific part of the comment.
 
 Function comment shape. Aim the comment so that the name, the signature and the example carry the behavior between them: a reader who stops after those three has what the function does. What follows is for the reader who wants more than that — the meaning a name leaves unsaid, the case that would surprise — so keep each section to that, and stopping early stays the normal way to read it.
