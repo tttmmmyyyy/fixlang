@@ -325,7 +325,11 @@ impl<'c, 'm> Generator<'c, 'm> {
                         *state,
                     )
                 } else {
-                    ObjectFieldType::take_unboxed_struct_fields(self, &container_obj, &field_indices)
+                    ObjectFieldType::take_unboxed_struct_fields(
+                        self,
+                        &container_obj,
+                        &field_indices,
+                    )
                 };
                 // One object per requested index; the pop below walks `fields`, so a shorter list
                 // would leave it popping names this loop never pushed.

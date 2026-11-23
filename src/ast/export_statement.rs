@@ -176,9 +176,7 @@ impl ExportStatement {
                 // The result is `(IOState, a)`; the state holds no reference, so taking it out and
                 // leaving it unused drops nothing.
                 fix_value =
-                    ObjectFieldType::take_unboxed_struct_fields(gc, &fix_value, &[0, 1])
-                        [1]
-                    .clone();
+                    ObjectFieldType::take_unboxed_struct_fields(gc, &fix_value, &[0, 1])[1].clone();
             }
         }
 

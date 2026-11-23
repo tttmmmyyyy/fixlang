@@ -35,9 +35,7 @@ use crate::rc_ir::ast::{
 };
 use crate::rc_ir::borrow::{rc_of_units, rewrite_bodies, BodyModel};
 use crate::rc_ir::leaf_map::{boxed_leaf_paths, boxed_leaves_under};
-use crate::rc_ir::ownership::{
-    all_owned_units, origin, rc_units, read_container, Origin,
-};
+use crate::rc_ir::ownership::{all_owned_units, origin, rc_units, read_container, Origin};
 use std::iter;
 use std::slice;
 use std::sync::Arc;
@@ -218,8 +216,12 @@ fn consuming_position_count(
     v: &RcVar,
     unit: &FieldPath,
 ) -> Option<usize> {
-    let mut counts = boxed_leaves_under(&v.ty, unit, model.type_env)
-        .map(|leaf| position_counts.get(&(v.name.clone(), leaf)).copied().unwrap_or(0));
+    let mut counts = boxed_leaves_under(&v.ty, unit, model.type_env).map(|leaf| {
+        position_counts
+            .get(&(v.name.clone(), leaf))
+            .copied()
+            .unwrap_or(0)
+    });
     let first = counts.next().unwrap_or_else(|| {
         panic!(
             "the unit {:?} of `{}` has no boxed leaf",
