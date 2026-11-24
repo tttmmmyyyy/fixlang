@@ -345,6 +345,10 @@ reason, and a hunt that leaves it reachable changes what every later build costs
 
 Leaks, double frees, and use-after-free produce correct output on a good day, so comparing outputs finds none of them. Memcheck does. Interpret its report against a baseline: a glibc thread-local pattern or a third-party library's internal allocation shows up identically on unmodified code.
 
+For the reference-counting optimizations, `tools/rc-fuzz/` generates programs that read values out
+of containers, update the containers, and use the values read, runs each under memcheck and against
+a reference compiler's output, and reduces a failing one; its README gives the commands.
+
 **It is blind to a stack array, and a compiler's own runtime is where that matters.** A tool that
 ships source it compiles for the user — a C runtime, a generated prelude, an injected shim — never
 has that source in its own build, so the project's test suite cannot put a sanitizer on it, and
