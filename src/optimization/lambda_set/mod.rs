@@ -81,9 +81,9 @@ pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, dev
 /// that component for one body. Each round adds a component, so the rounds are at most as many as
 /// the components.
 fn infer_within_copy_budgets(prg: &Program, layout: &SlotLayout) -> (Analysis, Specialization) {
-    let mut past_copy_budget: Set<FullName> = Set::default();
+    let mut symbols_past_copy_budget: Set<FullName> = Set::default();
     loop {
-        let mut analysis = infer(prg, layout, &past_copy_budget);
+        let mut analysis = infer(prg, layout, &symbols_past_copy_budget);
         match specialize(&mut analysis) {
             Ok(spec) => return (analysis, spec),
             Err(component) => {
@@ -94,7 +94,7 @@ fn infer_within_copy_budgets(prg: &Program, layout: &SlotLayout) -> (Analysis, S
                      was inferred as past it",
                     component.symbols[0].to_string()
                 );
-                past_copy_budget.extend(component.symbols.iter().cloned());
+                symbols_past_copy_budget.extend(component.symbols.iter().cloned());
             }
         }
     }

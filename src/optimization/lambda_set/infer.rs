@@ -231,13 +231,17 @@ impl Analysis {
     }
 }
 
-/// Infers the lambda sets of `prg`. Each component holding a symbol listed in `past_copy_budget` is
-/// inferred as one the program asks for more bodies than its copy budget (`specialize`): the
-/// variables of its `Component::body_params` are given `Member::Dynamic`. A reference to the
-/// component gets them holding it, and the variables the reference unifies them with hold it too,
-/// so the functions the bodies of the component depend on are closures wherever they are built,
-/// passed and called.
-pub fn infer(prg: &Program, layout: &SlotLayout, past_copy_budget: &Set<FullName>) -> Analysis {
+/// Infers the lambda sets of `prg`. Each component holding a symbol listed in
+/// `symbols_past_copy_budget` is inferred as one the program asks for more bodies than its copy
+/// budget (`specialize`): the variables of its `Component::body_params` are given
+/// `Member::Dynamic`. A reference to the component gets them holding it, and the variables the
+/// reference unifies them with hold it too, so the functions the bodies of the component depend on
+/// are closures wherever they are built, passed and called.
+pub fn infer(
+    prg: &Program,
+    layout: &SlotLayout,
+    symbols_past_copy_budget: &Set<FullName>,
+) -> Analysis {
     let mut analysis = Analysis {
         components: vec![],
         component_of: Map::default(),
@@ -245,8 +249,15 @@ pub fn infer(prg: &Program, layout: &SlotLayout, past_copy_budget: &Set<FullName
         solver: Solver::new(),
     };
     for symbols in components_callees_first(prg) {
-        let is_past = symbols.iter().any(|s| past_copy_budget.contains(s));
-        let component = infer_component(prg, layout, &mut analysis, symbols, vec![], is_past);
+        let past_copy_budget = symbols.iter().any(|s| symbols_past_copy_budget.contains(s));
+        let component = infer_component(
+            prg,
+            layout,
+            &mut analysis,
+            symbols,
+            vec![],
+            past_copy_budget,
+        );
         analysis.components.push(component);
     }
     let mut roots = vec![];

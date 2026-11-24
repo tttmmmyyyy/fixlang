@@ -143,8 +143,8 @@ pub fn specialize(analysis: &mut Analysis) -> Result<Specialization, usize> {
                     );
                 }
             }
-            let bodies = copies.request(analysis, callee, callee_args);
-            if bodies > budgets[callee] {
+            let body_count = copies.request(analysis, callee, callee_args);
+            if body_count > budgets[callee] {
                 return Err(callee);
             }
         }
