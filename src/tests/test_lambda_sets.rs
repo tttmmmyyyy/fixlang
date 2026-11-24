@@ -2703,10 +2703,10 @@ fn test_a_function_in_a_type_given_as_a_type_constructor_argument_computes_it() 
     test_source(source, Configuration::develop_mode());
 }
 
-/// A struct whose field applies one type constructor argument to a tuple type holding the other
-/// applied, `t (Tuple2 (m I64))`, at an instance where both are newtypes: `t` a struct whose one
-/// field applies its argument, `m` `IO`. The field is a tuple of an `IO` action and a number, and
-/// the function reading it runs the action.
+/// The field `t (Tuple2 (m I64))` applies one type constructor argument to `Tuple2` given the
+/// other one applied. Here both are newtypes: `t` is a struct whose one field applies its argument,
+/// and `m` is `IO`. The field is a tuple of an `IO` action and a number, and a recursive function
+/// reading it runs the action.
 #[test]
 fn test_a_field_applying_a_newtype_to_a_tuple_type_holding_an_io_action_runs_it() {
     let source = r#"
@@ -2752,11 +2752,12 @@ fn test_a_field_applying_a_newtype_to_a_tuple_type_holding_a_newtype_of_a_number
     test_source(source, Configuration::develop_mode());
 }
 
-/// Fields applying a type constructor argument to a type that holds a newtype at each place a type
-/// constructor short of its arguments can hold one: as a later argument, under a type constructor
-/// applied to all its arguments, applied to itself, and under a second argument applied the same
-/// way inside a newtype's own field. In the last two types the argument is a newtype given one of
-/// its two arguments, and a newtype whose field applies its own argument to such a type.
+/// Fields applying a type constructor argument `t` to a tuple type given all but its last
+/// argument, with the newtype `m` at each place such a type can hold one: as a later argument
+/// (`Later`), under a type constructor applied to all its arguments (`Under`), and applied to
+/// itself (`Twice`). `Short` binds `t` to a newtype given one of its two arguments, and `Inner`
+/// reaches the field through a newtype whose own field applies `t` the same way. Each field gives
+/// back the numbers it was built with.
 #[test]
 fn test_fields_applying_a_newtype_to_types_holding_a_newtype_at_each_place_read_it() {
     let source = r#"
@@ -2837,8 +2838,8 @@ fn test_a_field_applying_a_newtype_to_a_tuple_type_holding_a_newtype_is_read_eac
 /// The field `t (Tuple2 (m I64))` beside fields declaring a function: `g`, a function type of its
 /// own, and `p`, the argument `m` applied to one. With `m` a newtype of a function, a recursive
 /// function calls the function the tuple holds and the one in `g`; with `m` a newtype of its
-/// argument, it calls the function in `p`, and the one a tuple type written with a function type,
-/// `t (Tuple2 (m (I64 -> I64)))`, holds.
+/// argument, it calls the function in `p`, and the one the field `t (Tuple2 (m (I64 -> I64)))` of
+/// `Held` holds.
 #[test]
 fn test_functions_beside_and_inside_a_field_applying_a_newtype_to_a_tuple_type_compute_them() {
     let source = r#"
