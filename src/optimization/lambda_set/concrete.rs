@@ -68,10 +68,15 @@ enum Node {
 
 /// The sets that a set lying on a cycle reaches, written alike for two sets that reach the same
 /// trees. Each entry is a class of equal sets, in the order `canonical_classes` numbers them, given
-/// as its sorted elements; an element's label is its lambda, or `None` for `Elem::Dynamic`. The set
+/// as its sorted elements; an element's label is its lambda. Every element names a lambda: a set
+/// holding `Elem::Dynamic` holds nothing else, so it reaches no set and lies on no cycle. The set
 /// itself is one of the classes, so the classes and the class of the set give the tree it unfolds
 /// to.
-type CycleClasses = Vec<Vec<ElemKey<Option<LamId>>>>;
+type CycleClasses = Vec<Vec<ElemKey<LamId>>>;
+
+/// What `SetStore::intern_cycle` panics with on meeting Dynamic in a set on a cycle.
+const DYNAMIC_ON_A_CYCLE: &str =
+    "a set on a cycle holds Dynamic, though a set holding Dynamic holds nothing else";
 
 impl SetStore {
     /// A store holding no set.
@@ -180,6 +185,9 @@ impl SetStore {
     /// classes of equal sets, and numbers the classes by the trees the sets unfold to, so the
     /// classes and one of them name the tree of a set (`CycleClasses`). A class naming a set of the
     /// store resolves its sets of the component to that one; each other class becomes a new set.
+    ///
+    /// Every node holds lambdas alone, as a set on a cycle reaches itself through an `Elem::Lam`
+    /// and a set holding `Elem::Dynamic` holds nothing else.
     fn intern_cycle(
         &mut self,
         component: &[usize],
@@ -191,13 +199,13 @@ impl SetStore {
             nodes.iter().enumerate().map(|(p, n)| (*n, p)).collect();
         // The elements of each node, in the order of `nodes`, which grows as the walk meets the sets
         // of the store the nodes reach.
-        let mut elems: Vec<NodeElems<Option<LamId>>> = vec![];
+        let mut elems: Vec<NodeElems<LamId>> = vec![];
         while elems.len() < nodes.len() {
             let node_elems = match nodes[elems.len()] {
                 Node::Local(i) => system[i]
                     .iter()
                     .map(|e| match e {
-                        PendingElem::Dynamic => (None, vec![]),
+                        PendingElem::Dynamic => unreachable!("{}", DYNAMIC_ON_A_CYCLE),
                         PendingElem::Lam(lam, args) => {
                             let children = args
                                 .iter()
@@ -213,20 +221,20 @@ impl SetStore {
                                     Ref::Known(id) => self.child(*id, &mut nodes, &mut position),
                                 })
                                 .collect();
-                            (Some(*lam), children)
+                            (*lam, children)
                         }
                     })
                     .collect(),
                 Node::Known(id) => self.sets[id as usize]
                     .iter()
                     .map(|e| match e {
-                        Elem::Dynamic => (None, vec![]),
+                        Elem::Dynamic => unreachable!("{}", DYNAMIC_ON_A_CYCLE),
                         Elem::Lam(lam, args) => {
                             let children = args
                                 .iter()
                                 .map(|a| self.child(*a, &mut nodes, &mut position))
                                 .collect();
-                            (Some(*lam), children)
+                            (*lam, children)
                         }
                     })
                     .collect(),
@@ -264,9 +272,8 @@ impl SetStore {
         for (c, p) in new_classes {
             let new_elems = elems[p]
                 .iter()
-                .map(|(lam, children)| match lam {
-                    None => Elem::Dynamic,
-                    Some(lam) => Elem::Lam(
+                .map(|(lam, children)| {
+                    Elem::Lam(
                         *lam,
                         children
                             .iter()
@@ -275,7 +282,7 @@ impl SetStore {
                                 Child::Fixed(id) => *id,
                             })
                             .collect(),
-                    ),
+                    )
                 })
                 .collect();
             let id = self.insert(new_elems, true);
