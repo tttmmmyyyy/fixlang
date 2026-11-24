@@ -44,10 +44,10 @@ struct GroupSlots {
 
 /// What an occurrence of a type variable stands for while a declared type is read at an instance.
 ///
-/// The type of a binding has its newtypes unwrapped: at any depth, an unwrapped newtype occurring
-/// in it is short of its arguments. The walk reads the arguments of a type constructor bound
-/// without all of them (the `I64 -> I64` of `Tuple2 (I64 -> I64)`) as the types of values, which
-/// is the form `slot_count` takes.
+/// Every unwrapped newtype in the type of a binding, at any depth, is applied to fewer arguments
+/// than it takes. That holds inside the arguments of a type constructor bound without all its
+/// arguments too (the `I64 -> I64` of `Tuple2 (I64 -> I64)`): the walk reads each such argument as
+/// the type of a value and counts its slots with `slot_count`.
 #[derive(Clone)]
 enum Binding {
     /// A type whose slots are the given variables.
@@ -673,9 +673,14 @@ impl<'e> SlotLayout<'e> {
         }
     }
 
-    /// The type the declared type `ty` is at the instance `env` binds its type variables to: `ty`
-    /// with each type variable replaced by the type bound to it, and with the unwrapped newtypes the
-    /// replacement saturates replaced by what they unwrap to, as `TypeNode::field_types` answers.
+    /// The declared type `ty` at the instance `env` binds its type variables to. Each type variable
+    /// is replaced by the type bound to it, and then each unwrapped newtype applied to all its
+    /// arguments by the type of its field. `TypeNode::field_types` gives a field's type in the same
+    /// form.
+    ///
+    /// # Examples
+    /// With `NW f` and `Nt a` unwrapped newtypes of `f I64` and of `a`, and with `t` bound to `NW`
+    /// and `m` to `Nt`, `t (Tuple2 (m I64))` becomes `(I64, I64)`.
     fn instantiate(&self, ty: &Arc<TypeNode>, env: &Map<Name, Binding>) -> Arc<TypeNode> {
         substitute(ty, env).unwrap_newtypes(self.type_env)
     }
@@ -769,8 +774,8 @@ fn untracked_tycon(source: &OwnSource) -> TyCon {
 }
 
 /// The declared type `ty` with each of its type variables replaced by the type `env` binds it to.
-/// Replacing a variable applied to arguments can saturate an unwrapped newtype, so the answer is a
-/// type of a value only once `SlotLayout::instantiate` has unwrapped it.
+/// Replacing a type variable applied to arguments can apply an unwrapped newtype to all its
+/// arguments, and `TypeNode::unwrap_newtypes` then turns the result into the type of a value.
 fn substitute(ty: &Arc<TypeNode>, env: &Map<Name, Binding>) -> Arc<TypeNode> {
     match &ty.ty {
         Type::TyVar(tv) => env[&tv.name].ty().clone(),
