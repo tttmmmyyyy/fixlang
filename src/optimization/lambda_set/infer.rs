@@ -1,6 +1,7 @@
 // Inferring the lambda sets of a program, one component of its call graph at a time.
 
 use super::{
+    concrete::SetId,
     flow::BuiltinFlow,
     partition::{canonical_classes, Child, NodeElems},
     slots::{AType, SlotLayout},
@@ -117,7 +118,7 @@ pub struct Component {
 impl Component {
     /// The body a copy giving the parameters the sets `args` has: the sets it gives `body_params`,
     /// in order. Copies of one body share their code in the rewritten program.
-    pub fn body_of<T: Copy>(&self, args: &[T]) -> Vec<T> {
+    pub fn body_of(&self, args: &[SetId]) -> Vec<SetId> {
         self.body_params.iter().map(|p| args[*p]).collect()
     }
 }
