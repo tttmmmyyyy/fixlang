@@ -1048,12 +1048,13 @@ fn test_a_long_chain_of_functions_each_calling_the_next_with_two_lambdas_lists_i
 }
 
 /// What `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
-const RETURNING_BRANCHING_CHAIN_OUTPUT: &str = "2175390";
+const RETURNING_BRANCHING_CHAIN_OUTPUT: &str = "4361560";
 
 /// The chain of `branching_chain_source`, where each function returns the function it builds in
 /// place of calling it: `f0` returns the function it was given, so what `f{i}` returns holds the
 /// lambdas `f{i}` and every function after it in the chain build. `main` calls what `f{depth}`
-/// returns.
+/// returns twice, so that the functions of the chain return a function once their calls are
+/// uncurried.
 fn returning_branching_chain_source(depth: usize) -> String {
     chain_of_two_lambda_calls_source(
         depth,
@@ -1061,15 +1062,15 @@ fn returning_branching_chain_source(depth: usize) -> String {
         "(I64 -> I64)",
         "",
         "g",
-        "println(CHAIN_CALL(n).to_string)",
+        "let h = CHAIN_CALL;\n    println((h(n) + h(n + 1)).to_string)",
     )
 }
 
 /// The chain of `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
-/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions and computes its value. Past the copy budget
-/// (`LS_COPY_BUDGET_BASE`), the parameters of the functions far down the chain are given sets
-/// represented by closures, while each function returns the lambdas it and the later functions of
-/// the chain build.
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions (11.7 billion on x86-64) and computes its value.
+/// A function far down the chain goes past the copy budget (`LS_COPY_BUDGET_BASE`), so the
+/// function it is given is a closure. The chain hands that function back, so every function of the
+/// chain returns a closure.
 #[test]
 fn test_a_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_bounded_work() {
     let description = format!(
@@ -1080,6 +1081,32 @@ fn test_a_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_
         &returning_branching_chain_source(BRANCHING_CHAIN_DEPTH),
         &description,
         RETURNING_BRANCHING_CHAIN_OUTPUT,
+    );
+}
+
+/// A depth of the chain of `returning_branching_chain_source` at which what `f{depth}` returns
+/// would hold some 2^18 lambdas.
+const DEEP_RETURNING_BRANCHING_CHAIN_DEPTH: usize = 18;
+
+/// What `returning_branching_chain_source(DEEP_RETURNING_BRANCHING_CHAIN_DEPTH)` prints.
+const DEEP_RETURNING_BRANCHING_CHAIN_OUTPUT: &str = "16826700";
+
+/// The chain of `returning_branching_chain_source(DEEP_RETURNING_BRANCHING_CHAIN_DEPTH)` builds in
+/// fewer than `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions (14.3 billion on x86-64) and computes its
+/// value. What each function returns holds twice the lambdas of what the next returns, so the
+/// variable of the result goes past `MAX_LS_VARIABLE_LAMBDAS` within a few steps and is made
+/// Dynamic, which stops the doubling.
+/// Where the machine does not let the test count instructions, the test checks the answer alone.
+#[test]
+fn test_a_deep_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_bounded_work()
+{
+    assert_chain_builds_in_bounded_work(
+        &returning_branching_chain_source(DEEP_RETURNING_BRANCHING_CHAIN_DEPTH),
+        &format!(
+            "a chain of {} functions each returning the next with two lambdas",
+            DEEP_RETURNING_BRANCHING_CHAIN_DEPTH
+        ),
+        DEEP_RETURNING_BRANCHING_CHAIN_OUTPUT,
     );
 }
 
@@ -1205,6 +1232,69 @@ mod dump_tests {
     use crate::tests::test_util::{
         build_run_and_read_rc_ir, rc_ir_callee_of, rc_ir_function_bodies,
     };
+
+    /// How many values `pick` of `joined_values_source` chooses among: more than the classes a
+    /// union may have (`MAX_LS_UNION_VARIANTS`).
+    const JOINED_VALUES: usize = MAX_LS_UNION_VARIANTS + 8;
+
+    /// A program whose `pick` returns one of `JOINED_VALUES` functions, each built by a call of
+    /// its own of `mk2` given what a call of its own of `mk` builds. The variable of the result
+    /// holds the lambda of `mk2` once per call, each time with a variable of its own for the
+    /// function it captures, and every one of those variables holds the lambda of `mk` alone.
+    /// `mk` and `mk2` recurse, which keeps their bodies out of `pick`.
+    fn joined_values_source() -> String {
+        let branches: Vec<String> = (0..JOINED_VALUES)
+            .map(|i| format!("    if k == {i} {{ mk2(mk({i})) }} else\n"))
+            .collect();
+        format!(
+            "module Main;\n\
+             \n\
+             mk : I64 -> (I64 -> I64);\n\
+             mk = |n| |x| if x < -1000000 {{ (mk(n))(x + 1) }} else {{ x + n }};\n\
+             \n\
+             mk2 : (I64 -> I64) -> (I64 -> I64);\n\
+             mk2 = |g| |x| if x < -1000000 {{ (mk2(g))(x + 1) }} else {{ g(x) + 1 }};\n\
+             \n\
+             pick : I64 -> (I64 -> I64) -> (I64 -> I64);\n\
+             pick = |k, d| (\n\
+             {}\
+             \x20   d\n\
+             );\n\
+             \n\
+             main : IO ();\n\
+             main = (\n\
+             \x20   let n = *(pure(100) : IO I64);\n\
+             \x20   let h = pick(n % 7, mk2(mk(1000)));\n\
+             \x20   println((h(n) + h(n + 1)).to_string)\n\
+             );\n",
+            branches.concat()
+        )
+    }
+
+    /// A variable holding more lambdas than a union may have classes keeps its capture struct
+    /// where the lambdas build the same values: `pick` of `joined_values_source` returns the
+    /// capture struct of the lambda of `mk2`, and builds no closure. The lambdas of the result's
+    /// variable are within `MAX_LS_VARIABLE_LAMBDAS`, and its concrete set holds one element.
+    #[test]
+    fn test_a_function_returning_one_of_many_values_of_one_lambda_returns_its_capture_struct() {
+        let dump = build_run_and_read_rc_ir(
+            &joined_values_source(),
+            "max",
+            "207",
+            "a function returning one of many values built by one lambda",
+        );
+        let picks = rc_ir_function_bodies(&dump, "fn Main::pick");
+        assert_eq!(picks.len(), 1, "the functions made of `pick`: {:?}", picks);
+        let pick = &picks[0];
+        let signature = pick.lines().next().unwrap();
+        let (_, result) = signature.rsplit_once(" -> ").unwrap();
+        assert!(
+            result.contains(&format!("{}@mk2", LS_CAP_PREFIX)),
+            "`pick` returns `{}`",
+            result
+        );
+        assert!(!pick.contains("= closure "), "`pick` builds a closure");
+    }
 
     /// The function values that `body`, a function of an RC IR dump, calls: each call whose callee
     /// is a local value. A global is written with its namespace, and a builtin operation's name

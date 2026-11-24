@@ -94,8 +94,9 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
 /// `v<index>`.
 ///
 /// # Examples
-/// A variable holding a lambda of `Main::f` whose owner is given `p0`, and a Dynamic member, reads
-/// as `Main::f@lam1[p0], Dynamic (<reason>)`.
+/// A variable holding two lambdas of `Main::f`, the owner of the second given `p0`, reads as
+/// `Main::f@lam0[], Main::f@lam1[p0]`. A variable holding Dynamic reads as `Dynamic (<reason>)`,
+/// once for each reason.
 fn describe_members(
     solver: &mut Solver,
     v: SetVar,
