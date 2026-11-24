@@ -416,9 +416,9 @@ fn partition_sets(
 /// into classes too, whatever represents the set they are built for: the rewrite lifts such a lambda
 /// to a global function, and a closure of it is that function applied to the capture struct. The
 /// class is that of the element naming the lambda and the sets the copy gives the parameters the
-/// lambda depends on, which a set of closures holding `Elem::Dynamic` does not list. Elements
-/// representing the sets at the lambda's interface alike are in one class, so they share the global
-/// function and the capture struct.
+/// lambda depends on, which a set of closures holding `Elem::Dynamic` does not list. Values built
+/// by copies that represent the sets at the lambda's interface alike are in one class, so they
+/// share the global function and the capture struct.
 pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     let store = &spec.store;
     let set_count = store.len();

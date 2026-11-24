@@ -116,8 +116,8 @@ pub struct Component {
 }
 
 impl Component {
-    /// The body a copy giving the parameters the sets `args` has: the sets it gives `body_params`,
-    /// in order. Copies of one body share their code in the rewritten program.
+    /// The body of the copy that gives the parameters the sets `args`: the sets it gives
+    /// `body_params`, in order. Copies of one body share their code in the rewritten program.
     pub fn body_args(&self, args: &[SetId]) -> Vec<SetId> {
         self.body_params.iter().map(|p| args[*p]).collect()
     }
@@ -234,9 +234,10 @@ impl Analysis {
 /// Infers the lambda sets of `prg`. Each component holding a symbol listed in
 /// `symbols_past_copy_budget` is inferred as one the program asks for more bodies than its copy
 /// budget (`specialize`): the variables of its `Component::body_params` are given
-/// `Member::Dynamic`. A reference to the component gets them holding it, and the variables the
-/// reference unifies them with hold it too, so the functions the bodies of the component depend on
-/// are closures wherever they are built, passed and called.
+/// `Member::Dynamic`. Each reference to the component copies those variables with the
+/// `Member::Dynamic` they hold, and the variables it unifies the copies with hold it too, so the
+/// functions the bodies of the component depend on are closures wherever they are built, passed and
+/// called.
 pub fn infer(
     prg: &Program,
     layout: &SlotLayout,

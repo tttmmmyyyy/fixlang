@@ -53,7 +53,7 @@ pub struct Specialization {
 ///
 /// Each copy is given the set of every variable of its component, which is what types its nodes.
 /// The set of a variable holding `Member::Dynamic` is the set holding `Elem::Dynamic` alone: its
-/// values are closures whatever lambdas build them, so the copies given them need no telling apart.
+/// values are closures whatever lambdas build them, so one copy serves them all.
 ///
 /// The walk counts the bodies each component is asked for: the distinct lists of sets its copies
 /// give `Component::body_params`. It stops at the first component asked for more bodies than its
