@@ -82,6 +82,8 @@ A hunt is **two finder subagents and the orchestrator**. Each finder gets its ow
 
    **Answer it by measurement, not by reading.** Break what the test pins — the narrowest change to the implementation that makes the behavior wrong — and run the **whole** suite. The tests that go red are the axis's existing owners. None red means the axis has none, and the test is the wave's most durable product; one or more red means the test is a duplicate of those, and it is dropped and named in the report. One mutation serves every test that pins the same behavior, so the runs are per behavior rather than per test.
 
+   When several behaviors are in question, put each mutation behind its own environment variable — `if std::env::var("MUT_<name>").is_ok() { <the broken behavior> }` — and build once. Each suite run then sets one variable, so the measurement costs one build however many behaviors it covers, and no run reads a binary left mutated by the one before. Remove the switches with the rest of the probes.
+
    Two traps make this measurement lie:
 
    - **Reading instead of running.** Grepping the test files that look related, or reasoning from test names, finds the tests you already thought of. The suite is large and its coverage is not organized by subject: the owner of an axis routinely lives in a file whose name gives no hint of it.
@@ -344,6 +346,10 @@ reason, and a hunt that leaves it reachable changes what every later build costs
 #### Run the emitted programs under valgrind memcheck
 
 Leaks, double frees, and use-after-free produce correct output on a good day, so comparing outputs finds none of them. Memcheck does. Interpret its report against a baseline: a glibc thread-local pattern or a third-party library's internal allocation shows up identically on unmodified code.
+
+For the reference-counting optimizations, `tools/rc-fuzz/` generates programs that read values out
+of containers, update the containers, and use the values read, runs each under memcheck and against
+a reference compiler's output, and reduces a failing one; its README gives the commands.
 
 **It is blind to a stack array, and a compiler's own runtime is where that matters.** A tool that
 ships source it compiles for the user — a C runtime, a generated prelude, an injected shim — never
