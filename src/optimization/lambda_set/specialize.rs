@@ -135,9 +135,9 @@ pub fn specialize(analysis: &mut Analysis) -> Result<Specialization, usize> {
         for (callee, callee_args) in requests {
             let callee_component = &analysis.components[callee];
             if callee_component.past_copy_budget {
-                for p in &callee_component.body_params {
+                for set in callee_component.body_of(&callee_args) {
                     assert!(
-                        store.elems(callee_args[*p]) == [Elem::Dynamic],
+                        store.elems(set) == [Elem::Dynamic],
                         "a reference gives the component {}, past its copy budget, a set of lambdas",
                         callee
                     );

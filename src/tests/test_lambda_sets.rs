@@ -1014,6 +1014,19 @@ fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bo
     );
 }
 
+/// Builds `source`, a chain `description` names, at the optimization level `max` in fewer than
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions (`build_within_instructions_and_run`), and checks
+/// that the program prints `expected`.
+fn assert_chain_builds_in_bounded_work(source: &str, description: &str, expected: &str) {
+    let printed = build_within_instructions_and_run(
+        source,
+        "max",
+        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
+        description,
+    );
+    assert_eq!(printed, expected, "the chain computed a wrong value");
+}
+
 /// A depth of the chain of `branching_chain_source` at which a copy for each way a function is
 /// asked for would make some 2^24 copies.
 const LONG_BRANCHING_CHAIN_DEPTH: usize = 24;
@@ -1029,19 +1042,13 @@ const LONG_BRANCHING_CHAIN_OUTPUT: &str = "17458065";
 #[test]
 fn test_a_long_chain_of_functions_each_calling_the_next_with_two_lambdas_lists_its_copies_in_bounded_work(
 ) {
-    let description = format!(
-        "a chain of {} functions each calling the next with two lambdas",
-        LONG_BRANCHING_CHAIN_DEPTH
-    );
-    let printed = build_within_instructions_and_run(
+    assert_chain_builds_in_bounded_work(
         &branching_chain_source(LONG_BRANCHING_CHAIN_DEPTH),
-        "max",
-        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
-        &description,
-    );
-    assert_eq!(
-        printed, LONG_BRANCHING_CHAIN_OUTPUT,
-        "the chain computed a wrong value"
+        &format!(
+            "a chain of {} functions each calling the next with two lambdas",
+            LONG_BRANCHING_CHAIN_DEPTH
+        ),
+        LONG_BRANCHING_CHAIN_OUTPUT,
     );
 }
 
@@ -1113,20 +1120,14 @@ fn wrapping_branching_chain_source(depth: usize) -> String {
 /// that lambda with are the ones the copy of `wrap` under `f0` builds it with.
 #[test]
 fn test_a_lambda_built_under_a_function_past_its_copy_budget_and_returned_up_a_chain_is_called() {
-    let description = format!(
-        "a chain of {} functions each returning the next with two lambdas, the last returning a \
-         lambda another function builds",
-        BRANCHING_CHAIN_DEPTH
-    );
-    let printed = build_within_instructions_and_run(
+    assert_chain_builds_in_bounded_work(
         &wrapping_branching_chain_source(BRANCHING_CHAIN_DEPTH),
-        "max",
-        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
-        &description,
-    );
-    assert_eq!(
-        printed, WRAPPING_BRANCHING_CHAIN_OUTPUT,
-        "the chain computed a wrong value"
+        &format!(
+            "a chain of {} functions each returning the next with two lambdas, the last returning \
+             a lambda another function builds",
+            BRANCHING_CHAIN_DEPTH
+        ),
+        WRAPPING_BRANCHING_CHAIN_OUTPUT,
     );
 }
 

@@ -943,7 +943,7 @@ fn generalize(
             solver.make_dynamic_found_in(
                 params[*p],
                 DynamicKind::CopyBudget,
-                symbols.first().cloned(),
+                Some(symbols[0].clone()),
             );
         }
     }
