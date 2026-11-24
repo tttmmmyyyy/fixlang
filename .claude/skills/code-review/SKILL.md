@@ -367,6 +367,14 @@ The signs of a design with no such argument:
 
 When the argument cannot be written, is tangled, or needs a premise kept only by convention, flag it: give the argument as far as it goes, the step where it stops, and a design whose argument goes through — often one that rests on a model the code base already has. When the argument goes through, give it in the report, with its premises. Whether it could be written is the judgment, so the orchestrator's summary says only that it went through and on which premises; the argument itself is kept for the pull request body, which carries it (the `pr-message` skill's *The correctness argument*).
 
+**An argument that goes through is then refuted by a reader who did not write it.** Its author
+cannot see its gaps: what the author knows about the code fills in the step the text leaves out.
+So the orchestrator hands the argument, its premises and the diff to a fresh subagent, with no
+account of how the change was made, and asks for a program that breaks it. The subagent opens every
+piece of code the argument cites and checks that it says what the argument claims. A counterexample
+it names is built and run before it counts; one that reproduces is a finding against the change,
+and one that does not is reported with the step that rules it out.
+
 ### What the implementation reveals about the design
 
 Look for concrete evidence, in the code as written, that the chosen design fights the goal:
