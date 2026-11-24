@@ -229,16 +229,88 @@ impl Builders {
     }
 }
 
+/// The Fix type of the functions of each set of `spec`, where they have one: the type of the lambdas
+/// the set's elements name, and of the nodes whose value is a function of the set in the copies,
+/// among them the function each call applies. `None` for a set whose functions have several types,
+/// and for one with no function.
+///
+/// The functions of a set have several types where the set is at an own slot of a group of type
+/// constructors (`SlotLayout`) whose member occurs in the group's fields at other type arguments
+/// than its own: with `type L a = box struct { f : a -> I64, next : Option (L I64) }`, the
+/// functions at `f` of an `L Bool` and of the `L I64` it holds make one set.
+fn function_types(analysis: &Analysis, spec: &Specialization) -> Vec<Option<Arc<TypeNode>>> {
+    /// The types met so far of the functions of each set.
+    struct Met<'m> {
+        /// The first type met of the functions of each set.
+        first: Vec<Option<&'m Arc<TypeNode>>>,
+        /// Whether a type other than the first was met of the functions of each set.
+        several: Vec<bool>,
+    }
+    impl<'m> Met<'m> {
+        /// Records that a function of `set` has the type `ty`.
+        fn meet(&mut self, set: SetId, ty: &'m Arc<TypeNode>) {
+            match self.first[set as usize] {
+                None => self.first[set as usize] = Some(ty),
+                Some(first) => self.several[set as usize] |= first != ty,
+            }
+        }
+    }
+    let store = &spec.store;
+    let mut met = Met {
+        first: vec![None; store.len()],
+        several: vec![false; store.len()],
+    };
+    for id in 0..store.len() {
+        for (lam, _) in store.lam_elems(id as SetId) {
+            let lambda = &analysis.lambdas[lam as usize];
+            met.meet(id as SetId, lambda.expr.type_.as_ref().unwrap());
+        }
+    }
+    // The variable and the type of the function-typed nodes of each component, each pair once: a
+    // copy gives every node of a pair the same set.
+    let function_nodes: Vec<Set<(SetVar, &Arc<TypeNode>)>> = analysis
+        .components
+        .iter()
+        .map(|component| {
+            component
+                .node_types
+                .iter()
+                .flatten()
+                .filter(|node| node.ty.ty.is_arrow())
+                .map(|node| (node.ty.slots[0], &node.ty.ty))
+                .collect()
+        })
+        .collect();
+    for instance in &spec.instances {
+        let component = &analysis.components[instance.component];
+        for (v, ty) in &function_nodes[instance.component] {
+            met.meet(instance.set_of(component, *v), ty);
+        }
+    }
+    met.first
+        .into_iter()
+        .zip(met.several)
+        .map(|(first, several)| first.filter(|_| !several).cloned())
+        .collect()
+}
+
 /// Whether a capture struct, or a union of capture structs, can stand for the values of each set of
-/// `spec`: the set is not empty and holds lambdas alone, and its layout does not hold itself, as
-/// `represent` describes.
-fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builders) -> Vec<bool> {
+/// `spec`: the set is not empty and holds lambdas alone, its functions have one Fix type
+/// (`function_types`), and its layout does not hold itself, as `represent` describes.
+fn unboxable_sets(
+    analysis: &Analysis,
+    spec: &Specialization,
+    builders: &Builders,
+    function_types: &[Option<Arc<TypeNode>>],
+) -> Vec<bool> {
     let store = &spec.store;
     let set_count = store.len();
     let mut unboxable: Vec<bool> = (0..set_count)
         .map(|id| {
             let elems = store.elems(id as SetId);
-            !elems.is_empty() && elems.iter().all(|elem| matches!(elem, Elem::Lam(..)))
+            !elems.is_empty()
+                && elems.iter().all(|elem| matches!(elem, Elem::Lam(..)))
+                && function_types[id].is_some()
         })
         .collect();
     let mut holds = Graph::new((0..set_count).collect::<Vec<usize>>());
@@ -615,10 +687,15 @@ fn partition_sets(
 /// The representation is decided in four steps.
 ///
 /// 1. A set whose values neither a capture struct nor a union of capture structs can stand for is
-///    represented by closures: an empty set, a set holding `Elem::Dynamic`, and a set whose layout
-///    holds itself. The layout of a set holds itself when the capture structs of its elements
-///    hold in place, through unboxed fields, a set that in turn holds this one in place. Such a
-///    layout would have no size, as an unboxed type reaching itself has none.
+///    represented by closures: an empty set, a set holding `Elem::Dynamic`, a set whose functions
+///    have several Fix types, and a set whose layout holds itself. A value of a capture struct or
+///    a union is called by calling each lambda of its set directly with the argument of the call,
+///    which is typed only where the lambdas and the function the call applies have one type
+///    (`function_types`); a closure is called through its function pointer, whatever the types
+///    of the other functions of its set. The layout of a set holds itself when the capture
+///    structs of its elements hold in place, through unboxed fields, a set that in turn holds
+///    this one in place. Such a layout would have no size, as an unboxed type reaching itself
+///    has none.
 ///    So is a set step 2 finds too large for a capture struct or a union (`too_large_sets`): its
 ///    elements make more classes than `MAX_LS_UNION_VARIANTS`, or its values would lay out more
 ///    capture structs in place than `MAX_LS_IN_PLACE_CAPTURE_STRUCTS`. Step 2 is then taken again with
@@ -648,7 +725,8 @@ pub fn represent(analysis: &Analysis, spec: &Specialization, type_env: &TypeEnv)
     let builders = Builders::new(analysis, spec);
 
     // The sets a capture struct or a union of capture structs can stand for.
-    let mut unboxable = unboxable_sets(analysis, spec, &builders);
+    let function_types = function_types(analysis, spec);
+    let mut unboxable = unboxable_sets(analysis, spec, &builders, &function_types);
 
     // The partition of the sets by the code their values make. The sets of closures hold no
     // element the partition reads, so they make one class of their own. A set too large for a
@@ -684,6 +762,13 @@ pub fn represent(analysis: &Analysis, spec: &Specialization, type_env: &TypeEnv)
         if !unboxable[id] {
             continue;
         }
+        // The direct calls the rewrite builds for the set's values rely on this.
+        assert!(
+            function_types[id].is_some(),
+            "the functions of the set {}, represented by a capture struct or a union, have several \
+             types",
+            id
+        );
         let repr = *repr_of_block.entry(block[id]).or_insert_with(|| {
             if block_elems[block[id]].len() == 1 {
                 first_struct_sets.push(id);

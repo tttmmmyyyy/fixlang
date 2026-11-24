@@ -884,8 +884,16 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 let func = self.walk_expr(walk, func, false);
                 let arg = self.walk_expr(walk, &args[0], false);
                 match own {
-                    Repr::Single(c) => self.call_class(walk, c, e, func, arg, ty),
-                    Repr::Union(u) => self.call_union(walk, u, e, func, arg, ty),
+                    Repr::Single(c) => {
+                        self.assert_class_typed(c, &func_node.ty.ty);
+                        self.call_class(walk, c, e, func, arg, ty)
+                    }
+                    Repr::Union(u) => {
+                        for c in &self.repr.unions[u as usize].members {
+                            self.assert_class_typed(*c, &func_node.ty.ty);
+                        }
+                        self.call_union(walk, u, e, func, arg, ty)
+                    }
                     Repr::Closure => e.set_app_func(func).set_app_args(vec![arg]).set_type(ty),
                 }
             }
@@ -1126,6 +1134,21 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let cap_ty = cap.type_.clone().unwrap();
         let callee = expr_var_typed(self.lifted_name(c), type_arrow(cap_ty, ty));
         expr_app_typed(callee, vec![cap])
+    }
+
+    /// Panics unless the lambda of the class `c` has the type `func_ty` of a function that a call
+    /// about to be rewritten into a direct call of the lambda applies. `represent` gives a capture
+    /// struct or a union only to a set whose functions have one type.
+    fn assert_class_typed(&self, c: u32, func_ty: &Arc<TypeNode>) {
+        let lambda = &self.analysis.lambdas[self.repr.classes[c as usize].lam as usize];
+        let lambda_ty = lambda.expr.type_.as_ref().unwrap();
+        assert!(
+            lambda_ty == func_ty,
+            "a call of a function of type `{}` is rewritten into a direct call of {}, of type `{}`",
+            func_ty.to_string(),
+            lambda.to_string(),
+            lambda_ty.to_string()
+        );
     }
 
     /// The application `e` of `func`, a value of the class `c`, to `arg`, of type `ty`: a direct call

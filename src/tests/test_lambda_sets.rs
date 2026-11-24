@@ -2905,6 +2905,163 @@ fn test_functions_in_two_types_referring_to_each_other_compute_them() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// A type that refers to itself at other type arguments than its own, with a function field
+/// typed by the argument: the function of the outer value and that of the inner one have
+/// different types, and each call reaches the one stored in the value it reads.
+#[test]
+fn test_functions_in_a_type_referring_to_itself_at_other_arguments_compute_them() {
+    let source = r#"
+    module Main;
+
+    type L a = box struct { f : a -> I64, next : Option (L I64) };
+    type Alt a b = box struct { here : a -> b, there : Option (Alt b a) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let inner : L I64 = L { f : |x| x + n, next : none() };
+        let outer : L Bool = L { f : |b| if b { n } else { 3 }, next : some(inner) };
+        let r = (outer.@f)(n > 5);
+        let s = (outer.@next.as_some.@f)(r);
+        let back : Alt Bool I64 = Alt { here : |b| if b { n } else { 7 }, there : none() };
+        let forth : Alt I64 Bool = Alt { here : |x| x > n, there : some(back) };
+        let t = (forth.@there.as_some.@here)((forth.@here)(n + 1));
+        assert_eq(|_| "", [s, t], [3 + n, n]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A type that refers to itself at `F64`, with a function field typed by the argument: the
+/// function of the outer value takes an integer and that of the inner one a floating-point number,
+/// and each is called with its own.
+#[test]
+fn test_functions_in_a_type_referring_to_itself_at_a_float_argument_compute_them() {
+    let source = r#"
+    module Main;
+
+    type L a = box struct { f : a -> I64, next : Option (L F64) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let inner : L F64 = L { f : |x| (x * 2.5).to_I64 + n, next : none() };
+        let outer : L I64 = L { f : |i| i * 3 + n, next : some(inner) };
+        let r = (outer.@f)(n + 4);
+        let s = (outer.@next.as_some.@f)(r.to_F64 + 0.5);
+        assert_eq(|_| "", [r, s], [4 * n + 12, 11 * n + 31]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Two types referring to each other, one of them to the other at `String` too, both holding a
+/// third type with a function field typed by the argument: the function reached at the argument
+/// and the one reached at `String` have different types, and each is called with its own.
+#[test]
+fn test_functions_in_two_types_referring_to_each_other_at_other_arguments_compute_them() {
+    let source = r#"
+    module Main;
+
+    type W a = box struct { g : a -> I64 };
+    type A x = box struct { w : W x, b : Option (B x) };
+    type B y = box struct { a1 : Option (A y), a2 : A String };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let sa : A String = A { w : W { g : |s| s.get_size + n }, b : none() };
+        let ia : A I64 = A { w : W { g : |i| i * 3 + n }, b : some(B { a1 : none(), a2 : sa }) };
+        let r = (ia.@w.@g)(n + 4);
+        let s = (ia.@b.as_some.@a2.@w.@g)("abc");
+        assert_eq(|_| "", [r, s], [4 * n + 12, 3 + n]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A type that refers to itself at other type arguments than its own, where the program stores a
+/// function in the outer value alone and also calls the field of an inner value, which no value
+/// reaches: the one function stored is called with an argument of its own type.
+#[test]
+fn test_a_function_in_a_type_referring_to_itself_at_other_arguments_beside_a_call_of_another_type_computes_it(
+) {
+    let source = r#"
+    module Main;
+
+    type L a = box struct { f : a -> I64, next : Option (L I64) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let outer : L Bool = L { f : |b| if b { n } else { 3 }, next : none() };
+        let r = (outer.@f)(n == n);
+        let s = match outer.@next { none(_) => 100, some(i) => (i.@f)(r) };
+        assert_eq(|_| "", [r, s], [n, 100]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A type that refers to itself at other type arguments than its own, whose values two global
+/// functions build, where the program calls the function of the inner value alone.
+#[test]
+fn test_functions_of_two_types_built_into_one_type_by_global_functions_compute_the_one_called() {
+    let source = r#"
+    module Main;
+
+    type L a = box struct { f : a -> I64, next : Option (L I64) };
+
+    mk_inner : I64 -> L I64;
+    mk_inner = |n| L { f : |x| x + n, next : none() };
+
+    mk_outer : I64 -> L Bool;
+    mk_outer = |n| L { f : |b| if b { n } else { 3 }, next : some(mk_inner(n)) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let outer = mk_outer(n);
+        let s = (outer.@next.as_some.@f)(n + 5);
+        assert_eq(|_| "", s, 2 * n + 5);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// An unboxed type that refers to itself at other type arguments than its own, whose functions of
+/// two types are captured by lambdas that an array holds together: `h` captures the function of
+/// the inner value, and `k` captures `h` and the outer value, which holds its function in place.
+#[test]
+fn test_lambdas_capturing_functions_of_a_type_referring_to_itself_at_other_arguments_compute_them()
+{
+    let source = r#"
+    module Main;
+
+    type L a = unbox struct { f : a -> I64, next : Option (Box (L I64)) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let inner : L I64 = L { f : |x| x + n, next : none() };
+        let outer : L Bool = L { f : |b| if b { n } else { 3 }, next : some(Box::make(inner)) };
+        let g = inner.@f;
+        let h = |x| g(x) * 2 + n;
+        let k = |b| h((outer.@f)(b)) + (outer.@next.as_some.@value.@f)(1);
+        let fs = [h, |x| k(x == 7)];
+        let t = fs.to_iter.fold(0, |f, acc| acc + f(7));
+        assert_eq(|_| "", [h(1), k(true), t], [3 * n + 2, 6 * n + 1, 9 * n + 15]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 /// How many functions of `global_struct_chain_source` take a struct holding a function and hand
 /// one to the next.
 const GLOBAL_STRUCT_CHAIN_DEPTH: usize = 11;
