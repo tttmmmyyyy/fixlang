@@ -32,17 +32,18 @@ mod solver;
 mod specialize;
 
 use crate::{
-    ast::{program::Program, type_agreement::validate_types},
+    ast::{name::FullName, program::Program, type_agreement::validate_types},
     constants::DOT_FIXLANG,
     error::panic_if_err,
+    misc::Set,
     project_fs::{write_file_guarding_project_links, DOT_FIXLANG_LINK_HINT},
 };
 pub use flow::BuiltinFlow;
-use infer::infer;
+use infer::{infer, Analysis};
 use represent::represent;
 use rewrite::rewrite;
 use slots::SlotLayout;
-use specialize::specialize;
+use specialize::{specialize, Specialization};
 use std::{fs, path::PathBuf};
 
 /// Infers the lambda sets of `prg` and the copies they ask for, and rewrites the program by them.
@@ -53,8 +54,7 @@ use std::{fs, path::PathBuf};
 pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, develop_mode: bool) {
     let rewritten = {
         let layout = SlotLayout::new(&prg.type_env);
-        let mut analysis = infer(prg, &layout);
-        let spec = specialize(&mut analysis);
+        let (mut analysis, spec) = infer_within_copy_budgets(prg, &layout);
         if let Some(step) = dump_step {
             let text = dump::render(&mut analysis, &spec, &layout);
             let path = PathBuf::from(format!("{}/{}.lambda_sets.txt", DOT_FIXLANG, step));
@@ -73,16 +73,46 @@ pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, dev
     }
 }
 
+/// The lambda sets of `prg` and the copies they ask for, with no component asked for more bodies
+/// than its copy budget (`specialize`).
+///
+/// Inference starts with no component past its budget. Each time the listing of the copies stops
+/// at a component asked for more bodies than its budget, the program is inferred again with the
+/// symbols of that component among those past their budgets (`infer`), and the next listing asks
+/// that component for one body. Each round adds a component, so the rounds are at most as many as
+/// the components.
+fn infer_within_copy_budgets(prg: &Program, layout: &SlotLayout) -> (Analysis, Specialization) {
+    let mut symbols_past_copy_budget: Set<FullName> = Set::default();
+    loop {
+        let mut analysis = infer(prg, layout, &symbols_past_copy_budget);
+        match specialize(&mut analysis) {
+            Ok(spec) => return (analysis, spec),
+            Err(component) => {
+                let component = &analysis.components[component];
+                assert!(
+                    !component.past_copy_budget,
+                    "the component of `{}` is asked for more bodies than its budget, though it \
+                     was inferred as past it",
+                    component.symbols[0].to_string()
+                );
+                symbols_past_copy_budget.extend(component.symbols.iter().cloned());
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         concrete::{Elem, SetId},
-        infer::{infer, Analysis},
+        infer::Analysis,
+        infer_within_copy_budgets,
         slots::{AType, SlotLayout},
-        specialize::{specialize, Specialization},
+        specialize::Specialization,
     };
     use crate::{
         ast::program::Program,
+        constants::LS_COPY_BUDGET_BASE,
         elaboration::elaborate_at_max,
         optimization::{inline, inline_local, unwrap_newtype},
     };
@@ -121,8 +151,7 @@ mod tests {
         /// Infers the lambda sets of `prg` and the copies they ask for.
         fn new(prg: &'p Program) -> Self {
             let layout = SlotLayout::new(&prg.type_env);
-            let mut analysis = infer(prg, &layout);
-            let spec = specialize(&mut analysis);
+            let (analysis, spec) = infer_within_copy_budgets(prg, &layout);
             Inferred {
                 prg,
                 layout,
@@ -200,7 +229,7 @@ mod tests {
         }
     }
 
-    /// `v` in ascending order, Dynamic (`None`) first.
+    /// `v`, what `Inferred::writing_symbols` gives of a set, in ascending order.
     fn sorted(mut v: Vec<Option<String>>) -> Vec<Option<String>> {
         v.sort();
         v
@@ -318,8 +347,8 @@ main = (
     }
 
     /// A `Std::fix` that `defunctionalize_fix` leaves applies the function it is given to a closure
-    /// the combinator builds at run time, so the set of that function holds Dynamic beside the
-    /// lambda passed.
+    /// the combinator builds at run time, so the set of that function holds Dynamic, and lists no
+    /// lambda beside it, though `main` passes one.
     #[test]
     fn test_a_function_given_to_fix_is_dynamic() {
         let prg = program_of(
@@ -339,7 +368,7 @@ main = (
         let mut inf = Inferred::new(&prg);
         let sets = inf.sets_at("run_fixed", &[0]);
         assert_eq!(sets.len(), 1);
-        assert_eq!(sorted(inf.writing_symbols(sets[0])), vec![None, main_lam()]);
+        assert_eq!(inf.writing_symbols(sets[0]), vec![None]);
     }
 
     /// The runtime runs the entry `IO` value, and C code calls an exported function through each
@@ -712,5 +741,100 @@ main = (
             inf.analysis.components[c].scheme.classes.len()
         };
         assert_eq!(classes_of("c6"), classes_of("c12"));
+    }
+
+    /// The source of a program whose `main` calls `callee`, a function of `Main` taking a function
+    /// and an `I64`, from `calls` places, each with a lambda of its own. `globals` defines `callee`
+    /// and what it refers to.
+    fn calls_with_a_lambda_each_source(globals: &str, callee: &str, calls: usize) -> String {
+        let mut source = format!(
+            "module Main;\n{globals}\nmain : IO ();\nmain = (\n    \
+             let n = *get_args.map(|args| args.@size);\n    let v = 0;\n"
+        );
+        for i in 0..calls {
+            source += &format!("    let v = v + {callee}(|y| y + n + {i}, n);\n");
+        }
+        source += "    println(v.to_string)\n);\n";
+        source
+    }
+
+    /// The copy budget of a component counts its bodies: a global function put into more sets than
+    /// its budget, by copies of a function within its own, gets a copy for each set, depends on
+    /// none of them, and stays within its budget.
+    #[test]
+    fn test_a_global_function_put_into_more_sets_than_its_copy_budget_is_within_it() {
+        let calls = LS_COPY_BUDGET_BASE;
+        let prg = program_of(&calls_with_a_lambda_each_source(
+            "g : I64 -> I64;\n\
+             g = |x| x * 3 + 1;\n\
+             pick : (I64 -> I64) -> I64 -> I64;\n\
+             pick = |h, x| (\n    \
+                 let a = if x > 2 { g } else { h };\n    \
+                 let b = if x > 3 { g } else { |y| h(y) + 1 };\n    \
+                 let c = if x > 4 { g } else { |y| h(y) + 2 };\n    \
+                 a(x) + b(x) + c(x)\n\
+             );\n",
+            "pick",
+            calls,
+        ));
+        let mut inf = Inferred::new(&prg);
+        let (g, _) = inf.component_of("g");
+        let copies_of_g = inf
+            .spec
+            .instances
+            .iter()
+            .filter(|inst| inst.component == g)
+            .count();
+        // The references on the way to `g`: the entry to `main`, `main` to `pick` from `calls`
+        // places, and `pick` to `g` from three.
+        assert!(copies_of_g > LS_COPY_BUDGET_BASE + 1 + calls + 3);
+        assert!(!inf.analysis.components[g].past_copy_budget);
+        assert_eq!(inf.analysis.components[g].body_params, Vec::<usize>::new());
+        let sets = inf.sets_at("pick", &[0]);
+        assert_eq!(sets.len(), calls);
+        for s in sets {
+            assert_eq!(
+                sorted(inf.writing_symbols(s)),
+                vec![Some("g".to_string()), main_lam()]
+            );
+        }
+    }
+
+    /// The sets the copies of `f0` give its function parameter, where `main` calls `f1` from
+    /// `calls` places with a lambda of its own each, and `f1` calls `f0` from two places with a
+    /// lambda of its own wrapping the function it was given: `f0` is asked for `2 * calls` bodies,
+    /// with `calls + 3` references on the way to it, the one to `main` from the entry among them.
+    fn sets_given_to_a_function_called_twice_by_each_copy_of_its_caller(
+        calls: usize,
+    ) -> Vec<Vec<Option<String>>> {
+        let prg = program_of(&calls_with_a_lambda_each_source(
+            "f0 : (I64 -> I64) -> I64 -> I64;\n\
+             f0 = |g, x| g(x);\n\
+             f1 : (I64 -> I64) -> I64 -> I64;\n\
+             f1 = |g, x| if x % 3 == 0 { f0(|y| g(y) + 1, x) } else { f0(|y| g(y) * 2, x) };\n",
+            "f1",
+            calls,
+        ));
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("f0", &[0]);
+        sets.into_iter().map(|s| inf.writing_symbols(s)).collect()
+    }
+
+    /// A component asked for as many bodies as its copy budget, `LS_COPY_BUDGET_BASE` and one for
+    /// each reference on the way to it, gets them all, each given a set of lambdas. Asked for one
+    /// more, it gets one body, given closures.
+    #[test]
+    fn test_a_component_is_given_closures_from_one_body_past_its_copy_budget() {
+        // `2 * calls` bodies against a budget of `LS_COPY_BUDGET_BASE + calls + 3`.
+        let calls_at_budget = LS_COPY_BUDGET_BASE + 3;
+        let at_budget =
+            sets_given_to_a_function_called_twice_by_each_copy_of_its_caller(calls_at_budget);
+        assert_eq!(at_budget.len(), 2 * calls_at_budget);
+        for set in at_budget {
+            assert_eq!(set, vec![Some("f1".to_string())]);
+        }
+        let past_budget =
+            sets_given_to_a_function_called_twice_by_each_copy_of_its_caller(calls_at_budget + 1);
+        assert_eq!(past_budget, vec![vec![None]]);
     }
 }

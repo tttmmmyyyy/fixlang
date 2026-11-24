@@ -42,6 +42,9 @@ pub enum PendingElem {
 /// whose lambda captures a function of that set does. Such a set is an infinite tree, held as a
 /// cycle. Two sets are the same set when they unfold to the same tree. The store holds each set
 /// once, however it is written, so a copy of a symbol can be keyed on the sets it is given.
+///
+/// A set holding `Elem::Dynamic` holds nothing else: its values are closures whatever lambdas
+/// build them, so one set stands for them all.
 pub struct SetStore {
     /// The elements of each set, sorted.
     sets: Vec<Vec<Elem>>,
@@ -65,10 +68,15 @@ enum Node {
 
 /// The sets that a set lying on a cycle reaches, written alike for two sets that reach the same
 /// trees. Each entry is a class of equal sets, in the order `canonical_classes` numbers them, given
-/// as its sorted elements; an element's label is its lambda, or `None` for `Elem::Dynamic`. The set
+/// as its sorted elements; an element's label is its lambda. Every element names a lambda: a set
+/// holding `Elem::Dynamic` holds nothing else, so it reaches no set and lies on no cycle. The set
 /// itself is one of the classes, so the classes and the class of the set give the tree it unfolds
 /// to.
-type CycleClasses = Vec<Vec<ElemKey<Option<LamId>>>>;
+type CycleClasses = Vec<Vec<ElemKey<LamId>>>;
+
+/// What `SetStore::intern_cycle` panics with on meeting Dynamic in a set on a cycle.
+const DYNAMIC_ON_A_CYCLE: &str =
+    "a set on a cycle holds Dynamic, though a set holding Dynamic holds nothing else";
 
 impl SetStore {
     /// A store holding no set.
@@ -102,7 +110,8 @@ impl SetStore {
 
     /// The sets the equations of `system` define, held in the store. An equation lists the
     /// elements of its set, which may refer to sets of the store and to the sets of any equation
-    /// of the system, its own included.
+    /// of the system, its own included. An equation listing `PendingElem::Dynamic` lists nothing
+    /// else.
     pub fn intern(&mut self, system: Vec<Vec<PendingElem>>) -> Vec<SetId> {
         let n = system.len();
         let mut graph = Graph::new((0..n).collect::<Vec<usize>>());
@@ -149,6 +158,10 @@ impl SetStore {
     fn insert(&mut self, mut elems: Vec<Elem>, on_cycle: bool) -> SetId {
         elems.sort();
         elems.dedup();
+        assert!(
+            !elems.contains(&Elem::Dynamic) || elems.len() == 1,
+            "a set holds lambdas beside Dynamic"
+        );
         if let Some(id) = self.id_of.get(&elems) {
             assert!(
                 !on_cycle,
@@ -172,6 +185,9 @@ impl SetStore {
     /// classes of equal sets, and numbers the classes by the trees the sets unfold to, so the
     /// classes and one of them name the tree of a set (`CycleClasses`). A class naming a set of the
     /// store resolves its sets of the component to that one; each other class becomes a new set.
+    ///
+    /// Every node holds lambdas alone, as a set on a cycle reaches itself through an `Elem::Lam`
+    /// and a set holding `Elem::Dynamic` holds nothing else.
     fn intern_cycle(
         &mut self,
         component: &[usize],
@@ -183,13 +199,13 @@ impl SetStore {
             nodes.iter().enumerate().map(|(p, n)| (*n, p)).collect();
         // The elements of each node, in the order of `nodes`, which grows as the walk meets the sets
         // of the store the nodes reach.
-        let mut elems: Vec<NodeElems<Option<LamId>>> = vec![];
+        let mut elems: Vec<NodeElems<LamId>> = vec![];
         while elems.len() < nodes.len() {
             let node_elems = match nodes[elems.len()] {
                 Node::Local(i) => system[i]
                     .iter()
                     .map(|e| match e {
-                        PendingElem::Dynamic => (None, vec![]),
+                        PendingElem::Dynamic => unreachable!("{}", DYNAMIC_ON_A_CYCLE),
                         PendingElem::Lam(lam, args) => {
                             let children = args
                                 .iter()
@@ -205,20 +221,20 @@ impl SetStore {
                                     Ref::Known(id) => self.child(*id, &mut nodes, &mut position),
                                 })
                                 .collect();
-                            (Some(*lam), children)
+                            (*lam, children)
                         }
                     })
                     .collect(),
                 Node::Known(id) => self.sets[id as usize]
                     .iter()
                     .map(|e| match e {
-                        Elem::Dynamic => (None, vec![]),
+                        Elem::Dynamic => unreachable!("{}", DYNAMIC_ON_A_CYCLE),
                         Elem::Lam(lam, args) => {
                             let children = args
                                 .iter()
                                 .map(|a| self.child(*a, &mut nodes, &mut position))
                                 .collect();
-                            (Some(*lam), children)
+                            (*lam, children)
                         }
                     })
                     .collect(),
@@ -256,9 +272,8 @@ impl SetStore {
         for (c, p) in new_classes {
             let new_elems = elems[p]
                 .iter()
-                .map(|(lam, children)| match lam {
-                    None => Elem::Dynamic,
-                    Some(lam) => Elem::Lam(
+                .map(|(lam, children)| {
+                    Elem::Lam(
                         *lam,
                         children
                             .iter()
@@ -267,7 +282,7 @@ impl SetStore {
                                 Child::Fixed(id) => *id,
                             })
                             .collect(),
-                    ),
+                    )
                 })
                 .collect();
             let id = self.insert(new_elems, true);

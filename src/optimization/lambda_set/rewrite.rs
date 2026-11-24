@@ -247,9 +247,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         for (k, instance) in spec.instances.iter().enumerate() {
             let component = &analysis.components[instance.component];
             let body_reprs: Vec<Repr> = component
-                .body_params
-                .iter()
-                .map(|p| repr.of(instance.args[*p]))
+                .body_args(&instance.args)
+                .into_iter()
+                .map(|set| repr.of(set))
                 .collect();
             let copy = *copy_of_body_reprs
                 .entry((instance.component, body_reprs))
@@ -1047,7 +1047,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     .iter()
                     .map(|v| self.set_of(walk.instance, *v))
                     .collect();
-                self.spec.copy_reached(self.analysis, site.component, args)
+                self.spec.instance_of[&(site.component, args)]
             }
         };
         let copy = self.copy_of_instance[target];

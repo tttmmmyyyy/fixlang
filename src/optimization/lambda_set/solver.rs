@@ -67,6 +67,9 @@ pub enum DynamicKind {
     TypeConstructorArgument(TyCon),
     /// A lambda whose body reads its own capture as a whole, which only a closure object holds.
     ReadsOwnCapture,
+    /// A parameter the bodies of a component depend on (`Component::body_params`), where the
+    /// program asks the component for more bodies than its copy budget (`LS_COPY_BUDGET_BASE`).
+    PastCopyBudget,
 }
 
 impl DynamicReason {
@@ -83,6 +86,7 @@ impl DynamicReason {
                 format!("inside a type argument of {}", tc.to_string())
             }
             DynamicKind::ReadsOwnCapture => "a lambda reading its own capture".to_string(),
+            DynamicKind::PastCopyBudget => "given to a component past its copy budget".to_string(),
         };
         match &self.found_in {
             Some(at) => format!("{} (in {})", kind, at.to_string()),
@@ -197,10 +201,18 @@ impl Solver {
     /// Records that the values at `v` are closures built at run time, for the reason `kind`, found
     /// in the current symbol. Each reason is recorded once per variable.
     pub fn make_dynamic(&mut self, v: SetVar, kind: DynamicKind) {
-        let reason = DynamicReason {
-            kind,
-            found_in: self.current_symbol.clone(),
-        };
+        self.make_dynamic_found_in(v, kind, self.current_symbol.clone());
+    }
+
+    /// Records that the values at `v` are closures built at run time, for the reason `kind`, found
+    /// in `found_in` (`DynamicReason::found_in`). Each reason is recorded once per variable.
+    pub fn make_dynamic_found_in(
+        &mut self,
+        v: SetVar,
+        kind: DynamicKind,
+        found_in: Option<FullName>,
+    ) {
+        let reason = DynamicReason { kind, found_in };
         let root = self.find(v);
         let members = &mut self.members[root.0 as usize];
         let known = members.iter().any(|m| match m {
