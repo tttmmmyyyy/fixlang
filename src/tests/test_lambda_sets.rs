@@ -1002,15 +1002,10 @@ fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bo
         "a chain of {} functions each calling the next with two lambdas",
         BRANCHING_CHAIN_DEPTH
     );
-    let printed = build_within_instructions_and_run(
+    assert_chain_builds_in_bounded_work(
         &branching_chain_source(BRANCHING_CHAIN_DEPTH),
-        "max",
-        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
         &description,
-    );
-    assert_eq!(
-        printed, BRANCHING_CHAIN_OUTPUT,
-        "the chain computed a wrong value"
+        BRANCHING_CHAIN_OUTPUT,
     );
 }
 
@@ -1081,15 +1076,10 @@ fn test_a_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_
         "a chain of {} functions each returning the next with two lambdas",
         BRANCHING_CHAIN_DEPTH
     );
-    let printed = build_within_instructions_and_run(
+    assert_chain_builds_in_bounded_work(
         &returning_branching_chain_source(BRANCHING_CHAIN_DEPTH),
-        "max",
-        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
         &description,
-    );
-    assert_eq!(
-        printed, RETURNING_BRANCHING_CHAIN_OUTPUT,
-        "the chain computed a wrong value"
+        RETURNING_BRANCHING_CHAIN_OUTPUT,
     );
 }
 
