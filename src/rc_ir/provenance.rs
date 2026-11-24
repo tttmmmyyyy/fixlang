@@ -688,12 +688,12 @@ impl<'a> Interpreter<'a> {
             // The variable an arm binds is the variant's value, projected from the scrutinee's
             // expanded shape (a variant arm of an unboxed union), or the whole scrutinee (a
             // catch-all).
-            if let Some(payload) = &arm.payload {
+            if let Some(binder) = &arm.binder {
                 let payload_prov = match arm.tag {
                     Some(tag) => scrut_prov.project(tag),
                     None => scrut_prov.clone(),
                 };
-                self.record(payload, &payload_prov, &mut arm_env);
+                self.record(binder, &payload_prov, &mut arm_env);
             }
             let (arm_prov, arm_exit) = self.interpret(&arm.body, arm_env);
             joined_result = Some(match joined_result {

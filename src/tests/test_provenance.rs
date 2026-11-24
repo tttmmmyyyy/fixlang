@@ -558,7 +558,7 @@ mod integration_tests {
         }
         let read = count
             .iter()
-            .find(|l| l.contains("= union_payload_1("))
+            .find(|l| l.contains("= union_as_known_1("))
             .unwrap_or_else(|| panic!("`count` reads no payload of a node:\n{}", body));
         assert!(
             read.contains(" @lent"),

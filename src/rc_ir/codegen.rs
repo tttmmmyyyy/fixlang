@@ -633,30 +633,28 @@ impl<'c, 'm> Generator<'c, 'm> {
             // scrutinee, and a catch-all arm binds the whole scrutinee. The move counts nothing,
             // which is right of an unboxed scrutinee alone.
             assert_eq!(
-                arm.payload.is_some(),
+                arm.binder.is_some(),
                 !scrut.ty.is_box(self.type_env()),
                 "an arm of the match on `{}`, of type `{}`, binds a variable over a boxed \
                  scrutinee, or none over an unboxed one",
                 scrut.name.to_string(),
                 scrut.ty.to_string()
             );
-            if let Some(payload) = &arm.payload {
+            if let Some(binder) = &arm.binder {
                 let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
                 let payload_obj = match arm.tag {
                     Some(_) => ObjectFieldType::get_union_value_noretain_norelease(
-                        self,
-                        scrut_obj,
-                        &payload.ty,
+                        self, scrut_obj, &binder.ty,
                     ),
                     None => scrut_obj,
                 };
-                self.scope_push(&payload.name, &payload_obj);
-                self.emit_debug_local_variable(payload, &payload_obj);
+                self.scope_push(&binder.name, &payload_obj);
+                self.emit_debug_local_variable(binder, &payload_obj);
             }
 
             let arm_obj = self.eval_rc_expr(&arm.body, tail, func_vals);
-            if let Some(payload) = &arm.payload {
-                self.scope_pop(&payload.name);
+            if let Some(binder) = &arm.binder {
+                self.scope_pop(&binder.name);
             }
 
             // A non-tail arm that produced a value branches to the merge block and feeds the phi. An

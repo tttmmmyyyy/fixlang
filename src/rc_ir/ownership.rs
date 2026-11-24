@@ -45,8 +45,8 @@ enum Binding {
     Producer,
     /// A `destructure` field: field `idx` of the container.
     Field(RcVar, usize),
-    /// A `match`-arm payload: the variant tag (`None` for a catch-all), and the scrutinee.
-    Payload(RcVar, Option<usize>),
+    /// The variable a `match` arm binds: the scrutinee, and the variant tag (`None` for a catch-all).
+    ArmBinder(RcVar, Option<usize>),
     /// `let x = match ...`: the value each arm returns. A match binding produces nothing of its own —
     /// it receives one of these, chosen by the path taken — so its object identity is path-dependent.
     Join(Vec<RcVar>),
@@ -129,13 +129,12 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
                 RcRhs::Match(scrut, arms) => {
                     let mut arm_results = vec![];
                     for arm in arms {
-                        if let Some(payload) = &arm.payload {
+                        if let Some(binder) = &arm.binder {
                             vars.bindings.insert(
-                                payload.name.clone(),
-                                Binding::Payload(scrut.clone(), arm.tag),
+                                binder.name.clone(),
+                                Binding::ArmBinder(scrut.clone(), arm.tag),
                             );
-                            vars.var_tys
-                                .insert(payload.name.clone(), payload.ty.clone());
+                            vars.var_tys.insert(binder.name.clone(), binder.ty.clone());
                         }
                         collect_bindings(&arm.body, vars);
                         arm_results.push(returned_var(&arm.body).clone());
@@ -382,7 +381,7 @@ pub(crate) fn alias_step(
             container_path.extend_from_slice(path);
             AliasStep::Projects((container.name.clone(), container_path))
         }
-        Some(Binding::Payload(scrut, variant)) => match variant {
+        Some(Binding::ArmBinder(scrut, variant)) => match variant {
             // A catch-all binds the whole scrutinee: the same object.
             None => AliasStep::Projects((scrut.name.clone(), path.to_vec())),
             // A variant arm moves the payload out of an unboxed union: the scrutinee's variant
@@ -1520,7 +1519,7 @@ mod tests {
             (scrutinee.clone(), Binding::Param),
             (
                 payload.clone(),
-                Binding::Payload(scrutinee.clone(), Some(0)),
+                Binding::ArmBinder(scrutinee.clone(), Some(0)),
             ),
         ]);
 

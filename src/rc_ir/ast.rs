@@ -237,7 +237,7 @@ pub struct MatchArm {
     /// the variant for a variant arm, and the whole scrutinee for a catch-all arm. An arm over a
     /// boxed scrutinee binds none: the match borrows the scrutinee, and the arm's body reads it
     /// with ops, as every read out of a boxed container is.
-    pub payload: Option<RcVar>,
+    pub binder: Option<RcVar>,
     /// The expression this arm evaluates to, in the scope extended with `payload`.
     pub body: RcExprNode,
 }
@@ -633,7 +633,7 @@ fn for_each_var_of_rhs(rhs: &RcRhs, visit: &mut impl FnMut(&RcVar)) {
         RcRhs::Match(scrutinee, arms) => {
             visit(scrutinee);
             for arm in arms {
-                arm.payload.iter().for_each(&mut *visit);
+                arm.binder.iter().for_each(&mut *visit);
             }
         }
     }

@@ -348,7 +348,7 @@ impl<'a> Lowerer<'a> {
                 captures.iter().map(|(_, v)| v.ty.clone()).collect();
             for (i, (ast_name, _)) in captures.iter().enumerate() {
                 let op = Box::new(CaptureProjectOp {
-                    assumed: RcState::Unknown,
+                    assumed_state: RcState::Unknown,
                     cap_name: capture_var.name.clone(),
                     cap_idx: i,
                     cap_tys: capture_tys.clone(),
@@ -533,7 +533,7 @@ impl<'a> Lowerer<'a> {
     /// out would have no owner. Bound to a variable nothing reads, it is released by a `Release`
     /// node of its own, which cancellation pairs with the retain RC insertion puts before the
     /// `DestructureUnboxed` where the container is used afterwards.
-    fn push_destructure(
+    fn push_struct_pattern_bindings(
         &mut self,
         container: &RcVar,
         mut named: Vec<(usize, RcVar)>,
@@ -695,12 +695,12 @@ impl<'a> Lowerer<'a> {
         let payload_tys = cond_var.ty.field_types(self.type_env);
         let then_arm = MatchArm {
             tag: Some(BOOL_TRUE_TAG),
-            payload: Some(self.fresh_var("unit", payload_tys[BOOL_TRUE_TAG].clone(), None)),
+            binder: Some(self.fresh_var("unit", payload_tys[BOOL_TRUE_TAG].clone(), None)),
             body: self.lower_body(then_expr),
         };
         let else_arm = MatchArm {
             tag: Some(BOOL_FALSE_TAG),
-            payload: Some(self.fresh_var("unit", payload_tys[BOOL_FALSE_TAG].clone(), None)),
+            binder: Some(self.fresh_var("unit", payload_tys[BOOL_FALSE_TAG].clone(), None)),
             body: self.lower_body(else_expr),
         };
         let result = self.fresh_var("if", ty, source.clone());
@@ -790,7 +790,7 @@ impl<'a> Lowerer<'a> {
                 }
                 MatchArm {
                     tag: Some(variant_idx),
-                    payload: bound_by_arm,
+                    binder: bound_by_arm,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
             }
@@ -807,7 +807,7 @@ impl<'a> Lowerer<'a> {
                 self.unbind(&v.name);
                 MatchArm {
                     tag: None,
-                    payload: bound_by_arm,
+                    binder: bound_by_arm,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
             }
@@ -825,7 +825,7 @@ impl<'a> Lowerer<'a> {
                 }
                 MatchArm {
                     tag: None,
-                    payload: bound_by_arm,
+                    binder: bound_by_arm,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
             }
@@ -972,7 +972,7 @@ impl<'a> Lowerer<'a> {
     // --- pattern destructuring ---
 
     /// Destructure `pat` against the value `obj`, binding each pattern variable in the environment
-    /// (a struct/tuple pattern emits the bindings of `push_destructure`, extracting all its fields) and
+    /// (a struct/tuple pattern emits the bindings of `push_struct_pattern_bindings`, extracting all its fields) and
     /// returning the AST names it bound, for the caller to pop after the scope closes.
     fn destructure_pattern(
         &mut self,
@@ -1038,7 +1038,7 @@ impl<'a> Lowerer<'a> {
                     fields.push((field_idx, field_var));
                 }
                 // Extract the fields before the sub-patterns that take them apart further.
-                self.push_destructure(obj, fields, pat.info.source.clone(), bindings);
+                self.push_struct_pattern_bindings(obj, fields, pat.info.source.clone(), bindings);
                 for (field_var, subpat) in nested {
                     bound_names.extend(self.destructure_pattern(subpat, &field_var, bindings));
                 }

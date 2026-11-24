@@ -253,7 +253,7 @@ mod lent_reads_tests {
     /// A value read out of a container that is a global on one path and an object built here on
     /// another is held throughout on the first path alone, so it keeps a reference of its own.
     ///
-    /// `either_table` reads a field out of such a table and reads the field after the table's last
+    /// `read_either_table` reads a field out of such a table and reads the field after the table's last
     /// use. On the path that built the table, releasing the table frees the field, so a read
     /// lending the field would read it after it was freed, which Valgrind MemCheck reports.
     #[test]
@@ -272,10 +272,10 @@ mod lent_reads_tests {
             gtable = Table { cells : [1, 2, 3], tag : [4] };
 
             // Reads a field out of a table that is the global on one path and built here on the other, and
-            // reads the field after the last use of the table. The recursion keeps `either_table` a call.
-            either_table : I64 -> I64;
-            either_table = |n| (
-                let k = if n > 0 { either_table(n - 1) } else { 0 };
+            // reads the field after the last use of the table. The recursion keeps `read_either_table` a call.
+            read_either_table : I64 -> I64;
+            read_either_table = |n| (
+                let k = if n > 0 { read_either_table(n - 1) } else { 0 };
                 let t = if n > 0 { gtable } else { Table { cells : fresh(n + 5), tag : fresh(1) } };
                 let c = t.@cells;
                 let y = fresh(40 + t.@tag.@size);
@@ -285,7 +285,7 @@ mod lent_reads_tests {
             main : IO ();
             main = (
                 let n = (*get_args).@size;
-                assert_eq(|_|"the field of the global and of the table built here", either_table(n), 4);;
+                assert_eq(|_|"the field of the global and of the table built here", read_either_table(n), 4);;
                 pure()
             );
         "#;

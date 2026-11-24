@@ -3089,7 +3089,7 @@ pub struct ArrayUnsafeGetBoundsUncheckedOp {
     idx_name: FullName,
     /// The reference-counting state the objects this op reference-counts inside `generate` are
     /// known to be in, which those operations run under; `Unknown` has them read it.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
     /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
     /// container goes on holding it.
     #[serde(default)]
@@ -3110,7 +3110,7 @@ impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
         if self.lend {
             ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, ty.clone(), idx)
         } else {
-            ObjectFieldType::read_from_array_buf(gc, None, buf, ty.clone(), idx, self.assumed)
+            ObjectFieldType::read_from_array_buf(gc, None, buf, ty.clone(), idx, self.assumed_state)
         }
     }
 
@@ -3160,12 +3160,12 @@ impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn lending(&self) -> Box<dyn BuiltinOp> {
@@ -3213,7 +3213,7 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_builtin(
                 Box::new(ArrayUnsafeGetBoundsUncheckedOp {
-                    assumed: RcState::Unknown,
+                    assumed_state: RcState::Unknown,
                     lend: false,
                     arr_name: FullName::local(ARR_NAME),
                     idx_name: FullName::local(IDX_NAME),
@@ -3246,7 +3246,7 @@ pub struct ArrayTruncateBoundsUncheckedOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -3256,7 +3256,7 @@ impl BuiltinOp for ArrayTruncateBoundsUncheckedOp {
         let new_len = gc.get_scoped_obj_field(&self.len_name, 0).into_int_value();
 
         // Force the array to be unique before shrinking it in place.
-        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed_state);
 
         // Release the dropped tail `[new_len, size)`, then lower the length to `new_len`. The caller
         // guarantees `0 <= new_len <= size`, so there is no size check.
@@ -3270,7 +3270,7 @@ impl BuiltinOp for ArrayTruncateBoundsUncheckedOp {
             size,
             elem_ty,
             TraverserWorkType::release(),
-            self.assumed,
+            self.assumed_state,
         );
         array.insert_field(gc, ARRAY_SIZE_IDX, new_len)
     }
@@ -3306,12 +3306,12 @@ impl BuiltinOp for ArrayTruncateBoundsUncheckedOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -3368,7 +3368,7 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_builtin(
                 Box::new(ArrayTruncateBoundsUncheckedOp {
-                    assumed: RcState::Unknown,
+                    assumed_state: RcState::Unknown,
                     arr_name: FullName::local(ARR_NAME),
                     len_name: FullName::local(LEN_NAME),
                     force_unique: true,
@@ -3402,7 +3402,7 @@ pub struct ArrayAppendValueCapacityUncheckedOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -3415,13 +3415,20 @@ impl BuiltinOp for ArrayAppendValueCapacityUncheckedOp {
             .into_int_value();
 
         // Force the array to be unique before appending in place.
-        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed_state);
 
         // Write `value` into the `count` uninitialized slots at the end and grow the length. The
         // caller guarantees `count >= 0` and `size + count <= capacity`.
         let size = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
         let buf = get_array_storage_buf(gc, &array);
-        ObjectFieldType::append_value_into_array_buf(gc, buf, size, count, value, self.assumed);
+        ObjectFieldType::append_value_into_array_buf(
+            gc,
+            buf,
+            size,
+            count,
+            value,
+            self.assumed_state,
+        );
         let new_size = gc.builder().build_int_add(size, count, "new_size").unwrap();
         array.insert_field(gc, ARRAY_SIZE_IDX, new_size)
     }
@@ -3465,12 +3472,12 @@ impl BuiltinOp for ArrayAppendValueCapacityUncheckedOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -3530,7 +3537,7 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
                 vec![var_local(ARR_NAME)],
                 expr_builtin(
                     Box::new(ArrayAppendValueCapacityUncheckedOp {
-                        assumed: RcState::Unknown,
+                        assumed_state: RcState::Unknown,
                         arr_name: FullName::local(ARR_NAME),
                         value_name: FullName::local(VALUE_NAME),
                         count_name: FullName::local(COUNT_NAME),
@@ -3710,7 +3717,7 @@ pub struct ArraySetCapacityBoundsUncheckedOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -3732,7 +3739,7 @@ impl BuiltinOp for ArraySetCapacityBoundsUncheckedOp {
         let storage = get_array_storage(gc, &array);
         let storage_ptr = storage.value(gc).into_pointer_value();
         build_capacity_check(gc, &elem_ty, new_cap, CapacityCheck::Run);
-        let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr, self.assumed);
+        let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr, self.assumed_state);
         let current_func = unique_bb.get_parent().unwrap();
         let end_bb = gc
             .context
@@ -3751,8 +3758,16 @@ impl BuiltinOp for ArraySetCapacityBoundsUncheckedOp {
         let new_storage = alloc_array_storage(gc, elem_ty.clone(), new_cap, CapacityCheck::Skip);
         let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
         let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        ObjectFieldType::clone_array_buf(gc, len, src_buf, dst_buf, elem_ty, None, self.assumed);
-        release_replaced_array(gc, array.clone(), None, self.assumed);
+        ObjectFieldType::clone_array_buf(
+            gc,
+            len,
+            src_buf,
+            dst_buf,
+            elem_ty,
+            None,
+            self.assumed_state,
+        );
+        release_replaced_array(gc, array.clone(), None, self.assumed_state);
         let new_storage_val = new_storage.value(gc);
         let cloned_array = array
             .clone()
@@ -3803,12 +3818,12 @@ impl BuiltinOp for ArraySetCapacityBoundsUncheckedOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -3858,7 +3873,7 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_builtin(
                 Box::new(ArraySetCapacityBoundsUncheckedOp {
-                    assumed: RcState::Unknown,
+                    assumed_state: RcState::Unknown,
                     arr_name: FullName::local(ARR_NAME),
                     cap_name: FullName::local(CAP_NAME),
                     force_unique: true,
@@ -3891,7 +3906,7 @@ pub struct ArrayAppendCapacityUncheckedOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -3901,7 +3916,7 @@ impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
         let src = gc.get_scoped_obj(&self.src_name);
         let elem_ty = dst.ty.field_types(gc.type_env())[0].clone();
         let (dst, dst_len, dst_write) =
-            array_tail_destination(gc, dst, self.force_unique, self.assumed);
+            array_tail_destination(gc, dst, self.force_unique, self.assumed_state);
 
         let src_storage = get_array_storage(gc, &src);
         let src_ptr = src_storage.value(gc).into_pointer_value();
@@ -3928,7 +3943,7 @@ impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
             .unwrap();
         let zero = gc.context.i64_type().const_zero();
         let src_emptied = src.clone().insert_field(gc, ARRAY_SIZE_IDX, zero);
-        gc.release(src_emptied, self.assumed);
+        gc.release(src_emptied, self.assumed_state);
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Shared `src`: the elements stay in `src`, so retain each one into `dst`'s tail, then
@@ -3941,9 +3956,9 @@ impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
             dst_write,
             elem_ty,
             None,
-            self.assumed,
+            self.assumed_state,
         );
-        gc.release(src, self.assumed);
+        gc.release(src, self.assumed_state);
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Grow `dst`'s length by the number of appended elements.
@@ -3988,12 +4003,12 @@ impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -4050,7 +4065,7 @@ pub fn array_append_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(SRC_NAME), var_local(DST_NAME)],
         expr_builtin(
             Box::new(ArrayAppendCapacityUncheckedOp {
-                assumed: RcState::Unknown,
+                assumed_state: RcState::Unknown,
                 dst_name: FullName::local(DST_NAME),
                 src_name: FullName::local(SRC_NAME),
                 force_unique: true,
@@ -4083,7 +4098,7 @@ pub struct ArrayCopyCapacityBoundsUncheckedOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -4099,13 +4114,21 @@ impl BuiltinOp for ArrayCopyCapacityBoundsUncheckedOp {
         let elem_value_ty = elem_ty.get_embedded_type(gc);
         let n = gc.builder().build_int_sub(end, begin, "copy_n").unwrap();
         let (dst, dst_len, dst_write) =
-            array_tail_destination(gc, dst, self.force_unique, self.assumed);
+            array_tail_destination(gc, dst, self.force_unique, self.assumed_state);
 
         // Retain each element of `src[begin, end)` into `dst`'s tail. `src` keeps its elements and
         // its reference for its caller.
         let src_buf = get_array_storage_buf(gc, &src);
         let src_read = build_gep_array_elem(gc, elem_value_ty, src_buf, begin, "copy_src_read");
-        ObjectFieldType::clone_array_buf(gc, n, src_read, dst_write, elem_ty, None, self.assumed);
+        ObjectFieldType::clone_array_buf(
+            gc,
+            n,
+            src_read,
+            dst_write,
+            elem_ty,
+            None,
+            self.assumed_state,
+        );
 
         // Grow `dst`'s length by the number of copied elements.
         let new_dst_len = gc
@@ -4159,12 +4182,12 @@ impl BuiltinOp for ArrayCopyCapacityBoundsUncheckedOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -4226,7 +4249,7 @@ pub fn array_copy_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         ],
         expr_builtin(
             Box::new(ArrayCopyCapacityBoundsUncheckedOp {
-                assumed: RcState::Unknown,
+                assumed_state: RcState::Unknown,
                 dst_name: FullName::local(DST_NAME),
                 src_name: FullName::local(SRC_NAME),
                 begin_name: FullName::local(BEGIN_NAME),
@@ -4264,7 +4287,7 @@ pub struct ArrayGrowSizeOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -4285,7 +4308,7 @@ impl BuiltinOp for ArrayGrowSizeOp {
 
         // Force the array to be unique before growing it in place, so the length is written only on a
         // uniquely owned array.
-        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed_state);
         array.insert_field(gc, ARRAY_SIZE_IDX, length)
     }
 
@@ -4320,12 +4343,12 @@ impl BuiltinOp for ArrayGrowSizeOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -4379,7 +4402,7 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_builtin(
                 Box::new(ArrayGrowSizeOp {
-                    assumed: RcState::Unknown,
+                    assumed_state: RcState::Unknown,
                     arr_name,
                     len_name,
                     force_unique: true,
@@ -4542,7 +4565,7 @@ pub struct ArraySetOp {
     bounds_checked: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -4554,7 +4577,7 @@ impl BuiltinOp for ArraySetOp {
         let value = gc.get_scoped_obj(&self.value_name);
 
         // Force array to be unique
-        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed_state);
 
         // Perform write and return. `set` bounds-checks unless `--no-runtime-check` is set;
         // `unsafe_set_bounds_unchecked` never bounds-checks.
@@ -4564,7 +4587,15 @@ impl BuiltinOp for ArraySetOp {
             None
         };
         let array_buf = get_array_storage_buf(gc, &array);
-        ObjectFieldType::write_to_array_buf(gc, len, array_buf, idx, value, true, self.assumed);
+        ObjectFieldType::write_to_array_buf(
+            gc,
+            len,
+            array_buf,
+            idx,
+            value,
+            true,
+            self.assumed_state,
+        );
         array
     }
 
@@ -4612,12 +4643,12 @@ impl BuiltinOp for ArraySetOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -4664,7 +4695,7 @@ fn set_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
     let body = expr_builtin(
         Box::new(ArraySetOp {
-            assumed: RcState::Unknown,
+            assumed_state: RcState::Unknown,
             array_name: FullName::local("array"),
             idx_name: FullName::local("idx"),
             value_name: FullName::local("value"),
@@ -4727,7 +4758,7 @@ pub struct ArraySwapOp {
     bounds_checked: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -4739,7 +4770,7 @@ impl BuiltinOp for ArraySwapOp {
         let j = gc.get_scoped_obj_field(&self.j_name, 0).into_int_value();
 
         // Force array to be unique.
-        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed_state);
 
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         // `swap` bounds-checks unless `--no-runtime-check` is set; `unsafe_swap_bounds_unchecked`
@@ -4799,12 +4830,12 @@ impl BuiltinOp for ArraySwapOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -4841,7 +4872,7 @@ impl BuiltinOp for ArraySwapOp {
 fn swap_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let body = expr_builtin(
         Box::new(ArraySwapOp {
-            assumed: RcState::Unknown,
+            assumed_state: RcState::Unknown,
             array_name: FullName::local("array"),
             i_name: FullName::local("i"),
             j_name: FullName::local("j"),
@@ -4902,7 +4933,7 @@ pub struct ArrayPunchOp {
     arr_name: FullName,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -4914,7 +4945,7 @@ impl BuiltinOp for ArrayPunchOp {
         let idx = idx_obj.extract_field(gc, 0).into_int_value();
 
         // The array has no hole yet, so this is an ordinary clone-if-shared.
-        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed);
+        let array = force_unique_or_assert(gc, array, self.force_unique, self.assumed_state);
 
         // Move the element at `idx` out without retaining, leaving its slot as the hole; the
         // length is unchanged.
@@ -4978,12 +5009,12 @@ impl BuiltinOp for ArrayPunchOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -5078,7 +5109,7 @@ pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(IDX_NAME), var_local(ARR_NAME)],
         expr_builtin(
             Box::new(ArrayPunchOp {
-                assumed: RcState::Unknown,
+                assumed_state: RcState::Unknown,
                 force_unique,
                 idx_name: FullName::local(IDX_NAME),
                 arr_name: FullName::local(ARR_NAME),
@@ -5110,7 +5141,7 @@ pub struct PunchedArrayPlugOp {
     punched_name: FullName,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -5125,8 +5156,13 @@ impl BuiltinOp for PunchedArrayPlugOp {
         let idx = idx_obj.extract_field(gc, 0).into_int_value();
 
         // On a shared array, clone skipping the hole so this plug gets a private array.
-        let array =
-            force_unique_or_assert_with_hole(gc, array, Some(idx), self.force_unique, self.assumed);
+        let array = force_unique_or_assert_with_hole(
+            gc,
+            array,
+            Some(idx),
+            self.force_unique,
+            self.assumed_state,
+        );
 
         // Write the element back into the hole (no bounds check, and no release of the hole slot).
         let buf = get_array_storage_buf(gc, &array);
@@ -5170,12 +5206,12 @@ impl BuiltinOp for PunchedArrayPlugOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -5226,7 +5262,7 @@ pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(ELEM_NAME), var_local(PUNCHED_NAME)],
         expr_builtin(
             Box::new(PunchedArrayPlugOp {
-                assumed: RcState::Unknown,
+                assumed_state: RcState::Unknown,
                 force_unique,
                 elem_name: FullName::local(ELEM_NAME),
                 punched_name: FullName::local(PUNCHED_NAME),
@@ -5524,7 +5560,7 @@ pub struct StructGetOp {
     field_idx: usize,
     /// The reference-counting state the objects this op reference-counts inside `generate` are
     /// known to be in, which those operations run under; `Unknown` has them read it.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
     /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
     /// container goes on holding it.
     #[serde(default)]
@@ -5537,7 +5573,7 @@ impl StructGetOp {
         StructGetOp {
             var_name: container.clone(),
             field_idx,
-            assumed: RcState::Unknown,
+            assumed_state: RcState::Unknown,
             lend: false,
         }
     }
@@ -5612,7 +5648,7 @@ impl BuiltinOp for StructGetOp {
         let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
         let field = ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
         if self.field_read(&container_ty, gc.type_env()) == ComponentRead::Retained {
-            gc.retain(field.clone(), self.assumed);
+            gc.retain(field.clone(), self.assumed_state);
         }
         field
     }
@@ -5673,12 +5709,12 @@ impl BuiltinOp for StructGetOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn lending(&self) -> Box<dyn BuiltinOp> {
@@ -6083,7 +6119,7 @@ pub struct CaptureProjectOp {
     pub cap_tys: Vec<Arc<TypeNode>>,
     /// The reference-counting state the objects this op reference-counts inside `generate` are
     /// known to be in, which those operations run under; `Unknown` has them read it.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -6094,7 +6130,7 @@ impl BuiltinOp for CaptureProjectOp {
             self.cap_idx,
             &self.cap_tys,
             ty,
-            self.assumed,
+            self.assumed_state,
         )
     }
 
@@ -6128,12 +6164,12 @@ impl BuiltinOp for CaptureProjectOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn internal_rc_targets(
@@ -6209,7 +6245,7 @@ pub struct StructPunchOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 impl StructPunchOp {
@@ -6244,7 +6280,8 @@ impl BuiltinOp for StructPunchOp {
         let struct_obj = gc.get_scoped_obj(&self.var_name);
 
         // Punching moves a field out of the struct, so the struct has to be uniquely owned.
-        let struct_obj = force_unique_or_assert(gc, struct_obj, self.force_unique, self.assumed);
+        let struct_obj =
+            force_unique_or_assert(gc, struct_obj, self.force_unique, self.assumed_state);
 
         // Move out struct field value without releasing the struct itself.
         let field = ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
@@ -6294,12 +6331,12 @@ impl BuiltinOp for StructPunchOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -6393,7 +6430,7 @@ pub fn struct_punch(
         vec![var_local(VAR_NAME)],
         expr_builtin(
             Box::new(StructPunchOp {
-                assumed: RcState::Unknown,
+                assumed_state: RcState::Unknown,
                 var_name: FullName::local(VAR_NAME),
                 field_idx: field_idx as usize,
                 force_unique,
@@ -6417,7 +6454,7 @@ pub struct StructPlugInOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -6433,7 +6470,7 @@ impl BuiltinOp for StructPlugInOp {
 
         // Make the punched struct unique before plugging-in the field value.
         let punched_struct =
-            force_unique_or_assert(gc, punched_struct, self.force_unique, self.assumed);
+            force_unique_or_assert(gc, punched_struct, self.force_unique, self.assumed_state);
 
         // Convert type of punched_struct into the struct type.
         let punched_value = punched_struct.value(gc);
@@ -6481,12 +6518,12 @@ impl BuiltinOp for StructPlugInOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -6653,7 +6690,7 @@ pub fn struct_plug_in(
             vec![var_local(FIELD_NAME)],
             expr_builtin(
                 Box::new(StructPlugInOp {
-                    assumed: RcState::Unknown,
+                    assumed_state: RcState::Unknown,
                     punched_struct_name: FullName::local(PUNCHED_STRUCT_NAME),
                     field_name: FullName::local(FIELD_NAME),
                     field_idx: field_idx as usize,
@@ -7419,7 +7456,7 @@ pub struct StructSetOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -7430,12 +7467,13 @@ impl BuiltinOp for StructSetOp {
         let struct_obj = gc.get_scoped_obj(&self.struct_name);
 
         // Make struct object unique.
-        let struct_obj = force_unique_or_assert(gc, struct_obj, self.force_unique, self.assumed);
+        let struct_obj =
+            force_unique_or_assert(gc, struct_obj, self.force_unique, self.assumed_state);
 
         // Release old value
         let old_value =
             ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
-        gc.release(old_value, self.assumed);
+        gc.release(old_value, self.assumed_state);
 
         // Set new value
         ObjectFieldType::move_into_struct_field(gc, struct_obj, self.field_idx as u32, &value)
@@ -7476,12 +7514,12 @@ impl BuiltinOp for StructSetOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -7563,7 +7601,7 @@ pub fn struct_set(
             vec![var_local(STRUCT_NAME)],
             expr_builtin(
                 Box::new(StructSetOp {
-                    assumed: RcState::Unknown,
+                    assumed_state: RcState::Unknown,
                     value_name: FullName::local(VALUE_NAME),
                     struct_name: FullName::local(STRUCT_NAME),
                     field_idx,
@@ -7777,13 +7815,13 @@ pub struct UnionAsOp {
     /// The local binding holding the union to read.
     union_arg_name: FullName,
     /// The variant read, as its index among the union's variants.
-    field_idx: usize,
+    variant_idx: usize,
     /// Whether the union is known to hold the variant read, as it is in the arm of a `match` that
     /// selected the variant, so that the read checks no tag.
     variant_known: bool,
     /// The reference-counting state the objects this op reference-counts inside `generate` are
     /// known to be in, which those operations run under; `Unknown` has them read it.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
     /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
     /// container goes on holding it.
     pub(crate) lend: bool,
@@ -7795,9 +7833,9 @@ impl UnionAsOp {
     pub fn of_variant(union: &FullName, variant_idx: usize) -> Self {
         UnionAsOp {
             union_arg_name: union.clone(),
-            field_idx: variant_idx,
+            variant_idx: variant_idx,
             variant_known: false,
-            assumed: RcState::Unknown,
+            assumed_state: RcState::Unknown,
             lend: false,
         }
     }
@@ -7813,7 +7851,7 @@ impl UnionAsOp {
 
     /// The index of the variant whose payload this operation reads.
     pub fn variant_index(&self) -> usize {
-        self.field_idx
+        self.variant_idx
     }
 
     /// Whether the union is known to hold the variant this operation reads.
@@ -7823,7 +7861,7 @@ impl UnionAsOp {
 
     /// How this op takes the payload out of a union of type `union_ty`.
     fn payload_read(&self, union_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> ComponentRead {
-        let payload_ty = &union_ty.field_types(type_env)[self.field_idx];
+        let payload_ty = &union_ty.field_types(type_env)[self.variant_idx];
         if payload_ty.is_fully_unboxed(type_env) {
             ComponentRead::Copied
         } else if !union_ty.is_box(type_env) {
@@ -7844,7 +7882,7 @@ impl BuiltinOp for UnionAsOp {
         let obj = gc.get_scoped_obj_noretain(&self.union_arg_name);
 
         if gc.config.runtime_check() && !self.variant_known {
-            let expected_tag = union_tag_value(gc.context, self.field_idx);
+            let expected_tag = union_tag_value(gc.context, self.variant_idx);
 
             // If tag mismatch, panic.
             ObjectFieldType::panic_if_union_tag_mismatch(gc, obj.clone(), expected_tag);
@@ -7854,7 +7892,7 @@ impl BuiltinOp for UnionAsOp {
         // reference the reader then holds.
         let payload = ObjectFieldType::get_union_value_noretain_norelease(gc, obj, ty);
         if self.payload_read(&union_ty, gc.type_env()) == ComponentRead::Retained {
-            gc.retain(payload.clone(), self.assumed);
+            gc.retain(payload.clone(), self.assumed_state);
         }
         payload
     }
@@ -7863,11 +7901,11 @@ impl BuiltinOp for UnionAsOp {
         format!(
             "{}_{}({})",
             if self.variant_known {
-                "union_payload"
+                "union_as_known"
             } else {
                 "union_as"
             },
-            self.field_idx,
+            self.variant_idx,
             self.union_arg_name.to_string()
         )
     }
@@ -7878,7 +7916,7 @@ impl BuiltinOp for UnionAsOp {
 
     /// The value read is the variant's payload.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
-        let payload = flow.field(&flow.operand(0), self.field_idx);
+        let payload = flow.field(&flow.operand(0), self.variant_idx);
         flow.same(&payload, &flow.result());
     }
 
@@ -7937,12 +7975,12 @@ impl BuiltinOp for UnionAsOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn lending(&self) -> Box<dyn BuiltinOp> {
@@ -7966,7 +8004,7 @@ impl BuiltinOp for UnionAsOp {
     }
 }
 
-/// The body of `as_{variant}`, which reads the payload of the variant at `field_idx`, of type
+/// The body of `as_{variant}`, which reads the payload of the variant at `variant_idx`, of type
 /// `field_ty`, out of the union bound to `union_arg_name`.
 pub fn union_as_body(
     union_arg_name: &Name,
@@ -8601,7 +8639,7 @@ pub struct IsUniqueOp {
     pub(crate) assume_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 /// The operand `is_unique` reports on: the value whose reference count it tests and hands back.
@@ -8650,7 +8688,7 @@ impl BuiltinOp for IsUniqueOp {
         } else {
             let current_func = gc.current_function();
 
-            let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr, self.assumed);
+            let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr, self.assumed_state);
             // Add continuing basic block.
             let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
@@ -8731,12 +8769,12 @@ impl BuiltinOp for IsUniqueOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -8797,7 +8835,7 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_builtin(
             Box::new(IsUniqueOp {
-                assumed: RcState::Unknown,
+                assumed_state: RcState::Unknown,
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
             }),
@@ -8823,7 +8861,7 @@ pub struct ArrayIsStorageUniqueOp {
     pub(crate) assume_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -8849,7 +8887,8 @@ impl BuiltinOp for ArrayIsStorageUniqueOp {
             let storage_ptr = get_array_storage(gc, &array).value(gc).into_pointer_value();
             let current_func = gc.current_function();
 
-            let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr, self.assumed);
+            let (unique_bb, shared_bb) =
+                gc.build_branch_by_is_unique(storage_ptr, self.assumed_state);
             let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
             gc.builder().position_at_end(unique_bb);
@@ -8928,12 +8967,12 @@ impl BuiltinOp for ArrayIsStorageUniqueOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -8979,7 +9018,7 @@ pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_builtin(
             Box::new(ArrayIsStorageUniqueOp {
-                assumed: RcState::Unknown,
+                assumed_state: RcState::Unknown,
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
             }),
@@ -9719,7 +9758,7 @@ pub struct MutatePtrOp {
     pub(crate) force_unique: bool,
     /// The reference-counting state the object this op's declared uniqueness check tests is known
     /// to be in, which the check runs under; `Unknown` has it read the state.
-    pub(crate) assumed: RcState,
+    pub(crate) assumed_state: RcState,
 }
 
 #[typetag::serde]
@@ -9735,7 +9774,7 @@ impl BuiltinOp for MutatePtrOp {
         let ios = gc.get_scoped_obj(&self.ios_name);
 
         // Clone the value first if it is shared, so the function writes into a uniquely owned one.
-        let x = force_unique_or_assert(gc, x, self.force_unique, self.assumed);
+        let x = force_unique_or_assert(gc, x, self.force_unique, self.assumed_state);
 
         // Apply the function to the pointer, threading `ios`.
         let ptr = get_lent_ptr(gc, &x);
@@ -9786,12 +9825,12 @@ impl BuiltinOp for MutatePtrOp {
 
     fn assuming(&self, state: RcState) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
-        c.assumed = state;
+        c.assumed_state = state;
         Box::new(c)
     }
 
     fn assumed_state(&self) -> RcState {
-        self.assumed
+        self.assumed_state
     }
 
     fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
@@ -9882,7 +9921,7 @@ fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprN
                     env_name,
                     ios_name: FullName::local(IOS_NAME),
                     force_unique: true,
-                    assumed: RcState::Unknown,
+                    assumed_state: RcState::Unknown,
                 }),
                 ret_ty,
                 None,

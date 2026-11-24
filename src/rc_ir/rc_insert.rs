@@ -323,7 +323,7 @@ impl<'a> RcInserter<'a> {
         let mut new_arms = vec![];
         let mut live_before_arms: Set<FullName> = Set::default();
         for (arm, used) in arms.into_iter().zip(free_in_arms.iter()) {
-            let payload = arm.payload.clone();
+            let binder = arm.binder.clone();
             let (body, body_live) = self.insert_into_expr(arm.body, &live_after_match);
 
             // Dead-branch (rule c): variables live at the arm's head that this arm does not use,
@@ -342,9 +342,9 @@ impl<'a> RcInserter<'a> {
                 }
             }
             // Then release the variable the arm binds if the arm body never uses it.
-            if let Some(payload) = &payload {
-                if !body_live.contains(&payload.name) && self.needs_rc(payload) {
-                    head.push(payload.clone());
+            if let Some(binder) = &binder {
+                if !body_live.contains(&binder.name) && self.needs_rc(binder) {
+                    head.push(binder.clone());
                 }
             }
             let body = build_releases(head, body);
@@ -352,13 +352,13 @@ impl<'a> RcInserter<'a> {
             for n in &body_live {
                 live_before_arms.insert(n.clone());
             }
-            if let Some(payload) = &payload {
-                live_before_arms.remove(&payload.name);
+            if let Some(binder) = &binder {
+                live_before_arms.remove(&binder.name);
             }
 
             new_arms.push(MatchArm {
                 tag: arm.tag,
-                payload,
+                binder,
                 body,
             });
         }
@@ -396,8 +396,8 @@ impl<'a> RcInserter<'a> {
     /// variable the arm binds).
     fn arm_free_locals(&self, arm: &MatchArm) -> Set<FullName> {
         let mut free = free_locals(&arm.body);
-        if let Some(payload) = &arm.payload {
-            free.remove(&payload.name);
+        if let Some(binder) = &arm.binder {
+            free.remove(&binder.name);
         }
         free
     }
@@ -521,8 +521,8 @@ fn collect_referenced_and_bound(
                 RcRhs::Match(scrut, arms) => {
                     insert_if_local(refs, &scrut.name);
                     for arm in arms {
-                        if let Some(payload) = &arm.payload {
-                            bound.insert(payload.name.clone());
+                        if let Some(binder) = &arm.binder {
+                            bound.insert(binder.name.clone());
                         }
                         collect_referenced_and_bound(&arm.body, refs, bound);
                     }
@@ -578,8 +578,8 @@ fn collect_vars(node: &RcExprNode, vars: &mut Map<FullName, RcVar>) {
                 RcRhs::Match(scrut, arms) => {
                     record_if_local(vars, scrut);
                     for arm in arms {
-                        if let Some(payload) = &arm.payload {
-                            record_if_local(vars, payload);
+                        if let Some(binder) = &arm.binder {
+                            record_if_local(vars, binder);
                         }
                         collect_vars(&arm.body, vars);
                     }

@@ -895,12 +895,12 @@ impl<'a> Walk<'a> {
         let mut joined: Option<ExtShape> = None;
         let mut out = Vec::with_capacity(arms.len());
         for arm in arms {
-            if let Some(payload) = &arm.payload {
+            if let Some(binder) = &arm.binder {
                 let payload_shape = match arm.tag {
                     Some(tag) => scrut_shape.project(tag),
                     None => scrut_shape.clone(),
                 };
-                self.env.insert(payload.name.clone(), payload_shape);
+                self.env.insert(binder.name.clone(), payload_shape);
             }
             let (arm_shape, body) = self.walk(&arm.body);
             joined = Some(match joined {

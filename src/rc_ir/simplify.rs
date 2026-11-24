@@ -169,7 +169,7 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     // Pick the arm for the known tag. A catch-all arm binds the whole union, so the construction
     // stays to build it; skip when only a catch-all matches.
     let arm = arms.iter().find(|arm| arm.tag == Some(variant))?;
-    if !binds_payload_alone(arm, x) || count_value_uses(&x.name, k2) != 0 {
+    if !reads_scrut_for_payload_alone(arm, x) || count_value_uses(&x.name, k2) != 0 {
         return None;
     }
     let body = with_payload_bound(arm, x, operand);
@@ -191,7 +191,7 @@ fn is_payload_read_of(rhs: &RcRhs, union: &FullName, variant: usize) -> bool {
 
 /// The variables the body of `arm`, a variant arm of a match on the boxed union `scrut`, binds to
 /// the payload it reads out of `scrut`.
-fn payload_reads(arm: &MatchArm, scrut: &RcVar) -> Set<FullName> {
+fn payload_read_vars(arm: &MatchArm, scrut: &RcVar) -> Set<FullName> {
     let mut vars = Set::default();
     let Some(variant) = arm.tag else {
         return vars;
@@ -210,10 +210,10 @@ fn payload_reads(arm: &MatchArm, scrut: &RcVar) -> Set<FullName> {
 /// `operand`: the variable the arm binds over an unboxed union, and each variable its body reads
 /// the payload into over a boxed one, whose read is dropped.
 fn with_payload_bound(arm: &MatchArm, scrut: &RcVar, operand: &RcVar) -> RcExprNode {
-    match &arm.payload {
+    match &arm.binder {
         Some(payload) => substitute_expr(&arm.body, &single_subst(&payload.name, &operand.name)),
         None => {
-            let read_vars = payload_reads(arm, scrut);
+            let read_vars = payload_read_vars(arm, scrut);
             let subst = read_vars
                 .iter()
                 .map(|var| (var.clone(), operand.name.clone()))
@@ -225,7 +225,7 @@ fn with_payload_bound(arm: &MatchArm, scrut: &RcVar, operand: &RcVar) -> RcExprN
 
 /// The number of nodes `with_payload_bound` leaves of `arm`.
 fn size_with_payload_bound(arm: &MatchArm, scrut: &RcVar) -> u64 {
-    node_count(&arm.body) - payload_reads(arm, scrut).len() as u64
+    node_count(&arm.body) - payload_read_vars(arm, scrut).len() as u64
 }
 
 /// The match on `x` that `k` starts with, `let m = match x { arms }; k2`, as `m`, `arms` and `k2`.
@@ -245,8 +245,8 @@ fn match_on<'a>(
 /// Whether the body of `arm`, a variant arm of a match on `scrut`, reads `scrut` only to bind its
 /// payload. A rewrite binding the payload to the operand that built it (`with_payload_bound`) then
 /// leaves nothing in the body reading `scrut`.
-fn binds_payload_alone(arm: &MatchArm, scrut: &RcVar) -> bool {
-    count_value_uses(&scrut.name, &arm.body) == payload_reads(arm, scrut).len()
+fn reads_scrut_for_payload_alone(arm: &MatchArm, scrut: &RcVar) -> bool {
+    count_value_uses(&scrut.name, &arm.body) == payload_read_vars(arm, scrut).len()
 }
 
 /// case-of-known-constructor on a struct: `let x = make_struct(a, b, ..); destructure x { .i -> fi };
@@ -382,10 +382,10 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     // after it, and by each arm a tail reaches only to bind its payload. The walk over `k2` is the
     // rest of the function, so it is asked last: asked first at every match on a match, it would
     // make a pass over a function quadratic in its length.
-    let reached_bind_payload_alone = reached
+    let reached_read_scrut_for_payload_alone = reached
         .iter()
-        .all(|variant| binds_payload_alone(outer_arm_of_variant[variant].0, s));
-    if !reached_bind_payload_alone || count_value_uses(&s.name, k2) != 0 {
+        .all(|variant| reads_scrut_for_payload_alone(outer_arm_of_variant[variant].0, s));
+    if !reached_read_scrut_for_payload_alone || count_value_uses(&s.name, k2) != 0 {
         return None;
     }
     let mut new_arms = Vec::with_capacity(inner_arms.len());

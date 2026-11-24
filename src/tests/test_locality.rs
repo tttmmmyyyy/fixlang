@@ -207,11 +207,11 @@ mod integration_tests {
         assert_op_state(&dump, "struct_get_0", &local_pair[0], "local");
         assert_op_state(&dump, "struct_get_1", &local_pair[0], "local");
         assert_op_state(&dump, "union_as_0", &local_holder[0], "local");
-        assert_op_state(&dump, "union_payload_0", &local_holder[0], "local");
+        assert_op_state(&dump, "union_as_known_0", &local_holder[0], "local");
 
         assert_op_state(&dump, "struct_get_0", "Main::gpair#", "global");
         assert_op_state(&dump, "struct_get_1", "Main::gpair#", "global");
-        assert_op_state(&dump, "union_payload_0", "Main::gholder#", "global");
+        assert_op_state(&dump, "union_as_known_0", "Main::gholder#", "global");
     }
 
     /// Verifies that what a field getter or the variant arm of a `match` takes out of a global's
@@ -228,7 +228,7 @@ mod integration_tests {
             .filter_map(|line| line.trim_start().strip_prefix("let "))
             .filter_map(|rest| rest.split_whitespace().next().map(str::to_string))
             .collect();
-        let payloads: Vec<String> = op_lines(&dump, "union_payload_0", "Main::gholder#")
+        let payloads: Vec<String> = op_lines(&dump, "union_as_known_0", "Main::gholder#")
             .into_iter()
             .filter_map(|line| line.trim_start().strip_prefix("let "))
             .filter_map(|rest| rest.split_whitespace().next().map(str::to_string))

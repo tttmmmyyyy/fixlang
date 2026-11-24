@@ -574,7 +574,7 @@ impl<'a, 'b> Validator<'a, 'b> {
                 for arm in arms {
                     // A match consumes an unboxed scrutinee into the variable each arm binds,
                     // and borrows a boxed one, which its arms read with ops.
-                    if arm.payload.is_some() == scrutinee.ty.is_box(self.type_env) {
+                    if arm.binder.is_some() == scrutinee.ty.is_box(self.type_env) {
                         panic!(
                             "[RC IR validate] {}: an arm of the match on `{}`, of type `{}`, binds \
                              a variable over a boxed scrutinee, or none over an unboxed one, in `{}`",
@@ -584,8 +584,8 @@ impl<'a, 'b> Validator<'a, 'b> {
                             self.location,
                         );
                     }
-                    if let Some(payload) = &arm.payload {
-                        self.bind(&payload.name);
+                    if let Some(binder) = &arm.binder {
+                        self.bind(&binder.name);
                     }
                     let outer_selection = arm
                         .tag
@@ -597,8 +597,8 @@ impl<'a, 'b> Validator<'a, 'b> {
                             None => self.selected_variants.remove(&scrutinee.name),
                         };
                     }
-                    if let Some(payload) = &arm.payload {
-                        self.scope.remove(&payload.name);
+                    if let Some(binder) = &arm.binder {
+                        self.scope.remove(&binder.name);
                     }
                 }
             }
@@ -868,12 +868,12 @@ mod tests {
         let arms = vec![
             MatchArm {
                 tag: None,
-                payload: Some(var("c")),
+                binder: Some(var("c")),
                 body: node(RcExpr::Ret(var("c"))),
             },
             MatchArm {
                 tag: Some(1),
-                payload: Some(var("p")),
+                binder: Some(var("p")),
                 body: node(RcExpr::Ret(var("p"))),
             },
         ];
@@ -965,7 +965,7 @@ mod tests {
         let read = UnionAsOp::of_known_variant(&FullName::local("u"), 0);
         let arm = MatchArm {
             tag: Some(1),
-            payload: None,
+            binder: None,
             body: node(RcExpr::Let(
                 var("p"),
                 RcRhs::Builtin(Box::new(read), vec![boxed_var("u")]),
@@ -989,7 +989,7 @@ mod tests {
         let read = UnionAsOp::of_known_variant(&FullName::local("u"), 0);
         let arm = MatchArm {
             tag: Some(0),
-            payload: None,
+            binder: None,
             body: node(RcExpr::Ret(var("c"))),
         };
         let after = node(RcExpr::Let(
@@ -1016,7 +1016,7 @@ mod tests {
         let read = UnionAsOp::of_known_variant(&FullName::local("u"), 1);
         let inner_arm = MatchArm {
             tag: Some(1),
-            payload: None,
+            binder: None,
             body: node(RcExpr::Ret(var("c"))),
         };
         let after_inner = node(RcExpr::Let(
@@ -1026,7 +1026,7 @@ mod tests {
         ));
         let outer_arm = MatchArm {
             tag: Some(0),
-            payload: None,
+            binder: None,
             body: node(RcExpr::Let(
                 var("i"),
                 RcRhs::Match(boxed_var("u"), vec![inner_arm]),
@@ -1051,7 +1051,7 @@ mod tests {
         // let m = match u { 0(p) -> ret c }; ret m   (u is boxed)
         let arm = MatchArm {
             tag: Some(0),
-            payload: Some(var("p")),
+            binder: Some(var("p")),
             body: node(RcExpr::Ret(var("c"))),
         };
         let body = node(RcExpr::Let(
@@ -1072,7 +1072,7 @@ mod tests {
         // let m = match s { 0 -> ret c }; ret m   (s is unboxed)
         let arm = MatchArm {
             tag: Some(0),
-            payload: None,
+            binder: None,
             body: node(RcExpr::Ret(var("c"))),
         };
         let body = node(RcExpr::Let(
@@ -1089,7 +1089,7 @@ mod tests {
     fn projecting_func(read_var: &RcVar, cap_idx: usize, cap_tys: Vec<Arc<TypeNode>>) -> RcFunc {
         let capture = var_of("cap", make_dynamic_object_ty());
         let proj = Box::new(CaptureProjectOp {
-            assumed: RcState::Unknown,
+            assumed_state: RcState::Unknown,
             cap_name: read_var.name.clone(),
             cap_idx,
             cap_tys,

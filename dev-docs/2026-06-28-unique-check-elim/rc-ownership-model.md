@@ -64,7 +64,7 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 
 - `Binding::Move(y)` -> `y`。
 - `Binding::Field(container, idx)`: 別名。`DestructureUnboxed` は unbox コンテナだけを分解する。
-- `Binding::Payload(scrut, variant)`: 別名。catch-all は scrutinee そのもの、variant は unbox union の
+- `Binding::ArmBinder(scrut, variant)`: 別名。catch-all は scrutinee そのもの、variant は unbox union の
   その variant の位置。アームが変数を束縛するのは unbox の scrutinee のときだけである。
 - `Binding::Llvm`: `result_prov` の leaf が単一の `Arg(j, p)` なら引数 `j` の別名。leaf でない path は
   その下の leaf 群から決める（`gather_leaves_under` と `origin_of_gathered`）。unbox union の構築
