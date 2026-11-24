@@ -460,39 +460,52 @@ fn test_a_lambda_capturing_a_function_chosen_from_two_alike_sets_computes_both()
     test_source(source, Configuration::develop_mode());
 }
 
-/// A recursion carrying in an `Option` a function `mk` builds from one of two functions whose sets
-/// hold Dynamic: the set of the carried function holds `mk`'s lambda twice, two elements of one
-/// class, and each captures in place, through the `Option`, a function of that set again.
+/// An array of one lambda more than `MAX_LS_UNION_VARIANTS`, as Fix source: the `i`-th computes
+/// `x {op} n * i` of its argument `x` and a captured `n`. Every lambda is a class of its own, so the
+/// set of the array's elements is represented by closures.
+fn array_of_too_many_lambdas(op: &str) -> String {
+    let lambdas: Vec<String> = (0..MAX_LS_UNION_VARIANTS + 1)
+        .map(|i| format!("|x| x {} n * {}", op, i))
+        .collect();
+    format!("[{}]", lambdas.join(", "))
+}
+
+/// A recursion carrying in an `Option` a function `mk` builds from one of two functions, each read
+/// from an array of its own of `array_of_too_many_lambdas`, so that the sets of the two are
+/// different sets represented by closures: the set of the carried function holds `mk`'s lambda
+/// twice, two elements of one class, and each captures in place, through the `Option`, a function
+/// of that set again.
 #[test]
 fn test_two_elements_of_one_class_capturing_an_optional_function_of_their_own_set_compute_the_chain(
 ) {
-    let source = r#"
+    let source = format!(
+        r#"
     module Main;
 
-    fixed : ((I64 -> I64) -> I64 -> I64) -> I64 -> I64;
-    fixed = |step| fix(step);
-
     mk : I64 -> (I64 -> I64) -> Option (I64 -> I64) -> Option (I64 -> I64);
-    mk = |d, g, o| if d > 100 { mk(d - 1, g, o) } else {
-        some(|y| g(y) + match o { some(f) => f(y), none(_) => 0 })
-    };
+    mk = |d, g, o| if d > 100 {{ mk(d - 1, g, o) }} else {{
+        some(|y| g(y) + match o {{ some(f) => f(y), none(_) => 0 }})
+    }};
 
     rec : I64 -> (I64 -> I64) -> (I64 -> I64) -> Option (I64 -> I64) -> I64 -> I64;
-    rec = |n, g1, g2, o, x| if n == 0 { match o { some(f) => f(x), none(_) => x } } else {
-        let o2 = if n % 2 == 0 { mk(n, g1, o) } else { mk(n, g2, o) };
+    rec = |n, g1, g2, o, x| if n == 0 {{ match o {{ some(f) => f(x), none(_) => x }} }} else {{
+        let o2 = if n % 2 == 0 {{ mk(n, g1, o) }} else {{ mk(n, g2, o) }};
         rec(n - 1, g1, g2, o2, x)
-    };
+    }};
 
     main : IO ();
     main = (
         let n = *get_args.map(|args| args.@size);
-        let g1 = if n > 0 { fixed(|loop, i| if i <= 0 { 0 } else { i + loop(i - 1) }) } else { |x| x + n };
-        let g2 = if n > 0 { fixed(|loop, i| if i <= 0 { 1 } else { i * loop(i - 1) }) } else { |x| x * n };
-        assert_eq(|_|"unexpected result", rec(4, g1, g2, none(), 3), 24);;
+        let g1 = {}.@(n);
+        let g2 = {}.@(n + 1);
+        assert_eq(|_|"unexpected result", rec(4, g1, g2, none(), 3), 10);;
         pure()
     );
-    "#;
-    test_source(source, Configuration::develop_mode());
+    "#,
+        array_of_too_many_lambdas("+"),
+        array_of_too_many_lambdas("-")
+    );
+    test_source(&source, Configuration::develop_mode());
 }
 
 /// Two folds handing `mk` each lambda of an array of more lambdas than `MAX_LS_UNION_VARIANTS`, the
@@ -502,8 +515,6 @@ fn test_two_elements_of_one_class_capturing_an_optional_function_of_their_own_se
 #[test]
 fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both() {
     let count = MAX_LS_UNION_VARIANTS + 1;
-    let adding: Vec<String> = (0..count).map(|i| format!("|x| x + n * {}", i)).collect();
-    let subtracting: Vec<String> = (0..count).map(|i| format!("|x| x - n * {}", i)).collect();
     let source = format!(
         r#"
     module Main;
@@ -514,16 +525,16 @@ fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both(
     main : IO ();
     main = (
         let n = *get_args.map(|args| args.@size);
-        let fs = [{}];
-        let gs = [{}];
+        let fs = {};
+        let gs = {};
         let a = fs.to_iter.fold(0, |f, acc| mk(n, f)(acc));
         let b = gs.to_iter.fold(0, |g, acc| mk(n, g)(acc));
         assert_eq(|_|"unexpected result", (a, b), ({} * n + {}, -{} * n + {}));;
         pure()
     );
     "#,
-        adding.join(", "),
-        subtracting.join(", "),
+        array_of_too_many_lambdas("+"),
+        array_of_too_many_lambdas("-"),
         count * (count - 1) / 2,
         count,
         count * (count - 1) / 2,
@@ -1125,7 +1136,9 @@ fn test_a_lambda_built_under_a_function_past_its_copy_budget_and_returned_up_a_c
 /// function values left as closures — so these assert against the dump.
 #[cfg(test)]
 mod dump_tests {
-    use super::{chain_source, global_read_back_source, CHAIN_DEPTH, CHAIN_OUTPUT};
+    use super::{
+        array_of_too_many_lambdas, chain_source, global_read_back_source, CHAIN_DEPTH, CHAIN_OUTPUT,
+    };
     use crate::constants::{
         LS_CAP_PREFIX, LS_COPY_BUDGET_BASE, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX,
         MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS,
@@ -1737,41 +1750,46 @@ mod dump_tests {
         );
     }
 
-    /// `k` captures `g`, which `mk` builds from one of two functions whose sets hold Dynamic, so the
-    /// set of `g` holds `mk`'s lambda twice, two elements that differ only in sets of closures.
-    const TWO_ALIKE_ELEMENTS_SOURCE: &str = r#"
+    /// A program whose `k` captures `g`, which `mk` builds from one of two functions, each read from
+    /// an array of its own of `array_of_too_many_lambdas`. The sets of the two are different sets
+    /// represented by closures, so the set of `g` holds `mk`'s lambda twice, two elements that
+    /// differ only in sets of closures.
+    fn two_alike_elements_source() -> String {
+        format!(
+            r#"
     module Main;
 
-    fixed : ((I64 -> I64) -> I64 -> I64) -> I64 -> I64;
-    fixed = |step| fix(step);
-
     mk : I64 -> (I64 -> I64) -> I64 -> I64;
-    mk = |d, f| if d > 100 { mk(d - 1, f) } else { |x| f(x) + 1 };
+    mk = |d, f| if d > 100 {{ mk(d - 1, f) }} else {{ |x| f(x) + 1 }};
 
     k : I64 -> (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
-    k = |d, f1, f2| if d > 100 { k(d - 1, f1, f2) } else {
-        let g = if d == 1 { mk(d, f1) } else { mk(d, f2) };
+    k = |d, f1, f2| if d > 100 {{ k(d - 1, f1, f2) }} else {{
+        let g = if d == 1 {{ mk(d, f1) }} else {{ mk(d, f2) }};
         |y| g(y) + d
-    };
+    }};
 
     main : IO () = (
         let n = *get_args.map(|args| args.@size);
-        let h1 = if n > 0 { fixed(|loop, i| if i <= 0 { 0 } else { i + loop(i - 1) }) } else { |x| x + n };
-        let h2 = if n > 0 { fixed(|loop, i| if i <= 0 { 1 } else { i * loop(i - 1) }) } else { |x| x * n };
+        let h1 = {}.@(n);
+        let h2 = {}.@(n + 1);
         println((k(n, h1, h2)(4) + k(n + 1, h1, h2)(4)).to_string)
     );
-    "#;
+    "#,
+            array_of_too_many_lambdas("+"),
+            array_of_too_many_lambdas("-")
+        )
+    }
 
-    /// What `TWO_ALIKE_ELEMENTS_SOURCE` prints: `k(1, ..)` adds 2 to the sum of `1..4`, and
-    /// `k(2, ..)` adds 3 to the factorial of 4.
-    const TWO_ALIKE_ELEMENTS_OUTPUT: &str = "39";
+    /// What `two_alike_elements_source` prints: `k(1, ..)` adds 2 to `h1(4)`, which is 5, and
+    /// `k(2, ..)` adds 3 to `h2(4)`, which is 2.
+    const TWO_ALIKE_ELEMENTS_OUTPUT: &str = "12";
 
     /// A set whose elements make one class is represented by that class's capture struct, however
     /// many elements it holds: `mk` builds `g` as a capture struct, and no closure.
     #[test]
     fn test_a_set_of_two_elements_of_one_class_is_a_capture_struct() {
         let dump = build_run_and_read_rc_ir(
-            TWO_ALIKE_ELEMENTS_SOURCE,
+            &two_alike_elements_source(),
             "max",
             TWO_ALIKE_ELEMENTS_OUTPUT,
             "a lambda capturing a function built from one of two alike functions",
