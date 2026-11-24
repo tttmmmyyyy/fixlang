@@ -2177,6 +2177,176 @@ fn test_a_function_in_a_type_given_as_a_type_constructor_argument_computes_it() 
     test_source(source, Configuration::develop_mode());
 }
 
+/// A struct whose field applies one type constructor argument to a tuple type holding the other
+/// applied, `t (Tuple2 (m I64))`, at an instance where both are newtypes: `t` a struct whose one
+/// field applies its argument, `m` `IO`. The field is a tuple of an `IO` action and a number, and
+/// the function reading it runs the action.
+#[test]
+fn test_a_field_applying_a_newtype_to_a_tuple_type_holding_an_io_action_runs_it() {
+    let source = r#"
+    module Main;
+
+    type [f : * -> *] NW f = unbox struct { x : f I64 };
+    type [t : (* -> *) -> *, m : * -> *] Outer t m = box struct { o : t (Tuple2 (m I64)) };
+
+    use_o : I64 -> Outer NW IO -> IO I64;
+    use_o = |d, w| if d > 0 { use_o(d - 1, w) } else { let v = *w.@o.@x.@0; pure(v + w.@o.@x.@1) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let sum = *use_o(n, Outer { o : NW { x : (pure(10 + n), 5) } });
+        assert_eq(|_| "", sum, 15 + n);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// The field `t (Tuple2 (m I64))` at an instance where `m` is a newtype of a number, so that the
+/// field holds no function: a struct built by a literal and read by getters gives back the numbers
+/// it was built with.
+#[test]
+fn test_a_field_applying_a_newtype_to_a_tuple_type_holding_a_newtype_of_a_number_reads_it() {
+    let source = r#"
+    module Main;
+
+    type Nt a = unbox struct { v : a };
+    type [f : * -> *] NW f = unbox struct { x : f I64 };
+    type [t : (* -> *) -> *, m : * -> *] Outer t m = box struct { o : t (Tuple2 (m I64)) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let w : Outer NW Nt = Outer { o : NW { x : (Nt { v : 10 + n }, 5) } };
+        assert_eq(|_| "", w.@o.@x.@0.@v + w.@o.@x.@1, 15 + n);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Fields applying a type constructor argument to a type that holds a newtype at each place a type
+/// constructor short of its arguments can hold one: as a later argument, under a type constructor
+/// applied to all its arguments, applied to itself, and under a second argument applied the same
+/// way inside a newtype's own field. In the last two types the argument is a newtype given one of
+/// its two arguments, and a newtype whose field applies its own argument to such a type.
+#[test]
+fn test_fields_applying_a_newtype_to_types_holding_a_newtype_at_each_place_read_it() {
+    let source = r#"
+    module Main;
+
+    type Nt a = unbox struct { v : a };
+    type [f : * -> *] NW f = unbox struct { x : f I64 };
+    type [f : * -> *] NW2 a f = unbox struct { x : f a };
+    type [t : (* -> *) -> *, f : * -> *] NWW t f = unbox struct { y : t (Tuple2 (f I64)) };
+
+    type [t : (* -> *) -> *, m : * -> *] Later t m = box struct { o : t (Tuple3 I64 (m I64)) };
+    type [t : (* -> *) -> *, m : * -> *] Under t m = box struct { o : t (Tuple2 (Option (m I64))) };
+    type [t : (* -> *) -> *, m : * -> *] Twice t m = box struct { o : t (Tuple2 (m (m I64))) };
+    type [t : (* -> *) -> *, m : * -> *] Short t m = box struct { o : t (Tuple2 (m I64)) };
+    type [p : ((* -> *) -> *) -> (* -> *) -> *, t : (* -> *) -> *, m : * -> *] Inner p t m = box struct { o : p t m };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let later : Later NW Nt = Later { o : NW { x : (1, Nt { v : 10 + n }, 5) } };
+        let under : Under NW Nt = Under { o : NW { x : (Option::some(Nt { v : 20 + n }), 5) } };
+        let twice : Twice NW Nt = Twice { o : NW { x : (Nt { v : Nt { v : 30 + n } }, 5) } };
+        let short : Short (NW2 I64) Nt = Short { o : NW2 { x : (Nt { v : 40 + n }, 5) } };
+        let inner : Inner NWW NW Nt = Inner { o : NWW { y : NW { x : (Nt { v : 50 + n }, 5) } } };
+        assert_eq(|_| "", [
+            later.@o.@x.@1.@v + later.@o.@x.@2,
+            under.@o.@x.@0.as_some.@v + under.@o.@x.@1,
+            twice.@o.@x.@0.@v.@v + twice.@o.@x.@1,
+            short.@o.@x.@0.@v + short.@o.@x.@1,
+            inner.@o.@y.@x.@0.@v + inner.@o.@y.@x.@1
+        ], [15 + n, 25 + n, 35 + n, 45 + n, 55 + n]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// The field `t (Tuple2 (m I64))` of a union and of an array's elements, and that of a struct taken
+/// apart by a pattern and rebuilt by `mod` and `set`: each gives the numbers it holds.
+#[test]
+fn test_a_field_applying_a_newtype_to_a_tuple_type_holding_a_newtype_is_read_each_way() {
+    let source = r#"
+    module Main;
+
+    type Nt a = unbox struct { v : a };
+    type [f : * -> *] NW f = unbox struct { x : f I64 };
+    type [t : (* -> *) -> *, m : * -> *] Outer t m = box struct { o : t (Tuple2 (m I64)) };
+    type [t : (* -> *) -> *, m : * -> *] OuterU t m = box union { o : t (Tuple2 (m I64)), e : () };
+    type [t : (* -> *) -> *, m : * -> *] OuterA t m = box struct { o : Array (t (Tuple2 (m I64))) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+
+        let u : OuterU NW Nt = OuterU::o(NW { x : (Nt { v : 10 + n }, 5) });
+        let u = if n > 5 { OuterU::e() } else { u };
+        let matched = match u { o(nw) => nw.@x.@0.@v + nw.@x.@1, e(_) => 0 };
+        let taken = u.as_o.@x.@0.@v;
+
+        let a : OuterA NW Nt = OuterA { o : [NW { x : (Nt { v : 20 + n }, 5) }] };
+        let element = a.@o.@(0).@x.@0.@v + a.@o.@(0).@x.@1;
+
+        let w : Outer NW Nt = Outer { o : NW { x : (Nt { v : 30 + n }, 5) } };
+        let Outer { o : NW { x : (first, second) } } = w;
+        let destructured = first.@v + second;
+
+        let w = w.mod_o(|nw| nw.mod_x(|(a, b)| (a.mod_v(|v| v + 1), b + 1)));
+        let w = w.set_o(NW { x : (Nt { v : w.@o.@x.@0.@v * 2 }, w.@o.@x.@1) });
+        let rebuilt = w.@o.@x.@0.@v + w.@o.@x.@1;
+
+        assert_eq(|_| "", [matched, taken, element, destructured, rebuilt], [15 + n, 10 + n, 25 + n, 35 + n, 68 + 2 * n]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// The field `t (Tuple2 (m I64))` beside fields declaring a function: `g`, a function type of its
+/// own, and `p`, the argument `m` applied to one. With `m` a newtype of a function, a recursive
+/// function calls the function the tuple holds and the one in `g`; with `m` a newtype of its
+/// argument, it calls the function in `p`, and the one a tuple type written with a function type,
+/// `t (Tuple2 (m (I64 -> I64)))`, holds.
+#[test]
+fn test_functions_beside_and_inside_a_field_applying_a_newtype_to_a_tuple_type_compute_them() {
+    let source = r#"
+    module Main;
+
+    type Nt a = unbox struct { v : a };
+    type Fn a = unbox struct { f : a -> a };
+    type [f : * -> *] NW f = unbox struct { x : f I64 };
+    type [t : (* -> *) -> *, m : * -> *] Outer t m = box struct { g : I64 -> I64, o : t (Tuple2 (m I64)), p : m (I64 -> I64) };
+    type [t : (* -> *) -> *, m : * -> *] Held t m = box struct { o : t (Tuple2 (m (I64 -> I64))) };
+
+    use_fn : I64 -> Outer NW Fn -> I64;
+    use_fn = |d, w| if d > 0 { use_fn(d - 1, w) } else { (w.@g)((w.@o.@x.@0.@f)(w.@o.@x.@1)) };
+
+    use_nt : I64 -> Outer NW Nt -> I64;
+    use_nt = |d, w| if d > 0 { use_nt(d - 1, w) } else { (w.@p.@v)(w.@o.@x.@0.@v + w.@o.@x.@1) };
+
+    use_held : I64 -> Held NW Nt -> I64;
+    use_held = |d, w| if d > 0 { use_held(d - 1, w) } else { (w.@o.@x.@0.@v)(w.@o.@x.@1) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let g = if n > 5 { |x| x + n } else { |x| x * 2 + n };
+        let with_fn = use_fn(n, Outer { g : g, o : NW { x : (Fn { f : |x| x * 3 + n }, 5) }, p : Fn { f : |h| h } });
+        let with_nt = use_nt(n, Outer { g : |x| x, o : NW { x : (Nt { v : 10 + n }, 5) }, p : Nt { v : g } });
+        let held = use_held(n, Held { o : NW { x : (Nt { v : |x| x * 7 + n }, 5) } });
+        assert_eq(|_| "", [with_fn, with_nt, held], [30 + 3 * n, 30 + 3 * n, 35 + n]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 /// Two types referring to each other, each declaring a function field, walked by a recursive
 /// function: the copies of the two types share the sets of their fields, and the walk calls the
 /// function of each field it reaches.
