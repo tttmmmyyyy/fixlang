@@ -3092,7 +3092,6 @@ pub struct ArrayUnsafeGetBoundsUncheckedOp {
     pub(crate) assumed_state: RcState,
     /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
     /// container goes on holding it.
-    #[serde(default)]
     pub(crate) lend: bool,
 }
 
@@ -5563,7 +5562,6 @@ pub struct StructGetOp {
     pub(crate) assumed_state: RcState,
     /// Whether the result is lent (`BuiltinOp::lending`): read out without a retain, while the
     /// container goes on holding it.
-    #[serde(default)]
     pub(crate) lend: bool,
 }
 

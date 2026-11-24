@@ -189,11 +189,12 @@ fn is_payload_read_of(rhs: &RcRhs, union: &FullName, variant: usize) -> bool {
     })
 }
 
-/// The variables the body of `arm`, a variant arm of a match on the boxed union `scrut`, binds to
-/// the payload it reads out of `scrut`.
+/// The variables the body of `arm`, an arm of a match on `scrut`, binds to the payload it reads out
+/// of `scrut`: none for an arm that binds its payload itself, which is every arm over an unboxed
+/// union, and none for a catch-all arm.
 fn payload_read_vars(arm: &MatchArm, scrut: &RcVar) -> Set<FullName> {
     let mut vars = Set::default();
-    let Some(variant) = arm.tag else {
+    let (Some(variant), None) = (arm.tag, &arm.binder) else {
         return vars;
     };
     for_each_node(&arm.body, &mut |n| {
