@@ -1,0 +1,6 @@
+[general]
+name = "prov-routing-read-out-of-a-global"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

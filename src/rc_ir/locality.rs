@@ -39,7 +39,6 @@ use crate::rc_ir::ast::{
 };
 use crate::rc_ir::leaf_map::{boxed_leaf_paths, LeafKey, LeafMap};
 use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneKey, CloneRegistry};
-use std::iter;
 use std::sync::Arc;
 
 /// What is proved about one boxed leaf, once the enclosing function's inputs are concrete. A
@@ -209,7 +208,8 @@ pub struct LeafCond {
     /// Whether, whatever the inputs, the object this leaf points to and every object it reaches are
     /// `RefcntState::GLOBAL`. A global's initializer marks its whole result graph global, and a
     /// global object never changes, so this holds of a global and of what the body takes out of it
-    /// by a `Destructure` or a `Match`. Every other constructor leaves it false — an op's
+    /// by a `DestructureUnboxed`, a `Match`, or an op that reads its result out of an operand
+    /// (`BuiltinOp::operand_holding_result`). Every other constructor leaves it false — an op's
     /// declaration, a summary, a substitution — and a join keeps it only where both sides have it,
     /// so it holds only where the body reads the value out of a global itself.
     pub global: bool,
@@ -575,11 +575,10 @@ impl<'a> Walk<'a> {
                 let build = || RcExpr::Release(v.clone(), path.clone(), state, k);
                 (shape, self.rebuild(node, build))
             }
-            RcExpr::Destructure(container, fields, _, k) => {
-                let state = self.annotate_destructure(container);
+            RcExpr::DestructureUnboxed(container, fields, k) => {
                 self.bind_destructured_fields(container, fields);
                 let (shape, k) = self.walk(k);
-                let build = || RcExpr::Destructure(container.clone(), fields.clone(), state, k);
+                let build = || RcExpr::DestructureUnboxed(container.clone(), fields.clone(), k);
                 (shape, self.rebuild(node, build))
             }
             RcExpr::Eval(v, k) => {
@@ -594,10 +593,7 @@ impl<'a> Walk<'a> {
     fn rebuild(&self, node: &RcExprNode, build: impl FnOnce() -> RcExpr) -> RcExprNode {
         match self.mode {
             Mode::Survey { .. } => node.clone(),
-            Mode::Clone { .. } => RcExprNode {
-                expr: Arc::new(build()),
-                source: node.source.clone(),
-            },
+            Mode::Clone { .. } => RcExprNode::new(build(), node.source.clone()),
         }
     }
 
@@ -632,7 +628,32 @@ impl<'a> Walk<'a> {
                 let arg_shapes: Vec<ExtShape> = args.iter().map(|a| self.shape_of(a)).collect();
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 let declared = op.result_locality(&result.ty, &arg_tys, self.type_env);
-                let result_shape = declared.substitute(&arg_shapes);
+                // An op that reads its result out of an operand (`lend_reads` lends that result
+                // while the operand lives on) declares the result taken out of that operand.
+                let held_by = op.operand_holding_result(&arg_tys, self.type_env);
+                if let Some(j) = held_by {
+                    assert_eq!(
+                        declared,
+                        ExtShape::uniform(
+                            &result.ty,
+                            self.type_env,
+                            LeafCond::take_out_of(&LeafCond::input_leaf(j, vec![])),
+                        ),
+                        "`{}` reads its result out of operand {}, but its locality does not take \
+                         the result out of it",
+                        op.name(),
+                        j
+                    );
+                }
+                // The take-out rule applied to the operand's own leaf, which is what the declaration
+                // comes to once substituted, keeps the fact that the operand is a global.
+                let result_shape = match held_by {
+                    Some(j) => {
+                        let taken = LeafCond::take_out_of(arg_shapes[j].leaf_at(&[]));
+                        ExtShape::uniform(&result.ty, self.type_env, taken)
+                    }
+                    None => declared.substitute(&arg_shapes),
+                };
                 let annotated = self.annotate_op(op, &arg_tys, &arg_shapes, &result_shape);
                 (result_shape, annotated.map(Rewritten::Op))
             }
@@ -743,8 +764,8 @@ impl<'a> Walk<'a> {
     /// the inputs, when any leaf it consults says so. That is exactly what the clone gate asks of a
     /// body: a site whose leaves all answer unconditionally answers the same under every key, so
     /// cloning the body for it buys nothing. Every kind of site goes through here, because a body
-    /// whose only annotatable site is an operation's internal reference counting, a `Destructure`, or
-    /// a boxed-union `Match` is as worth cloning as one holding a `Retain`.
+    /// whose only annotatable site is an operation's internal reference counting is as worth
+    /// cloning as one holding a `Retain`.
     fn site_inputs<'l>(
         &mut self,
         leaves: impl Iterator<Item = &'l LeafCond>,
@@ -790,10 +811,12 @@ impl<'a> Walk<'a> {
             .annotation()
     }
 
-    /// The operation annotated as acting on local objects, where this clone's inputs prove every
-    /// object it touches inside `generate` local: the one its declared uniqueness check tests, and
-    /// the ones `internal_rc_targets` names. One annotation covers them all, so one unproven target
-    /// leaves the whole operation reading the state.
+    /// The operation annotated with the state of the objects it touches inside `generate`: the one
+    /// its declared uniqueness check tests, and the ones `internal_rc_targets` names. They are
+    /// global where the operation only counts references and every one it counts is to an object
+    /// of a global's graph, and local where this clone's inputs prove every one of them local. One
+    /// annotation covers them all, so one unproven target leaves the whole operation reading the
+    /// state.
     ///
     /// A check the same `generate` emits without declaring is not covered and goes on reading it.
     fn annotate_op(
@@ -822,6 +845,12 @@ impl<'a> Walk<'a> {
             });
             checked.chain(counted)
         };
+        // A uniqueness check asks for a count, which a global object does not keep. An operation
+        // that counts no boxed leaf has no object to be global.
+        let counts_a_leaf = consulted().next().is_some();
+        if check.is_none() && counts_a_leaf && consulted().all(|leaf| leaf.global) {
+            return Some(op.assuming(RcState::Global));
+        }
         let inputs = self.site_inputs(consulted())?;
         if let Some(check) = &check {
             let leaf = arg_shapes[check.container_index].leaf_at(&check.path);
@@ -845,90 +874,40 @@ impl<'a> Walk<'a> {
                 return None;
             }
         }
-        Some(op.assuming_local())
+        Some(op.assuming(RcState::Local))
     }
 
-    /// The annotation of a `Destructure`, which counts every reference the node itself moves. Out of
-    /// a boxed container it releases the container and retains each named field, which the take-out
-    /// annotation covers. Out of an unboxed container, whose every field is named, it only moves the
-    /// leaves into the field variables and counts nothing.
-    fn annotate_destructure(&mut self, container: &RcVar) -> RcState {
-        if !container.ty.is_box(self.type_env) {
-            return RcState::Local;
-        }
-        let shape = self.shape_of(container);
-        self.annotate_take_out(shape.leaf_at(&[]))
-    }
-
-    /// The annotation of a node that takes values out of the boxed container whose leaf is
-    /// `container`, retaining them and, for a `Destructure`, releasing the container. The take-out
-    /// rule decides it: the values are local only where the container is `DeepLocal`, which also
-    /// covers the container itself, and global where the container is.
-    fn annotate_take_out(&mut self, container: &LeafCond) -> RcState {
-        if container.global {
-            return RcState::Global;
-        }
-        match self.site_inputs(iter::once(container)) {
-            Some(inputs) if container.resolve(inputs) == Locality::DeepLocal => RcState::Local,
-            _ => RcState::Unknown,
-        }
-    }
-
-    /// Bind the fields a `Destructure` names. Out of a boxed container each field is read by the
-    /// take-out rule; out of an unboxed one it is the projection of the container's own leaves.
+    /// Bind the fields a `DestructureUnboxed` names, each to the projection of the container's own
+    /// leaves.
     fn bind_destructured_fields(&mut self, container: &RcVar, fields: &[(usize, RcVar)]) {
         let container_shape = self.shape_of(container);
-        let boxed = container.ty.is_box(self.type_env);
         for (idx, fv) in fields {
-            let field_shape = if boxed {
-                let cond = LeafCond::take_out_of(container_shape.leaf_at(&[]));
-                ExtShape::uniform(&fv.ty, self.type_env, cond)
-            } else {
-                container_shape.project(*idx)
-            };
-            self.env.insert(fv.name.clone(), field_shape);
+            self.env
+                .insert(fv.name.clone(), container_shape.project(*idx));
         }
     }
 
-    /// Walk a `match`: bind each arm's payload, walk the arm, and join the arms' values. A variant
-    /// arm of a boxed union reads its payload out of the container by the take-out rule; of an
-    /// unboxed union it projects the scrutinee's variant. A catch-all arm binds the scrutinee itself.
+    /// Walk a `match`: bind the variable each arm binds, walk the arm, and join the arms' values. A
+    /// variant arm of an unboxed union projects the scrutinee's variant, and a catch-all arm binds
+    /// the scrutinee itself.
     fn walk_match(&mut self, scrut: &RcVar, arms: &[MatchArm]) -> (ExtShape, Vec<MatchArm>) {
         let scrut_shape = self.shape_of(scrut);
-        let boxed = scrut.ty.is_box(self.type_env);
         let mut joined: Option<ExtShape> = None;
         let mut out = Vec::with_capacity(arms.len());
         for arm in arms {
-            let payload_shape = match arm.tag {
-                Some(tag) => {
-                    if boxed {
-                        let cond = LeafCond::take_out_of(scrut_shape.leaf_at(&[]));
-                        ExtShape::uniform(&arm.payload.ty, self.type_env, cond)
-                    } else {
-                        scrut_shape.project(tag)
-                    }
-                }
-                None => scrut_shape.clone(),
-            };
-            // A variant arm of a boxed union retains the payload out of the container. A catch-all
-            // arm binds the scrutinee itself and retains nothing.
-            let payload_state = if arm.tag.is_some() && boxed {
-                self.annotate_take_out(scrut_shape.leaf_at(&[]))
-            } else {
-                RcState::Unknown
-            };
-            self.env.insert(arm.payload.name.clone(), payload_shape);
+            if let Some(binder) = &arm.binder {
+                let payload_shape = match arm.tag {
+                    Some(tag) => scrut_shape.project(tag),
+                    None => scrut_shape.clone(),
+                };
+                self.env.insert(binder.name.clone(), payload_shape);
+            }
             let (arm_shape, body) = self.walk(&arm.body);
             joined = Some(match joined {
                 None => arm_shape,
                 Some(acc) => acc.join(&arm_shape),
             });
-            out.push(MatchArm {
-                tag: arm.tag,
-                payload: arm.payload.clone(),
-                payload_state,
-                body,
-            });
+            out.push(arm.with_body(body));
         }
         // A match has at least one arm (an `if` lowers to two, a union match to one per variant).
         let joined = joined.unwrap_or_else(|| unreachable!("a match has at least one arm"));
@@ -1092,13 +1071,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         let init = annotate(prog, type_env, &summaries, &gate, &[], &mut clones)
             .walk(&g.init)
             .1;
-        globals.push(RcGlobalInit {
-            symbol: g.symbol.clone(),
-            ty: g.ty.clone(),
-            init,
-            owns_initializer: true,
-            owns_storage: true,
-        });
+        globals.push(g.with_init(init));
     }
 
     // Materialize every enqueued clone; each materialization may request further clones.
@@ -1118,9 +1091,5 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         );
     }
 
-    RcProgram {
-        funcs: output_funcs,
-        globals,
-        roots: prog.roots.clone(),
-    }
+    prog.with_code(output_funcs, globals)
 }

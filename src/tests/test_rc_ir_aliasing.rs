@@ -78,4 +78,35 @@ mod rc_ir_aliasing_tests {
         "#;
         test_source(&source, Configuration::develop_mode());
     }
+
+    /// A loop body captures `base`, and its even rounds update a copy of `base` that its odd rounds
+    /// do not see. The capture the body destructures `base` out of is retained for the next round,
+    /// and moving that retain down to the update leaves `base` bound before it: the update still
+    /// copies `base`, which the next round reads as it was.
+    #[test]
+    pub fn test_a_captured_array_updated_in_some_rounds_of_a_loop_stays_as_it_was() {
+        let source = r#"
+            module Main;
+
+            run : I64 -> I64;
+            run = |n| (
+                let base = Array::fill(3, 1);
+                loop((0, 0), |(i, s)|
+                    if i == n { break $ s };
+                    if i % 2 == 0 {
+                        let a = base.set(0, 100 + i);
+                        continue $ (i + 1, s + a.@(0))
+                    };
+                    continue $ (i + 1, s + base.@(0))
+                )
+            );
+
+            main : IO ();
+            main = (
+                assert_eq(|_|"the odd rounds read `base` as it was", run(6), 100 + 102 + 104 + 3);;
+                pure()
+            );
+        "#;
+        test_source(&source, Configuration::develop_mode());
+    }
 }

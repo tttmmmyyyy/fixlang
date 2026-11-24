@@ -5,19 +5,13 @@
 //! `advance` that calls itself is a body `inline` never moves, so a chain that keeps one leaves it
 //! standing as a function of its own in the dump.
 //!
-//! What the rewrites are for cannot be observed by running the program — they leave the answer
-//! unchanged — so the chain that motivates them is asserted on the dump: a function an iterator
-//! carries in a field is called through a pointer, and the same function reached as an argument is
-//! called by name. The answers are asserted at the levels above and below the one the pass runs at,
-//! which is what says the rewrites preserve them.
+//! The answers are asserted at the levels above and below the one the pass runs at, which is what
+//! says the rewrites preserve them.
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::constants::CAP_LIST_PREFIX;
-    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
+    use crate::tests::test_util::{build_project_run_and_read_rc_ir, setup_case_projects};
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     /// What `nested_iterators` prints: the sum of `3 * i + 1` over `0..9`.
@@ -47,13 +41,13 @@ mod integration_tests {
     /// What `dyn_flatten_chain` prints: each of `0..2` twice, times ten.
     const DYN_FLATTEN_CHAIN_OUTPUT: &str = "0,0,10,10,20,20";
 
-    /// What `field_name_reused_by_later_run` prints: each of the three rounds reads the `some` its
+    /// What `union_beside_computed_field` prints: each of the three rounds reads the `some` its
     /// triple holds, `3i + (i + 7) + 7` over `i` in `1..3`.
-    const FIELD_NAME_REUSED_BY_LATER_RUN_OUTPUT: &str = "66";
+    const UNION_BESIDE_COMPUTED_FIELD_OUTPUT: &str = "66";
 
-    /// What `split_field_order` prints: `run` folds `high` into `low` three times to reach 7321, and
+    /// What `fields_out_of_order` prints: `run` folds `high` into `low` three times to reach 7321, and
     /// adds the weight of the value it was handed on each round, 3007 + 2073 + 1732.
-    const SPLIT_FIELD_ORDER_OUTPUT: &str = "14133";
+    const FIELDS_OUT_OF_ORDER_OUTPUT: &str = "14133";
 
     /// The optimization levels the answers are asserted at: one below the level the passes run at,
     /// the level they run at, and the one above it.
@@ -62,100 +56,16 @@ mod integration_tests {
     /// Copies the cases into a temporary directory and gives back that directory together with the
     /// path of `case` inside it, so that cases run in parallel without sharing build output.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
-        let mut cases_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        cases_dir.push("src/tests/test_collapse_constructions/cases");
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        copy_dir_recursive(&cases_dir, &temp_dir.path().to_path_buf())
-            .expect("Failed to copy test cases");
-        let project_dir = temp_dir.path().join(case);
-        (temp_dir, project_dir)
+        setup_case_projects("src/tests/test_collapse_constructions/cases", case)
     }
 
-    /// Builds the case at `opt_level`, runs it, and returns the RC IR of every module.
-    ///
-    /// Running the program is what keeps the dump honest: the names asserted on come off a build
-    /// that is known to answer correctly.
-    fn build_run_and_read_rc_ir(
-        project_dir: &Path,
-        opt_level: &str,
-        expected_output: &str,
-    ) -> String {
-        let build = fix_command_at_opt_level("build", opt_level)
-            .args(["--emit-rc-ir", "all"])
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute fix build");
-        assert!(
-            build.status.success(),
-            "the build should succeed at -O {}.\nstdout: {}\nstderr: {}",
-            opt_level,
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr),
-        );
-
-        let run = Command::new(project_dir.join("a.out"))
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute the built program");
-        assert!(
-            run.status.success(),
-            "the built program should run cleanly at -O {}, but exited with {}.\nstderr: {}",
-            opt_level,
-            run.status,
-            String::from_utf8_lossy(&run.stderr),
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&run.stdout).trim(),
-            expected_output,
-            "the program should answer the same at -O {}",
-            opt_level
-        );
-
-        let dump_path = project_dir.join(".fixlang/rc_ir.post.txt");
-        fs::read_to_string(&dump_path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
-    }
-
-    /// The largest number of parameters of capture-list type that any one function in `dump` takes.
-    ///
-    /// A function reached as an argument arrives as its capture list, which is a type of its own, and
-    /// the body holding it calls that function by name. A function an iterator carries in a field
-    /// arrives as a closure and is called through a pointer. So this says how many of a chain's
-    /// functions one body knows the identity of.
-    fn most_capture_lists_taken_by_one_function(dump: &str) -> usize {
-        dump.lines()
-            .filter_map(|line| line.strip_prefix("fn "))
-            .map(|header| parameter_list(header).matches(CAP_LIST_PREFIX).count())
-            .max()
-            .expect("the RC IR dump names no function")
-    }
-
-    /// The parameter list of a dumped function header, taken from the parenthesis that opens it to
-    /// the one that closes it.
-    ///
-    /// A parameter's own type carries parentheses — a function type is written `(a) -> b` — so the
-    /// list runs to the parenthesis that brings the nesting back to where it started.
-    fn parameter_list(header: &str) -> &str {
-        let open = header
-            .find('(')
-            .unwrap_or_else(|| panic!("the function header opens no parameter list:\n{}", header));
-        let mut depth = 0;
-        for (offset, character) in header[open..].char_indices() {
-            match character {
-                '(' => depth += 1,
-                ')' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return &header[open + 1..open + offset];
-                    }
-                }
-                _ => {}
-            }
+    /// Builds `case` at every level of `OPT_LEVELS`, and checks that it answers `expected_output` at
+    /// each.
+    fn assert_answers_at_every_level(case: &str, expected_output: &str) {
+        let (_temp_dir, project_dir) = setup_test_env(case);
+        for opt_level in OPT_LEVELS {
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, expected_output);
         }
-        panic!(
-            "the parameter list of the function header stays open:\n{}",
-            header
-        )
     }
 
     /// The functions of `dump` whose name says they are an iterator's `advance`.
@@ -169,23 +79,6 @@ mod integration_tests {
             .collect()
     }
 
-    /// The functions of `dump` lifted out of `main` that take a capture list and an `I64` and answer
-    /// an `I64`: the functions a chain of iterators over `I64` carries, each standing as a function
-    /// of its own.
-    ///
-    /// The IO plumbing is lifted out of `main` as well, and each of those takes its capture list
-    /// alone and answers the action it wraps, so asking for `Std::I64` among the parameters and as
-    /// the result leaves them out.
-    fn carried_functions(dump: &str) -> Vec<&str> {
-        dump.lines()
-            .filter(|line| line.starts_with("fn Main::main") && line.ends_with(") -> Std::I64:"))
-            .filter(|line| {
-                let params = parameter_list(line);
-                params.contains(CAP_LIST_PREFIX) && params.contains("Std::I64")
-            })
-            .collect()
-    }
-
     /// Builds `case`, checks that it answers `expected_output`, and asserts that `standing` finds
     /// nothing of `subject` left as a function of its own in the RC IR dump.
     fn assert_leaves_no_function_of_its_own(
@@ -195,7 +88,7 @@ mod integration_tests {
         subject: &str,
     ) {
         let (_temp_dir, project_dir) = setup_test_env(case);
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", expected_output);
+        let dump = build_project_run_and_read_rc_ir(&project_dir, "max", expected_output);
 
         let left = standing(&dump);
         assert!(
@@ -203,42 +96,6 @@ mod integration_tests {
             "no {} should stand as a function of its own, but these do:\n{}",
             subject,
             left.join("\n")
-        );
-    }
-
-    /// A chain of two `map`s hands the fold two functions, each in a field of a struct that is in a
-    /// field of the next, and a third as the fold's own operation. Reading each construction where
-    /// the fold takes it apart is what makes all three arguments, so the fold receives three capture
-    /// lists; the chain's two functions stay closures without it.
-    #[test]
-    pub fn test_the_functions_a_chain_of_iterators_carries_are_called_by_name() {
-        let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", NESTED_ITERATORS_OUTPUT);
-
-        let known_function_count = most_capture_lists_taken_by_one_function(&dump);
-        assert!(
-            known_function_count >= 3,
-            "the fold should receive the chain's two functions and its own operation as capture \
-             lists, but the function taking the most of them takes {}",
-            known_function_count
-        );
-    }
-
-    /// Neither function the chain carries stands as a function of its own. Reading each construction
-    /// where the fold takes it apart binds the function a field holds to a name and hands the fold
-    /// that name, and the reduction that follows puts the body of each where its one call stood.
-    /// Left standing, each is a lambda bound to a name and applied once, which the program builds
-    /// and calls through instead of running the body where it is.
-    ///
-    /// The dump is what this asserts against because the program cannot observe it: the fold answers
-    /// the same either way.
-    #[test]
-    pub fn test_the_functions_a_chain_of_iterators_carries_leave_no_function_of_their_own() {
-        assert_leaves_no_function_of_its_own(
-            "nested_iterators",
-            NESTED_ITERATORS_OUTPUT,
-            carried_functions,
-            "function the chain carries",
         );
     }
 
@@ -282,10 +139,7 @@ mod integration_tests {
     /// outer one carries and the value the inner one carries, both named after the same field.
     #[test]
     pub fn test_a_chain_of_two_iterators_of_one_type_answers_the_same() {
-        let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
-        for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, NESTED_ITERATORS_OUTPUT);
-        }
+        assert_answers_at_every_level("nested_iterators", NESTED_ITERATORS_OUTPUT);
     }
 
     /// A struct built out of expressions and taken apart, a union each branch of an `if` builds a
@@ -294,70 +148,49 @@ mod integration_tests {
     /// rewrites do not run at.
     #[test]
     pub fn test_a_construction_read_where_it_is_built_answers_the_same() {
-        let (_temp_dir, project_dir) = setup_test_env("read_constructions");
-        for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, READ_CONSTRUCTIONS_OUTPUT);
-        }
+        assert_answers_at_every_level("read_constructions", READ_CONSTRUCTIONS_OUTPUT);
     }
 
     /// A struct argument whose pattern writes its fields in the reverse of the order they are
     /// declared, read whole besides, answers the same at every level. Both fields hold an `I64`, so
-    /// handing the fields over in the order the pattern writes them type checks, and the value is
-    /// what says the two orders were brought together — both where the fields are handed to the
-    /// function taking them one by one, and where the body that still names the struct rebuilds it.
+    /// a mix-up of the two orders type checks, and the value is what says there was none.
     #[test]
     pub fn test_a_struct_argument_taken_apart_out_of_declaration_order_answers_the_same() {
-        let (_temp_dir, project_dir) = setup_test_env("split_field_order");
-        for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, SPLIT_FIELD_ORDER_OUTPUT);
-        }
+        assert_answers_at_every_level("fields_out_of_order", FIELDS_OUT_OF_ORDER_OUTPUT);
     }
 
-    /// A field handed over as an argument of its own carries its name over the whole body, so a
-    /// value bound to that name before the pattern is read as the field unless every local has a
-    /// name of its own.
+    /// A value bound to a name before a pattern binds a field to the same name stays itself, and the
+    /// field read after the pattern is the field, at every level.
     #[test]
     pub fn test_a_value_named_like_a_field_before_the_pattern_stays_itself() {
-        let (_temp_dir, project_dir) = setup_test_env("shadowed_field_name");
-        for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, SHADOWED_FIELD_NAME_OUTPUT);
-        }
+        assert_answers_at_every_level("shadowed_field_name", SHADOWED_FIELD_NAME_OUTPUT);
     }
 
     /// An argument written beside the struct can name a field of the struct the call was given,
-    /// while the struct argument builds the value the call passes on. The first reaches the call
-    /// under a name of its own, so it keeps reading the value it was written against.
+    /// while the struct argument builds the value the call passes on. The first keeps reading the
+    /// value it was written against, at every level.
     #[test]
     pub fn test_an_argument_naming_a_field_reads_the_value_it_was_written_against() {
-        let (_temp_dir, project_dir) = setup_test_env("field_in_another_argument");
-        for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, FIELD_IN_ANOTHER_ARGUMENT_OUTPUT);
-        }
+        assert_answers_at_every_level(
+            "field_in_another_argument",
+            FIELD_IN_ANOTHER_ARGUMENT_OUTPUT,
+        );
     }
 
-    /// A struct built from a field the program names and a field it computes, where the name was
-    /// bound by an earlier run of the pass: the name bound for the computed field is one the struct
-    /// does not already read, so each field keeps the value it was written with.
+    /// A struct built on every step from fields that are names and fields that are expressions keeps
+    /// the value each field was written with, at every level.
     #[test]
-    pub fn test_a_field_named_by_an_earlier_run_keeps_its_value() {
-        let (_temp_dir, project_dir) = setup_test_env("dyn_flatten_chain");
-        for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, DYN_FLATTEN_CHAIN_OUTPUT);
-        }
+    pub fn test_a_struct_of_named_and_computed_fields_keeps_their_values() {
+        assert_answers_at_every_level("dyn_flatten_chain", DYN_FLATTEN_CHAIN_OUTPUT);
     }
 
-    /// A name an earlier run of the pass bound to a union, read after a later run binds a field of
-    /// another struct in the same global: the name the later run chooses is one the global does not
-    /// bind yet, so the reader is given the union the name was bound to.
+    /// A union taken apart from a triple, read in a global that also builds a pair with a computed
+    /// field: the reader is given the union, at every level.
     #[test]
-    pub fn test_a_field_name_from_an_earlier_run_is_read_as_it_was_bound() {
-        let (_temp_dir, project_dir) = setup_test_env("field_name_reused_by_later_run");
-        for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(
-                &project_dir,
-                opt_level,
-                FIELD_NAME_REUSED_BY_LATER_RUN_OUTPUT,
-            );
-        }
+    pub fn test_a_union_taken_from_a_triple_beside_a_computed_field_is_read_as_built() {
+        assert_answers_at_every_level(
+            "union_beside_computed_field",
+            UNION_BESIDE_COMPUTED_FIELD_OUTPUT,
+        );
     }
 }

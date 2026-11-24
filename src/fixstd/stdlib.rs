@@ -15,9 +15,9 @@ use crate::{
         C_LONG_LONG_NAME, C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME,
         C_UNSIGNED_INT_NAME, C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME,
         C_UNSIGNED_SHORT_NAME, DESTRUCTOR_NAME, F32_NAME, F64_NAME, FFI_NAME, HOLE_NAME, I16_NAME,
-        I32_NAME, I64_NAME, I8_NAME, IOSTATE_NAME, IO_NAME, MARK_THREADED_NAME, PTR_NAME,
-        PUNCHED_ARRAY_NAME, STD_NAME, TUPLE_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
-        WITH_RETAINED_NAME,
+        I32_NAME, I64_NAME, I8_NAME, INSTANCIATED_NAME_SEPARATOR, IOSTATE_NAME, IO_NAME,
+        MARK_THREADED_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, TUPLE_NAME, U16_NAME, U32_NAME,
+        U64_NAME, U8_NAME, WITH_RETAINED_NAME,
     },
     error::Errors,
     fixstd::builtin::{
@@ -56,6 +56,19 @@ use std::sync::Arc;
 /// The name of `Std::fix`, the fixed-point combinator a Fix source uses to write a local recursive
 /// function.
 pub const FIX_NAME: &str = "fix";
+
+/// Is this symbol `Std::fix` or an instance of it? An instance is named after the original,
+/// followed by `INSTANCIATED_NAME_SEPARATOR` and the hash of the type it is instantiated at, so the
+/// separator is what tells `fix#<hash>` apart from a name that only begins with `fix`.
+pub fn is_std_fix(name: &FullName) -> bool {
+    if name.namespace.names != [STD_NAME] {
+        return false;
+    }
+    match name.name.strip_prefix(FIX_NAME) {
+        Some(suffix) => suffix.is_empty() || suffix.starts_with(INSTANCIATED_NAME_SEPARATOR),
+        None => false,
+    }
+}
 
 /// The Fix source of the `Std` module, which `make_std_mod` parses and then extends with the
 /// definitions the compiler supplies.
@@ -98,7 +111,7 @@ fn register_deprecated_cast(
     to_name: &str,
     return_ty: Arc<TypeNode>,
 ) {
-    let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+    let from_namespace = from.expect_toplevel_tycon().name.to_namespace();
     let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
     errors.eat_err(fix_module.add_global_value(
         target.clone(),
@@ -289,9 +302,9 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     .map(|name| make_numeric_ty(name).0);
     // Fix → Fix: integer/float to integer/float.
     for from in &deprecated_cast_types {
-        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
+        let from_name = from.expect_toplevel_tycon().name.name.clone();
         for to in &deprecated_cast_types {
-            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let to_name = to.expect_toplevel_tycon().name.name.clone();
             register_deprecated_cast(
                 &mut fix_module,
                 &mut errors,
@@ -305,7 +318,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     // Fix → C alias: integer/float to any C numeric type.
     let c_types = config.c_numeric_types.get_c_types();
     for from in &deprecated_cast_types {
-        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
+        let from_name = from.expect_toplevel_tycon().name.name.clone();
         for (to_name_c, sign, size) in &c_types {
             let Some(to_type_c) = c_alias_ty(to_name_c, sign, *size) else {
                 continue;
@@ -323,7 +336,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     // Conversions between a number and its bytes, which the `ToBytes` and `FromBytes`
     // implementations of the numeric types call.
     for ty in integral_types.iter().chain(float_types) {
-        let ty_name = ty.toplevel_tycon().unwrap().name.name.clone();
+        let ty_name = ty.expect_toplevel_tycon().name.name.clone();
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "_to_bytes"),
             number_to_bytes_function(ty.clone()),
@@ -344,7 +357,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         (make_f64_ty(), make_u64_ty()),
         (make_f32_ty(), make_u32_ty()),
     ] {
-        let ty_name = float_ty.toplevel_tycon().unwrap().name.name.clone();
+        let ty_name = float_ty.expect_toplevel_tycon().name.name.clone();
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "to_bits"),
             bit_cast_function(float_ty.clone(), bits_ty.clone()),
@@ -362,7 +375,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     }
     // Bit operations
     for int_ty in integral_types {
-        let ty_name = int_ty.toplevel_tycon().unwrap().name.name.clone();
+        let ty_name = int_ty.expect_toplevel_tycon().name.name.clone();
         for operation in UnaryBitOperation::ALL {
             errors.eat_err(fix_module.add_global_value(
                 FullName::from_strs(&[STD_NAME, &ty_name], operation.function_name()),
@@ -955,7 +968,7 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     // rounded.
     let mut to_type_names: Vec<(String, bool)> = vec![];
     for (to, to_is_int) in &numeric_types {
-        to_type_names.push((to.toplevel_tycon().unwrap().name.name.clone(), *to_is_int));
+        to_type_names.push((to.expect_toplevel_tycon().name.name.clone(), *to_is_int));
     }
     for (to_name_c, sign, _) in &c_types {
         to_type_names.push((to_name_c.to_string(), *sign != "F"));
@@ -1031,7 +1044,7 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     // Fix → Fix: every (int|float) → (int|float) combination.
     for (from, from_is_int) in &numeric_types {
         for (to, to_is_int) in &numeric_types {
-            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let to_name = to.expect_toplevel_tycon().name.name.clone();
             let body = cast_body(from, *from_is_int, to.clone(), *to_is_int, None);
             prog.trait_env
                 .add_instance(make_impl(from, &to_name, body))?;
@@ -1077,4 +1090,42 @@ pub fn make_tuple_traits_mod(sizes: &[u32], config: &Configuration) -> Result<Pr
 /// The module-qualified name of `Std::with_retained`.
 pub fn make_with_retained_name() -> FullName {
     FullName::from_strs(&[STD_NAME], WITH_RETAINED_NAME)
+}
+
+/// Tests of `is_std_fix`.
+#[cfg(test)]
+mod tests {
+    use super::{is_std_fix, FullName, FIX_NAME, INSTANCIATED_NAME_SEPARATOR, STD_NAME};
+
+    /// The name a global of `namespace` called `name` carries, once instantiated at some type.
+    fn instance_of(namespace: &str, name: &str) -> FullName {
+        FullName::from_strs(
+            &[namespace],
+            &format!("{}{}0123abcd", name, INSTANCIATED_NAME_SEPARATOR),
+        )
+    }
+
+    /// A global reaches the predicate both as declared and as instantiated at a type, so both forms
+    /// have to be recognized.
+    #[test]
+    fn std_fix_and_its_instances_are_recognized() {
+        assert!(is_std_fix(&FullName::from_strs(&[STD_NAME], FIX_NAME)));
+        assert!(is_std_fix(&instance_of(STD_NAME, FIX_NAME)));
+    }
+
+    /// A name that begins with `fix` belongs to another global, which the predicate rejects:
+    /// accepting it would turn that global's applications into a fixed-point computation.
+    #[test]
+    fn a_name_that_merely_begins_with_fix_is_not_std_fix() {
+        assert!(!is_std_fix(&FullName::from_strs(&[STD_NAME], "fixup")));
+        assert!(!is_std_fix(&instance_of(STD_NAME, "fixup")));
+    }
+
+    /// A module's own `fix` is an ordinary global, so the predicate requires the `Std` namespace as
+    /// well as the name.
+    #[test]
+    fn a_global_named_fix_outside_std_is_not_std_fix() {
+        assert!(!is_std_fix(&FullName::from_strs(&["Main"], FIX_NAME)));
+        assert!(!is_std_fix(&instance_of("Main", FIX_NAME)));
+    }
 }

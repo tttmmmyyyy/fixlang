@@ -5,7 +5,8 @@ use crate::ast::name::{FullName, Name};
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
+use std::ops::ControlFlow;
 use std::sync::Arc;
 
 /// A variable of the RC IR. Because a fresh name is minted at every binding, a name resolves its
@@ -60,6 +61,24 @@ pub struct RcProgram {
     /// program — the names the unit publishes for the others (`divide_among_units`).
     /// `dead_code_elim::eliminate_unreachable` keeps what they reach and drops the rest.
     pub roots: Set<FullName>,
+    /// Whether `sink_retains` has moved the program's retains. Provenance reads a retain as demoting
+    /// only the variable it names, which holds where every alias of a retained value is bound after
+    /// the retain; a moved retain can sit below where an alias is bound, so
+    /// `provenance::analyze_program` refuses such a program.
+    pub retains_sunk: bool,
+}
+
+impl RcProgram {
+    /// This program with `funcs` and `globals` in place of its functions and global initializers,
+    /// and the rest of it kept: what a pass rewriting the code of a program returns.
+    pub fn with_code(&self, funcs: Map<FuncRef, RcFunc>, globals: Vec<RcGlobalInit>) -> RcProgram {
+        RcProgram {
+            funcs,
+            globals,
+            roots: self.roots.clone(),
+            retains_sunk: self.retains_sunk,
+        }
+    }
 }
 
 /// A top-level function. One shape uniformly represents lifted lambda bodies, global functions, and
@@ -94,13 +113,13 @@ pub struct RcFunc {
     pub source: Option<Span>,
     /// The reference-counting units this version borrows among its parameters and capture — the units
     /// it does not own, one `(parameter-name, unit-path)` each. Everything not listed is owned, so the
-    /// empty set is the all-owning default. Borrow-ification writes it: an original version borrows
-    /// nothing, a borrow version borrows its inferred read-only units.
+    /// empty set is the all-owning default. Borrow-ification writes it: a version borrows the units
+    /// its key marks `Borrow`, and the all-`Own` original borrows nothing.
     ///
     /// The empty default is correct at every stage — before borrow-ification every parameter is owned
     /// (the discipline `insert_rc` establishes), and a version that owns everything borrows nothing.
-    /// `cancel` and the RC IR dump read the owned complement (via `all_owned_units`) for each call's
-    /// consume sites and each parameter's ownership shape.
+    /// `cancel`, `sink_retains` and the RC IR dump read the owned complement (via
+    /// `all_owned_units`) for each call's consume sites and each parameter's ownership shape.
     #[serde(serialize_with = "serialize_sorted_var_paths")]
     pub borrowed_units: Set<VarPath>,
     /// Whether the back end is asked to inline every call of this function. Code generation writes
@@ -135,6 +154,16 @@ pub struct RcExprNode {
     pub source: Option<Span>,
 }
 
+impl RcExprNode {
+    /// A node standing for `expr`, written at `source`.
+    pub fn new(expr: RcExpr, source: Option<Span>) -> Self {
+        RcExprNode {
+            expr: Arc::new(expr),
+            source,
+        }
+    }
+}
+
 /// The statement-nested form: `Let`, `Retain`, and `Release` each carry a continuation, and `Ret`
 /// is the only terminator.
 #[derive(Clone, Serialize)]
@@ -147,15 +176,12 @@ pub enum RcExpr {
     /// Drop (refcount -1, freeing and traversing owned children at zero) every boxed leaf of the
     /// subtree of the variable named by the path, then continue.
     Release(RcVar, FieldPath, RcState, RcExprNode),
-    /// Destructure a struct/tuple container into its fields at once, then continue. Each `(index,
-    /// var)` binds field `index` to `var`. The container is consumed: an unboxed container names every
-    /// field, and its leaves are moved into the field variables (no per-field retain); a boxed
-    /// container retains each named field and releases the container. Reference-count
-    /// insertion retains the container before this node iff it is used afterward — together this
-    /// mirrors code generation's `get_scoped_obj` retain-if-used-later plus `get_struct_fields`
-    /// whole-container extraction. One node for the whole destructure lets that retain be decided
-    /// once, from the container's liveness after the destructure, and placed before the extraction.
-    Destructure(RcVar, Vec<(usize, RcVar)>, RcState, RcExprNode),
+    /// Take an unboxed struct/tuple container apart into its fields at once, then continue. Each
+    /// `(index, var)` binds field `index` to `var`, and every field is named. The container is
+    /// consumed: its leaves are moved, uncounted, into the field variables, and reference-count
+    /// insertion retains the container before this node iff it is used afterward. The fields of a
+    /// boxed struct are read out of it by getters (`StructGetOp`).
+    DestructureUnboxed(RcVar, Vec<(usize, RcVar)>, RcExprNode),
     /// Force the variable's value for its effect and discard it, then continue — the RC IR form of the
     /// source `eval e0; e1`. Forcing a local is a no-op (it is already computed); forcing a global
     /// runs its call-once initializer, whose evaluation may have an effect (e.g. an `undefined`-valued
@@ -199,28 +225,25 @@ pub enum RcTarget {
     Contents(usize, FieldPath),
 }
 
-/// One arm of a `Match`: the variant it matches, the variable its payload is bound to, the state of
-/// the payload it retains out of a boxed union, and the arm body, whose value is its final `Ret`.
-/// `tag` is `Some` for a variant arm, whose payload is that variant's value; it is `None` for a
-/// catch-all arm, whose payload is the whole scrutinee.
+/// One arm of a `Match`: the variant it matches, the variable it binds, and the arm body, whose
+/// value is its final `Ret`. `tag` is `Some` for a variant arm and `None` for a catch-all arm.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
 #[derive(Clone, Serialize)]
 pub struct MatchArm {
     /// The variant number this arm matches, or `None` for a catch-all arm.
     pub tag: Option<usize>,
-    /// The variable `body` reads the matched value through.
-    pub payload: RcVar,
-    /// What is known about the payload a variant arm of a boxed union retains out of the container.
-    /// A catch-all arm binds the scrutinee itself and retains nothing, so its state is `Unknown`.
-    pub payload_state: RcState,
-    /// The expression this arm evaluates to, in the scope extended with `payload`.
+    /// The variable the arm binds, which the match moves an unboxed scrutinee into: the payload of
+    /// the variant for a variant arm, and the whole scrutinee for a catch-all arm. `None` over a
+    /// boxed scrutinee, which the match borrows and the arm's body reads with ops.
+    pub binder: Option<RcVar>,
+    /// The expression this arm evaluates to, in the scope extended with `binder`.
     pub body: RcExprNode,
 }
 
 impl MatchArm {
     /// This arm with `body` in place of its own: it matches the same variant and binds the same
-    /// payload, and evaluates to what `body` gives.
+    /// variable, and evaluates to what `body` gives.
     pub fn with_body(&self, body: RcExprNode) -> MatchArm {
         MatchArm {
             body,
@@ -253,7 +276,7 @@ pub enum RcRhs {
 
 /// The reference-counting state dispatch of a `Retain` or `Release`. Lowering emits `Unknown`,
 /// which is always sound; locality inference specializes it.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum RcState {
     /// Read the object's refcount state at run time and dispatch three ways.
     Unknown,
@@ -302,7 +325,7 @@ impl RcState {
 }
 
 /// The ownership of a single reference-counting unit.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Ownership {
     /// The callee receives ownership: it consumes the unit, by releasing it or by moving it into
     /// the result, and the caller retains it before the call at a non-last use.
@@ -311,8 +334,19 @@ pub enum Ownership {
     Borrow,
 }
 
+impl Ownership {
+    /// `Own` where `owned` holds, else `Borrow`.
+    pub fn owned_if(owned: bool) -> Ownership {
+        if owned {
+            Ownership::Own
+        } else {
+            Ownership::Borrow
+        }
+    }
+}
+
 /// The ownership of one argument, shaped like the value.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum OwnershipShape {
     /// A part of the value holding no reference-counting unit.
     NoUnit,
@@ -321,6 +355,42 @@ pub enum OwnershipShape {
     Fields(Vec<OwnershipShape>),
     /// A single reference-counting unit, owned or borrowed.
     Unit(Ownership),
+}
+
+impl OwnershipShape {
+    /// The ownership of the reference-counting unit at `unit`, a unit path of the value this shape
+    /// describes.
+    pub fn at(&self, unit: &[usize]) -> Ownership {
+        match (self, unit.split_first()) {
+            (OwnershipShape::Unit(ownership), None) => *ownership,
+            (OwnershipShape::Fields(fields), Some((idx, below))) => fields[*idx].at(below),
+            _ => panic!("the path {:?} names no unit of the shape {:?}", unit, self),
+        }
+    }
+
+    /// Whether the value borrows any of its units.
+    pub fn borrows_any(&self) -> bool {
+        match self {
+            OwnershipShape::NoUnit => false,
+            OwnershipShape::Fields(fields) => fields.iter().any(OwnershipShape::borrows_any),
+            OwnershipShape::Unit(ownership) => *ownership == Ownership::Borrow,
+        }
+    }
+
+    /// The ownership written one letter per reference-counting unit, `O` for `Own` and `B` for
+    /// `Borrow`, in field order. Shapes of one type spell strings of one length, which differ
+    /// wherever the ownership does.
+    ///
+    /// # Examples
+    /// `Fields([Unit(Own), NoUnit, Unit(Borrow)])` spells `"OB"`.
+    pub fn spelling(&self) -> String {
+        match self {
+            OwnershipShape::NoUnit => String::new(),
+            OwnershipShape::Fields(fields) => fields.iter().map(OwnershipShape::spelling).collect(),
+            OwnershipShape::Unit(Ownership::Own) => "O".to_string(),
+            OwnershipShape::Unit(Ownership::Borrow) => "B".to_string(),
+        }
+    }
 }
 
 /// The initializer of a global value, run once when a reader first asks for the value. The whole
@@ -353,6 +423,17 @@ pub struct RcGlobalInit {
 }
 
 impl RcGlobalInit {
+    /// This global with `init` as its initializer, every other field kept.
+    pub fn with_init(&self, init: RcExprNode) -> RcGlobalInit {
+        RcGlobalInit {
+            symbol: self.symbol.clone(),
+            ty: self.ty.clone(),
+            init,
+            owns_initializer: self.owns_initializer,
+            owns_storage: self.owns_storage,
+        }
+    }
+
     /// Whether the program holding this part of the global can serve a read of the value: it keeps
     /// the value itself, or it reads the storage the unit keeping it publishes.
     ///
@@ -406,7 +487,7 @@ fn collect_mentions_inner(node: &RcExprNode, mention: &mut impl FnMut(&FullName)
             mention(&v.name);
             collect_mentions(k, mention);
         }
-        RcExpr::Destructure(container, _, _, k) => {
+        RcExpr::DestructureUnboxed(container, _, k) => {
             mention(&container.name);
             collect_mentions(k, mention);
         }
@@ -436,9 +517,66 @@ fn for_each_node_inner(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
         RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
         | RcExpr::Eval(_, k)
-        | RcExpr::Destructure(_, _, _, k) => for_each_node(k, visit),
+        | RcExpr::DestructureUnboxed(_, _, k) => for_each_node(k, visit),
         RcExpr::Ret(_) => {}
     }
+}
+
+/// What `node` evaluates after its own step. A `ret` ends the chain and has none, so a caller answers
+/// for that case before asking.
+pub(crate) fn continuation_of(node: &RcExprNode) -> &RcExprNode {
+    match node.expr.as_ref() {
+        RcExpr::Ret(v) => unreachable!("`ret {}` ends the chain", v.name.to_string()),
+        RcExpr::Let(_, _, k)
+        | RcExpr::DestructureUnboxed(_, _, k)
+        | RcExpr::Eval(_, k)
+        | RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k) => k,
+    }
+}
+
+/// `node` with its continuation replaced by what `f` makes of it. A `Ret` has no continuation and
+/// comes back as it is.
+pub(crate) fn map_continuation(
+    node: &RcExprNode,
+    f: impl FnOnce(&RcExprNode) -> RcExprNode,
+) -> RcExprNode {
+    let expr = match node.expr.as_ref() {
+        RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), f(k)),
+        RcExpr::Retain(v, path, state, k) => RcExpr::Retain(v.clone(), path.clone(), *state, f(k)),
+        RcExpr::Release(v, path, state, k) => {
+            RcExpr::Release(v.clone(), path.clone(), *state, f(k))
+        }
+        RcExpr::DestructureUnboxed(container, fields, k) => {
+            RcExpr::DestructureUnboxed(container.clone(), fields.clone(), f(k))
+        }
+        RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), f(k)),
+        RcExpr::Ret(_) => return node.clone(),
+    };
+    RcExprNode::new(expr, node.source.clone())
+}
+
+/// `node` with each node right under it replaced by what `f` makes of it: the body of each arm of
+/// the `Match` it binds, if it binds one, and then its continuation.
+pub(crate) fn map_children(
+    node: &RcExprNode,
+    mut f: impl FnMut(&RcExprNode) -> RcExprNode,
+) -> RcExprNode {
+    let node = match node.expr.as_ref() {
+        RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => RcExprNode::new(
+            RcExpr::Let(
+                x.clone(),
+                RcRhs::Match(
+                    scrutinee.clone(),
+                    arms.iter().map(|arm| arm.with_body(f(&arm.body))).collect(),
+                ),
+                k.clone(),
+            ),
+            node.source.clone(),
+        ),
+        _ => node.clone(),
+    };
+    map_continuation(&node, f)
 }
 
 /// Visit every variable `node` binds or reads, the payload of every arm of every `Match` included.
@@ -460,7 +598,7 @@ fn for_each_var_of_node(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
         RcExpr::Retain(var, _, _, _) | RcExpr::Release(var, _, _, _) | RcExpr::Eval(var, _) => {
             visit(var)
         }
-        RcExpr::Destructure(var, fields, _, _) => {
+        RcExpr::DestructureUnboxed(var, fields, _) => {
             visit(var);
             for (_, field) in fields {
                 visit(field);
@@ -470,8 +608,8 @@ fn for_each_var_of_node(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
     }
 }
 
-/// Visit the variables of a right-hand side: the payload variable of each arm of a `Match` among
-/// them, and not the arm bodies.
+/// Visit the variables a right-hand side itself names: of a `Match`, the scrutinee and the
+/// variable each arm binds.
 fn for_each_var_of_rhs(rhs: &RcRhs, visit: &mut impl FnMut(&RcVar)) {
     match rhs {
         RcRhs::Var(var) => visit(var),
@@ -494,10 +632,80 @@ fn for_each_var_of_rhs(rhs: &RcRhs, visit: &mut impl FnMut(&RcVar)) {
         RcRhs::Match(scrutinee, arms) => {
             visit(scrutinee);
             for arm in arms {
-                visit(&arm.payload);
+                arm.binder.iter().for_each(&mut *visit);
             }
         }
     }
+}
+
+/// Whether `node` reads the variable named `name` as a value. See `try_for_each_value_use` for
+/// what counts as such a read.
+pub(crate) fn is_value_used(name: &FullName, node: &RcExprNode) -> bool {
+    try_for_each_value_use(node, &mut |v| {
+        if v.name == *name {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    })
+    .is_break()
+}
+
+/// The number of times `node` reads the variable named `name` as a value. See
+/// `try_for_each_value_use` for what counts as such a read.
+pub(crate) fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
+    let mut count = 0;
+    let _ = try_for_each_value_use(node, &mut |v| {
+        count += (v.name == *name) as usize;
+        ControlFlow::Continue(())
+    });
+    count
+}
+
+/// Visit each place `node` reads a variable as a value, the bodies of the arms of every `Match`
+/// included, until `visit` breaks: a move, a call callee or argument, an operand of a builtin
+/// operation, a closure capture, a match scrutinee, a destructured container, an `eval`, or the
+/// returned variable. Binders are not reads. A `Retain`/`Release` names its variable only for
+/// reference counting, so it is not one either, which lets a call be recognized as an argument's
+/// last use even when the lowering brackets it with reference counts.
+fn try_for_each_value_use(
+    node: &RcExprNode,
+    visit: &mut impl FnMut(&RcVar) -> ControlFlow<()>,
+) -> ControlFlow<()> {
+    // A deep continuation chain recurses to its full depth here; grow the stack on demand.
+    grow_stack(|| match node.expr.as_ref() {
+        RcExpr::Ret(v) => visit(v),
+        RcExpr::Let(_, rhs, k) => {
+            match rhs {
+                RcRhs::Var(v) => visit(v)?,
+                RcRhs::App(callee, args) => {
+                    visit(callee)?;
+                    args.iter().try_for_each(&mut *visit)?
+                }
+                RcRhs::Closure(_, caps) => caps.iter().try_for_each(&mut *visit)?,
+                // The op's embedded names are its operand list again (`validate` checks it).
+                RcRhs::Builtin(_, args) => args.iter().try_for_each(&mut *visit)?,
+                RcRhs::Match(scrut, arms) => {
+                    visit(scrut)?;
+                    for arm in arms {
+                        try_for_each_value_use(&arm.body, visit)?;
+                    }
+                }
+            }
+            try_for_each_value_use(k, visit)
+        }
+        RcExpr::DestructureUnboxed(container, _, k) => {
+            visit(container)?;
+            try_for_each_value_use(k, visit)
+        }
+        RcExpr::Eval(v, k) => {
+            visit(v)?;
+            try_for_each_value_use(k, visit)
+        }
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => {
+            try_for_each_value_use(k, visit)
+        }
+    })
 }
 
 /// Serialize a set of variable paths in the order of the paths themselves, so that a digest taken

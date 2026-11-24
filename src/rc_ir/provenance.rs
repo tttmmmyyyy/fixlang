@@ -485,19 +485,12 @@ impl<'a> Interpreter<'a> {
             // `Eval` only observes its variable; like a release it creates no lasting alias, so the
             // provenance environment is unchanged.
             RcExpr::Release(_, _, _, cont) | RcExpr::Eval(_, cont) => self.interpret(cont, env),
-            RcExpr::Destructure(container, fields, _state, cont) => {
-                // Destructuring a boxed container retains each field out of the shared allocation, so
-                // every field's boxed leaf is `Unknown` (the same read-out-of-a-shared-box rule as a boxed
-                // union's payload in `interpret_match`). An unboxed container's fields carry the tracked
-                // provenance projected from the container.
-                let boxed = container.ty.is_box(self.type_env);
+            RcExpr::DestructureUnboxed(container, fields, cont) => {
+                // The container is unboxed, so its fields carry the tracked provenance projected
+                // from it.
                 let container_prov = self.prov_of(container, &env);
                 for (idx, fv) in fields {
-                    let field_prov = if boxed {
-                        Provenance::uniform(&fv.ty, self.type_env, LeafOrigin::Unknown)
-                    } else {
-                        container_prov.project(*idx)
-                    };
+                    let field_prov = container_prov.project(*idx);
                     self.record(fv, &field_prov, &mut env);
                 }
                 self.note_unique_flag(container, fields);
@@ -571,7 +564,7 @@ impl<'a> Interpreter<'a> {
     ///
     /// A callee's result provenance is symbolic in its capture as well as its parameters, while a
     /// call supplies only the arguments. The capture never survives into it: the capture object is
-    /// boxed, so the `Destructure` at the callee's entry reads every captured value as `Unknown`, and
+    /// boxed, so the reads out of it at the callee's entry give every captured value `Unknown`, and
     /// the object itself cannot be part of a result of a different type. `compose` therefore finds an
     /// operand for every `Arg` it meets.
     fn interpret_app(
@@ -609,7 +602,7 @@ impl<'a> Interpreter<'a> {
             .compose(&arg_provs)
     }
 
-    /// Record that a `Destructure` takes apart an `is_unique` result, pairing the flag it returns with
+    /// Record that a `DestructureUnboxed` takes apart an `is_unique` result, pairing the flag it returns with
     /// the value it returns so that a `match` on that flag can refine the value in its `true` arm.
     ///
     /// The pairing holds only where the tested leaf is a boxed leaf of the value: `is_unique` reports
@@ -647,7 +640,7 @@ impl<'a> Interpreter<'a> {
         let Some((value, path)) = self.flag_to_tested_leaf.get(&scrut.name) else {
             return env;
         };
-        // The flag and the value are bound by one `Destructure` upstream of this `match`, so the value
+        // The flag and the value are bound by one `DestructureUnboxed` upstream of this `match`, so the value
         // is in scope here.
         let refined = env
             .get(&value.name)
@@ -692,20 +685,16 @@ impl<'a> Interpreter<'a> {
         let mut joined_env: Option<Map<FullName, Provenance>> = None;
         for arm in arms {
             let mut arm_env = self.refine_by_unique_flag(scrut, arm, env);
-            // The payload is the variant's value (a tagged arm) or the whole scrutinee (catch-all). A
-            // variant payload of an unboxed union is projected from the scrutinee's expanded shape; of
-            // a boxed union it is read out of the shared container, so its every boxed leaf is `Unknown`.
-            let payload_prov = match arm.tag {
-                Some(tag) => {
-                    if scrut.ty.is_box(self.type_env) {
-                        Provenance::uniform(&arm.payload.ty, self.type_env, LeafOrigin::Unknown)
-                    } else {
-                        scrut_prov.project(tag)
-                    }
-                }
-                None => scrut_prov.clone(),
-            };
-            self.record(&arm.payload, &payload_prov, &mut arm_env);
+            // The variable an arm binds is the variant's value, projected from the scrutinee's
+            // expanded shape (a variant arm of an unboxed union), or the whole scrutinee (a
+            // catch-all).
+            if let Some(binder) = &arm.binder {
+                let payload_prov = match arm.tag {
+                    Some(tag) => scrut_prov.project(tag),
+                    None => scrut_prov.clone(),
+                };
+                self.record(binder, &payload_prov, &mut arm_env);
+            }
             let (arm_prov, arm_exit) = self.interpret(&arm.body, arm_env);
             joined_result = Some(match joined_result {
                 None => arm_prov,
@@ -814,8 +803,14 @@ fn merge_by_unique_name<V>(whole: &mut Map<FullName, V>, one: Map<FullName, V>, 
 }
 
 /// Analyze every function and global initializer of `prog`, after computing each function's result
-/// provenance to a fixed point so that a call composes its callee's effect.
+/// provenance to a fixed point so that a call composes its callee's effect. `prog`'s retains must
+/// not have moved (`RcProgram::retains_sunk`).
 pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalysis {
+    assert!(
+        !prog.retains_sunk,
+        "provenance is analyzed after `sink_retains` moved the retains, where an alias bound above a \
+         moved retain would read as unique"
+    );
     // Phase 1: compute each function's effect (its result provenance, symbolic in its parameters) to
     // a fixed point. A direct call substitutes the callee's effect, so recursion needs iteration;
     // the lattice is finite and the join is monotone, so it converges. Start each effect at `⊥`.
@@ -887,10 +882,15 @@ pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalys
 #[cfg(test)]
 mod tests {
     use super::{
-        join_envs, resolve, sole_origin, LeafOrigin, Provenance, SharingVerdict, Uniqueness,
+        analyze_program, join_envs, resolve, sole_origin, LeafOrigin, Provenance, SharingVerdict,
+        Uniqueness,
     };
     use crate::ast::name::FullName;
+    use crate::ast::type_env::TypeEnv;
+    use crate::fixstd::builtin::builtin_tycons;
     use crate::misc::{Map, Set};
+    use crate::rc_ir::borrow::sink_retains;
+    use crate::rc_ir::test_program::{func, global_name, prog};
 
     /// A single boxed value's provenance: one leaf at the root path.
     fn boxed(src: LeafOrigin) -> Provenance {
@@ -1075,5 +1075,18 @@ mod tests {
             resolve(&agg(vec![Provenance::empty(), fresh()]), &[]),
             uniq(vec![(vec![1], SharingVerdict::Unique)])
         );
+    }
+
+    /// Verifies that `analyze_program` accepts a program before `sink_retains` and refuses the same
+    /// program after it. Provenance reads a retain as demoting only the variable it names, and a
+    /// moved retain can sit below where an alias is bound.
+    #[test]
+    #[should_panic(expected = "after `sink_retains` moved the retains")]
+    fn analyze_program_refuses_a_program_whose_retains_sunk() {
+        let type_env = TypeEnv::new(builtin_tycons(), Map::default());
+        let main = global_name("main");
+        let unsunk = prog(vec![func(main.clone(), &[])], vec![], &[main]);
+        analyze_program(&unsunk, &type_env);
+        analyze_program(&sink_retains(&unsunk, &type_env), &type_env);
     }
 }

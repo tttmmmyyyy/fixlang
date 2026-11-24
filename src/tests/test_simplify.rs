@@ -8,76 +8,19 @@
 /// building no union — the property these tests assert.
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
-    use std::fs;
-    use std::path::{Path, PathBuf};
+    use crate::tests::test_util::{
+        build_project_and_read_rc_ir, build_project_run_and_read_rc_ir,
+        rc_ir_function_bodies_naming_all, setup_case_projects,
+    };
     use std::process::Command;
-    use tempfile::TempDir;
 
-    /// The directory holding the case projects, `src/tests/test_simplify/cases` in the source tree.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_simplify/cases");
-        path
-    }
+    /// The directory holding this module's case projects.
+    const CASES: &str = "src/tests/test_simplify/cases";
 
-    /// Copy the test cases into a fresh temporary directory so parallel test runs do not conflict,
-    /// and return the directory of the named case project.
-    fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let dst = temp_dir.path().to_path_buf();
-        copy_dir_recursive(&get_test_cases_dir(), &dst).expect("Failed to copy test cases");
-        let project_dir = dst.join(case);
-        (temp_dir, project_dir)
-    }
-
-    /// Build the case project at `max` (where the simplifier runs) with `--emit-rc-ir all`,
-    /// returning the dumped RC IR of every module. The `range.fold` driver is a specialized
-    /// `Std::Iterator` symbol, so the whole-program dump is needed to see it. Also leaves a runnable
-    /// executable.
-    fn emit_all_rc_ir(project_dir: &Path) -> String {
-        let output = fix_command_at_opt_level("build", "max")
-            .arg("--emit-rc-ir")
-            .arg("all")
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute fix build --emit-rc-ir");
-
-        if !output.status.success() {
-            eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-            panic!("fix build --emit-rc-ir failed");
-        }
-
-        let dump_path = project_dir.join(".fixlang/rc_ir.post.txt");
-        fs::read_to_string(&dump_path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
-    }
-
-    /// Each `fn` block of the dump whose header line contains all of `needles`: the header line
-    /// itself and every line up to the next `fn` header.
-    fn fn_bodies_matching(dump: &str, needles: &[&str]) -> Vec<String> {
-        let mut bodies = Vec::new();
-        let mut current_body: Option<String> = None;
-        for line in dump.lines() {
-            if line.starts_with("fn ") {
-                if let Some(body) = current_body.take() {
-                    bodies.push(body);
-                }
-                if needles.iter().all(|n| line.contains(n)) {
-                    current_body = Some(String::new());
-                }
-            }
-            if let Some(body) = current_body.as_mut() {
-                body.push_str(line);
-                body.push('\n');
-            }
-        }
-        if let Some(body) = current_body.take() {
-            bodies.push(body);
-        }
-        bodies
-    }
+    /// The header needles of the fold that `to_array` runs over `range(0, 10).map(f)`, the one
+    /// function of a case whose answer is an `Array I64`. The call `map` makes to `f` is inlined
+    /// into it, so `f`'s body stands there.
+    const MAPPED_FOLD: &[&str] = &["Std::Iterator::fold", ") -> Std::Array Std::I64:"];
 
     /// Build the case project and assert that every `fn` of its RC IR dump whose header matches
     /// `needles` — which `what` names in a failure message — holds each node of `held_nodes`,
@@ -96,10 +39,10 @@ mod integration_tests {
         held_nodes: &[&str],
         expected: &str,
     ) {
-        let (_temp_dir, project_dir) = setup_test_env(case);
-        let dump = emit_all_rc_ir(&project_dir);
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, case);
+        let dump = build_project_and_read_rc_ir(&project_dir, "all", "rc_ir.post.txt");
 
-        let bodies = fn_bodies_matching(&dump, needles);
+        let bodies = rc_ir_function_bodies_naming_all(&dump, needles);
         assert!(
             !bodies.is_empty(),
             "no {} in the RC IR dump:\n{}",
@@ -145,8 +88,8 @@ mod integration_tests {
     /// one, and the move is all-or-nothing.
     #[test]
     fn test_loop_state_cancelled() {
-        let (_temp_dir, project_dir) = setup_test_env("loop_two_conditions");
-        let dump = emit_all_rc_ir(&project_dir);
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "loop_two_conditions");
+        let dump = build_project_and_read_rc_ir(&project_dir, "all", "rc_ir.post.txt");
         assert!(
             !dump.contains("LoopState"),
             "the loop state of a two-condition loop body should be cancelled, and the dump still \
@@ -186,65 +129,104 @@ mod integration_tests {
 
     /// One branch of `step` reaches the `Option` it builds through a destructure, the other through
     /// an eval. The walk that finds the constructions passes both, so every construction takes the
-    /// arm answering it and the function builds no union. Both nodes are checked to still stand in
-    /// the dumped body, so a lowering that stopped placing them there fails the test rather than
-    /// leaving it passing over a shape it no longer exercises. The built program still computes the
-    /// same values over 0..10.
+    /// arm answering it and the fold holding `step`'s body builds no union. Both nodes are checked
+    /// to still stand in the dumped body, so a lowering that stopped placing them there fails the
+    /// test rather than leaving it passing over a shape it no longer exercises. The built program
+    /// still computes the same values over 0..10.
     #[test]
     fn test_a_destructure_and_an_eval_before_the_tail_construction() {
         assert_union_cancelled(
             "before_tail",
-            &["Main::step"],
-            "`Main::step`",
-            &["destructure ", "eval "],
+            MAPPED_FOLD,
+            "the fold holding `step`'s body",
+            &["destructure Main::bounds", "eval Main::names"],
             "[14, -1, 18, -1, 22, -1, 26, -1, 30, -1]",
         );
     }
 
     /// `step` computes with the result of its `match` over an `Option`, so more code follows the
     /// match. The outer arms move into the branches that build the `Option`, the code after the
-    /// match stays after it, and the function builds no union. One branch reaches its `Option`
-    /// through a destructure and the other through an eval, and both nodes are checked to still
-    /// stand in the dumped body. The built program still computes the same values over 0..10.
+    /// match stays after it, and the fold holding `step`'s body builds no union. One branch
+    /// reaches its `Option` through a destructure and the other through an eval, and both nodes are
+    /// checked to still stand in the dumped body. The built program still computes the same values
+    /// over 0..10.
     #[test]
     fn test_a_match_followed_by_more_code() {
         assert_union_cancelled(
             "match_then_more",
-            &["Main::step"],
-            "`Main::step`",
-            &["destructure ", "eval "],
+            MAPPED_FOLD,
+            "the fold holding `step`'s body",
+            &["destructure Main::bounds", "eval Main::names"],
             "[196, 2, 326, 4, 488, 6, 682, 8, 908, 10]",
         );
     }
 
     /// `step`'s branches end in a match of their own, and the four `Option`s it decides between are
     /// built at the ends of that one. The walk that moves an arm of the outer match follows such a
-    /// tail, so every construction takes the arm answering it and the function builds no union. The
+    /// tail, so every construction takes the arm answering it and the fold holding `step`'s body
+    /// builds no union. The remainders `step` takes are checked to stand in the dumped body. The
     /// built program still computes the same values over 0..10.
     #[test]
     fn test_a_match_in_tail_position() {
         assert_union_cancelled(
             "tail_match",
-            &["Main::step"],
-            "`Main::step`",
-            &[],
+            MAPPED_FOLD,
+            "the fold holding `step`'s body",
+            &["int_rem("],
             "[0, 16, -1, 20, -1, -1, 120, 28, -1, 32]",
         );
     }
 
     /// `shift_and_triple`'s inner arms build one constructor, so moving the outer `some` arm into
     /// them places a copy in each. The copy is smaller than the construction and the match it
-    /// replaces, so the simplifier takes the move and the function builds no union. The built
-    /// program still computes it over 0..10, so the removal leaves the values intact.
+    /// replaces, so the simplifier takes the move and the fold holding `shift_and_triple`'s body
+    /// builds no union. The remainder `shift_and_triple` takes is checked to stand in the dumped
+    /// body. The built program still computes it over 0..10, so the removal leaves the values
+    /// intact.
     #[test]
     fn test_one_variant_union_removed() {
         assert_union_cancelled(
             "one_variant",
-            &["Main::shift_and_triple"],
-            "`Main::shift_and_triple`",
-            &[],
+            MAPPED_FOLD,
+            "the fold holding `shift_and_triple`'s body",
+            &["int_rem("],
             "[0, 12, 15, 18, 21, 15, 27, 30, 33, 36]",
         );
+    }
+
+    /// A boxed union matched where it is built — with an arm for each variant, and with a
+    /// catch-all arm beside the arm of the variant built — and a boxed struct read where it is
+    /// built by nothing but the getters a pattern or the source reads its fields with, are each
+    /// cancelled against the code taking them apart. Each shape has a type of its own that only
+    /// its function builds, so a program holding no value of the type has cancelled that shape.
+    /// The built program still computes what the source says.
+    #[test]
+    fn test_boxed_constructions_cancelled() {
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "boxed_constructions");
+        let dump = build_project_run_and_read_rc_ir(&project_dir, "max", "[3, 3, 32, 4, 304]");
+        for (ty, shape) in [
+            ("Main::KnownOpt", "a boxed union matched where it is built"),
+            (
+                "Main::CatchAllOpt",
+                "a boxed union matched beside a catch-all arm where it is built",
+            ),
+            (
+                "Main::PatternPair",
+                "a boxed struct taken apart by a pattern where it is built",
+            ),
+            (
+                "Main::GetterPair",
+                "a boxed struct read by getters alone where it is built",
+            ),
+        ] {
+            let holding: Vec<&str> = dump.lines().filter(|line| line.contains(ty)).collect();
+            assert!(
+                holding.is_empty(),
+                "{} should be cancelled, but the program still holds a value of its type:\n{}",
+                shape,
+                holding.join("\n")
+            );
+        }
     }
 }
 
@@ -381,6 +363,38 @@ mod value_tests {
                 assert_eq(
                     |_|"a matched value read after the match",
                     Iterator::range(0, 6).map(f).to_array, [1, 99, 7, 99, 13, 99]
+                );;
+                pure()
+            );
+        "#;
+        test_source(&source, Configuration::develop_mode());
+    }
+
+    /// The outer match is over a boxed union each inner arm builds, and its `some` arm reads the
+    /// union itself beside the payload. Moving that arm to the construction would leave the read
+    /// naming a value nothing binds any more, so the rewrite declines and the values stay what the
+    /// source computes.
+    #[test]
+    pub fn test_an_outer_arm_reading_the_boxed_union_beside_its_payload() {
+        let source = r#"
+            module Main;
+
+            type BoxOpt = box union { some : Array I64, none : () };
+
+            f : I64 -> I64;
+            f = |n| (
+                let o = if n % 2 == 0 { BoxOpt::some([n, n]) } else { BoxOpt::none() };
+                match o {
+                    some(a) => a.@size + (if o.is_some { 10 } else { 20 }),
+                    none(_) => -1
+                }
+            );
+
+            main : IO ();
+            main = (
+                assert_eq(
+                    |_|"an outer arm reading the boxed union it matches",
+                    Iterator::range(0, 4).map(f).to_array, [12, -1, 12, -1]
                 );;
                 pure()
             );

@@ -64,6 +64,17 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
     out
 }
 
+/// The boxed leaves of a value of type `ty` under `path`.
+pub(crate) fn boxed_leaves_under<'p>(
+    ty: &Arc<TypeNode>,
+    path: &'p [usize],
+    type_env: &TypeEnv,
+) -> impl Iterator<Item = FieldPath> + 'p {
+    boxed_leaf_paths(ty, type_env)
+        .into_iter()
+        .filter(move |leaf| leaf.starts_with(path))
+}
+
 /// The boxed leaf paths that `boxed_leaf_paths` has worked out under one `TypeEnv`, by type. A later
 /// call for the same type reads its answer from here. The `TypeEnv` holds it, and only
 /// `boxed_leaf_paths` reads or writes it.
@@ -291,7 +302,7 @@ mod tests {
     use crate::ast::types::{
         kind_star, tycon, type_tyapp, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode,
     };
-    use crate::fixstd::builtin::{bulitin_tycons, make_array_ty, make_i64_ty};
+    use crate::fixstd::builtin::{builtin_tycons, make_array_ty, make_i64_ty};
     use crate::misc::{Map, Set};
     use std::sync::Arc;
 
@@ -331,7 +342,7 @@ mod tests {
 
     /// The built-in type constructors and `Test::S` with its array at field `array_index`.
     fn type_env(array_index: usize) -> TypeEnv {
-        let mut tycons = bulitin_tycons();
+        let mut tycons = builtin_tycons();
         tycons.insert(s_tycon(), s_info(array_index));
         TypeEnv::new(tycons, Map::default())
     }
@@ -388,7 +399,7 @@ mod tests {
             ],
             ..s_info(0)
         };
-        let mut tycons = bulitin_tycons();
+        let mut tycons = builtin_tycons();
         tycons.insert(w_tycon.clone(), w_info);
         tycons.insert(s_tycon(), s_info);
         let mut env = TypeEnv::new(tycons, Map::default());

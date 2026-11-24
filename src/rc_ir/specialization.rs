@@ -36,7 +36,7 @@ use std::hash::Hash;
 /// So the count is bounded outright. Past it, a call routes to the canonical version, which is keyed
 /// on the least informative inputs and therefore carries no annotation at all: exceeding the budget
 /// costs precision and can never cost soundness, whatever the bound is set to. The value is chosen
-/// against the corpus, where the most-cloned function has four.
+/// against the corpus, whose most-cloned function stays well under it.
 const MAX_CLONES_PER_FUNCTION: usize = 16;
 
 /// A key a specializing pass clones a function on, which spells itself into the clone's name.

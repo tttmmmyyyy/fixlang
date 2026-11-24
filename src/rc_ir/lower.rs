@@ -2,10 +2,11 @@
 //!
 //! This is the structural pass: it produces the RC IR skeleton — an A-normal form
 //! with fresh, globally-unique names, every lambda lifted to a top-level function, `If` and union
-//! patterns desugared to `Match`, and struct/tuple `let`-patterns desugared to a `Destructure` node.
+//! patterns desugared to `Match`, and struct/tuple `let`-patterns desugared to a `DestructureUnboxed` node
+//! over an unboxed container and to field getters over a boxed one.
 //! Every argument is owned and there are NO explicit `Retain`/`Release` nodes yet; reference-counting
-//! insertion is a separate backward pass. The one reference-counting effect already present is the
-//! retain baked into the boxed capture getter, per the retain-getter model.
+//! insertion is a separate backward pass. The reference-counting effect already present is the
+//! retain of a value read out of a boxed container by a getter, a payload read or a capture read.
 
 use crate::ast::builtin_op::BuiltinOpExpr;
 use crate::ast::expr::{Expr, ExprNode, FieldSrc, Var};
@@ -16,7 +17,8 @@ use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{TyCon, TypeNode};
 use crate::constants::{BOOL_FALSE_TAG, BOOL_TRUE_TAG, CAP_NAME};
 use crate::fixstd::builtin::{
-    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp, MakeStructOp, NoStorageValueOp,
+    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp, MakeStructOp,
+    NoStorageValueOp, StructGetOp, UnionAsOp,
 };
 use crate::hash::md5_hex;
 use crate::misc::{grow_stack, Map, Set};
@@ -36,7 +38,7 @@ enum PendingBinding {
     Let(RcVar, RcRhs, Option<Span>),
     /// A struct/tuple destructure of the first variable, binding field `index` to `var` for each
     /// `(index, var)`.
-    Destructure(RcVar, Vec<(usize, RcVar)>, Option<Span>),
+    DestructureUnboxed(RcVar, Vec<(usize, RcVar)>, Option<Span>),
     /// The variable forced for its effect and discarded.
     Eval(RcVar, Option<Span>),
 }
@@ -84,6 +86,7 @@ pub fn lower_program(
         funcs,
         globals,
         roots,
+        retains_sunk: false,
     }
 }
 
@@ -232,23 +235,15 @@ impl<'a> Lowerer<'a> {
             .into_iter()
             .rev()
             .fold(terminal, |cont, binding| match binding {
-                PendingBinding::Let(var, rhs, source) => RcExprNode {
-                    expr: Arc::new(RcExpr::Let(var, rhs, cont)),
-                    source,
-                },
-                PendingBinding::Destructure(container, fields, source) => RcExprNode {
-                    expr: Arc::new(RcExpr::Destructure(
-                        container,
-                        fields,
-                        RcState::Unknown,
-                        cont,
-                    )),
-                    source,
-                },
-                PendingBinding::Eval(var, source) => RcExprNode {
-                    expr: Arc::new(RcExpr::Eval(var, cont)),
-                    source,
-                },
+                PendingBinding::Let(var, rhs, source) => {
+                    RcExprNode::new(RcExpr::Let(var, rhs, cont), source)
+                }
+                PendingBinding::DestructureUnboxed(container, fields, source) => {
+                    RcExprNode::new(RcExpr::DestructureUnboxed(container, fields, cont), source)
+                }
+                PendingBinding::Eval(var, source) => {
+                    RcExprNode::new(RcExpr::Eval(var, cont), source)
+                }
             })
     }
 
@@ -256,10 +251,7 @@ impl<'a> Lowerer<'a> {
     /// from, so a return is shown at the value it returns.
     fn ret_node(var: RcVar) -> RcExprNode {
         let source = var.source.clone();
-        RcExprNode {
-            expr: Arc::new(RcExpr::Ret(var)),
-            source,
-        }
+        RcExprNode::new(RcExpr::Ret(var), source)
     }
 
     // --- symbols ---
@@ -356,7 +348,7 @@ impl<'a> Lowerer<'a> {
                 captures.iter().map(|(_, v)| v.ty.clone()).collect();
             for (i, (ast_name, _)) in captures.iter().enumerate() {
                 let op = Box::new(CaptureProjectOp {
-                    assume_local: false,
+                    assumed_state: RcState::Unknown,
                     cap_name: capture_var.name.clone(),
                     cap_idx: i,
                     cap_tys: capture_tys.clone(),
@@ -529,31 +521,43 @@ impl<'a> Lowerer<'a> {
         result
     }
 
-    /// Append a `Destructure` of `container` binding each `(index, var)` of `named`. For an unboxed
-    /// container, every field `named` leaves out is bound to a fresh variable as well, so that the
-    /// `Destructure` names every field.
+    /// Append the bindings of a struct pattern over `container`, binding each `(index, var)` of
+    /// `named` to that field.
     ///
-    /// A field of an unboxed container is a leaf of the container itself, so a field the
-    /// `Destructure` leaves out has no owner. Bound to a variable nothing reads, it is released by a
-    /// `Release` node of its own, which cancellation pairs with the retain RC insertion puts before
-    /// the `Destructure` where the container is used afterwards. A boxed container keeps the fields
-    /// it is not asked for, so its `Destructure` binds `named` alone.
-    fn push_destructure(
+    /// A boxed container keeps its fields, so each named field is read out of it by a getter
+    /// (`StructGetOp`), as `container.@f` is.
+    ///
+    /// An unboxed container is taken apart by a `DestructureUnboxed`, with every field `named` leaves out
+    /// bound to a fresh variable as well, so that the `DestructureUnboxed` names every field. A field of
+    /// an unboxed container is a leaf of the container itself, so a field the `DestructureUnboxed` left
+    /// out would have no owner. Bound to a variable nothing reads, it is released by a `Release`
+    /// node of its own, which cancellation pairs with the retain RC insertion puts before the
+    /// `DestructureUnboxed` where the container is used afterwards.
+    fn push_struct_pattern_bindings(
         &mut self,
         container: &RcVar,
         mut named: Vec<(usize, RcVar)>,
         source: Option<Span>,
         bindings: &mut Vec<PendingBinding>,
     ) {
-        if !container.ty.is_box(self.type_env) {
-            for (idx, field_ty) in container.ty.unpunched_field_types(self.type_env) {
-                if !named.iter().any(|(i, _)| *i == idx) {
-                    named.push((idx, self.fresh_var("field", field_ty, source.clone())));
-                }
+        if container.ty.is_box(self.type_env) {
+            for (idx, field) in named {
+                let read = StructGetOp::of_field(&container.name, idx);
+                bindings.push(PendingBinding::Let(
+                    field,
+                    RcRhs::Builtin(Box::new(read), vec![container.clone()]),
+                    source.clone(),
+                ));
             }
-            named.sort_by_key(|(idx, _)| *idx);
+            return;
         }
-        bindings.push(PendingBinding::Destructure(
+        for (idx, field_ty) in container.ty.unpunched_field_types(self.type_env) {
+            if !named.iter().any(|(i, _)| *i == idx) {
+                named.push((idx, self.fresh_var("field", field_ty, source.clone())));
+            }
+        }
+        named.sort_by_key(|(idx, _)| *idx);
+        bindings.push(PendingBinding::DestructureUnboxed(
             container.clone(),
             named,
             source,
@@ -690,15 +694,13 @@ impl<'a> Lowerer<'a> {
         let cond_var = self.lower_to_var(cond, bindings);
         let payload_tys = cond_var.ty.field_types(self.type_env);
         let then_arm = MatchArm {
-            payload_state: RcState::Unknown,
             tag: Some(BOOL_TRUE_TAG),
-            payload: self.fresh_var("unit", payload_tys[BOOL_TRUE_TAG].clone(), None),
+            binder: Some(self.fresh_var("unit", payload_tys[BOOL_TRUE_TAG].clone(), None)),
             body: self.lower_body(then_expr),
         };
         let else_arm = MatchArm {
-            payload_state: RcState::Unknown,
             tag: Some(BOOL_FALSE_TAG),
-            payload: self.fresh_var("unit", payload_tys[BOOL_FALSE_TAG].clone(), None),
+            binder: Some(self.fresh_var("unit", payload_tys[BOOL_FALSE_TAG].clone(), None)),
             body: self.lower_body(else_expr),
         };
         let result = self.fresh_var("if", ty, source.clone());
@@ -736,10 +738,12 @@ impl<'a> Lowerer<'a> {
     }
 
     /// Lower one arm of a match on `scrutinee`. A union pattern gives an arm the variant's tag
-    /// selects, whose payload variable holds that variant's contents; a variable or struct pattern
-    /// gives the default arm, taken for every value the tagged arms leave, and its payload is the
-    /// whole scrutinee. The pattern's variables are bound while the arm's body is lowered and
-    /// closed after it, so each body is lowered under its own pattern's bindings alone.
+    /// selects. Over an unboxed union the arm binds the payload, moved out of the scrutinee; over a
+    /// boxed union the arm's body opens by reading the payload out of the scrutinee with a
+    /// `UnionAsOp`, which borrows it. A variable or struct pattern gives the default arm, taken for
+    /// every value the tagged arms leave, which binds the whole scrutinee. The pattern's variables
+    /// are bound while the arm's body is lowered and closed after it, so each body is lowered under
+    /// its own pattern's bindings alone.
     fn lower_match_arm(
         &mut self,
         scrutinee: &RcVar,
@@ -766,54 +770,88 @@ impl<'a> Lowerer<'a> {
                 if let Pattern::Var(v, _) = &subpat.pattern {
                     payload.debug_name = Some(v.name.to_string());
                 }
-                // Destructure the payload's subpattern, then lower the arm body under those bindings.
                 let mut arm_bindings = vec![];
+                let bound_by_arm = if scrutinee.ty.is_box(self.type_env) {
+                    let read = UnionAsOp::of_known_variant(&scrutinee.name, variant_idx);
+                    arm_bindings.push(PendingBinding::Let(
+                        payload.clone(),
+                        RcRhs::Builtin(Box::new(read), vec![scrutinee.clone()]),
+                        pat.info.source.clone(),
+                    ));
+                    None
+                } else {
+                    Some(payload.clone())
+                };
+                // Destructure the payload's subpattern, then lower the arm body under those bindings.
                 let bound_names = self.destructure_pattern(subpat, &payload, &mut arm_bindings);
                 let ret_var = self.lower_to_var(body, &mut arm_bindings);
                 for name in &bound_names {
                     self.unbind(name);
                 }
                 MatchArm {
-                    payload_state: RcState::Unknown,
                     tag: Some(variant_idx),
-                    payload,
+                    binder: bound_by_arm,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
             }
             Pattern::Var(v, _) => {
                 // A catch-all arm binds the whole scrutinee to its source variable.
-                let mut payload =
+                let mut whole =
                     self.fresh_var(&v.name.name, scrutinee.ty.clone(), pat.info.source.clone());
-                payload.debug_name = Some(v.name.to_string());
-                self.bind(&v.name, payload.clone());
-                let body = self.lower_body(body);
+                whole.debug_name = Some(v.name.to_string());
+                let mut arm_bindings = vec![];
+                let bound_by_arm =
+                    self.bind_whole_scrutinee(scrutinee, &whole, pat, &mut arm_bindings);
+                self.bind(&v.name, whole);
+                let ret_var = self.lower_to_var(body, &mut arm_bindings);
                 self.unbind(&v.name);
                 MatchArm {
-                    payload_state: RcState::Unknown,
                     tag: None,
-                    payload,
-                    body,
+                    binder: bound_by_arm,
+                    body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
             }
             Pattern::Struct(_, _, _) => {
                 // A struct/tuple pattern in a `match` is a single non-variant (default) arm that
                 // binds the whole scrutinee and destructures it.
-                let payload =
-                    self.fresh_var("scrut", scrutinee.ty.clone(), pat.info.source.clone());
+                let whole = self.fresh_var("scrut", scrutinee.ty.clone(), pat.info.source.clone());
                 let mut arm_bindings = vec![];
-                let bound_names = self.destructure_pattern(pat, &payload, &mut arm_bindings);
+                let bound_by_arm =
+                    self.bind_whole_scrutinee(scrutinee, &whole, pat, &mut arm_bindings);
+                let bound_names = self.destructure_pattern(pat, &whole, &mut arm_bindings);
                 let ret_var = self.lower_to_var(body, &mut arm_bindings);
                 for name in &bound_names {
                     self.unbind(name);
                 }
                 MatchArm {
-                    payload_state: RcState::Unknown,
                     tag: None,
-                    payload,
+                    binder: bound_by_arm,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
             }
         }
+    }
+
+    /// Binds `whole` to the whole of `scrutinee` in a default arm, and returns the variable the arm
+    /// itself binds. A match consumes an unboxed scrutinee into the variable its arm binds, so
+    /// `whole` is that variable; a match borrows a boxed scrutinee, so the arm's body opens by
+    /// moving the scrutinee into `whole`.
+    fn bind_whole_scrutinee(
+        &mut self,
+        scrutinee: &RcVar,
+        whole: &RcVar,
+        pat: &PatternNode,
+        arm_bindings: &mut Vec<PendingBinding>,
+    ) -> Option<RcVar> {
+        if !scrutinee.ty.is_box(self.type_env) {
+            return Some(whole.clone());
+        }
+        arm_bindings.push(PendingBinding::Let(
+            whole.clone(),
+            RcRhs::Var(scrutinee.clone()),
+            pat.info.source.clone(),
+        ));
+        None
     }
 
     /// Lower a struct or tuple literal: the field expressions are lowered in declaration order,
@@ -934,7 +972,7 @@ impl<'a> Lowerer<'a> {
     // --- pattern destructuring ---
 
     /// Destructure `pat` against the value `obj`, binding each pattern variable in the environment
-    /// (a struct/tuple pattern emits a `Destructure` binding extracting all its fields at once) and
+    /// (a struct/tuple pattern emits the bindings of `push_struct_pattern_bindings`, extracting all its fields) and
     /// returning the AST names it bound, for the caller to pop after the scope closes.
     fn destructure_pattern(
         &mut self,
@@ -999,9 +1037,8 @@ impl<'a> Lowerer<'a> {
                     }
                     fields.push((field_idx, field_var));
                 }
-                // Extract all fields in one step (mirroring the back end's `get_struct_fields`); RC
-                // insertion retains the container beforehand iff it is used after this destructure.
-                self.push_destructure(obj, fields, pat.info.source.clone(), bindings);
+                // Extract the fields before the sub-patterns that take them apart further.
+                self.push_struct_pattern_bindings(obj, fields, pat.info.source.clone(), bindings);
                 for (field_var, subpat) in nested {
                     bound_names.extend(self.destructure_pattern(subpat, &field_var, bindings));
                 }

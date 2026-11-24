@@ -38,7 +38,10 @@ main = (
     // holds is not.
     let mixed : Array (Array I64) = Array::fill(2, g);
     let elem = mixed.@(0);
-    let from_elem = elem.@(0) + elem.@(1) + mixed.@(1).@(0);
+    // `elem` is put into a new array, which takes a reference to it, so it is counted before it is
+    // put there.
+    let kept = [elem];
+    let from_elem = elem.@(0) + elem.@(1) + kept.@(0).@(0) + mixed.@(1).@(0);
 
     // A value rebuilt from a retained pointer, which says nothing about the graph it names.
     let ptr = *Box::make([7, 8]).boxed_to_retained_ptr;

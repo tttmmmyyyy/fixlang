@@ -1,16 +1,19 @@
-// This module provides a transformation that makes all local names defined in an expression unique.
-// Not only avoids shadowing but also avoids collisions with names that are already out of scope.
-use std::sync::Arc;
+//! This module provides a transformation that makes all local names defined in an expression unique.
+//! Not only avoids shadowing but also avoids collisions with names that are already out of scope.
 
 use crate::{
     ast::{
         expr::ExprNode,
         name::FullName,
-        traverse::{ExprVisitor, StartVisitResult},
+        traverse::{ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
 };
+use std::sync::Arc;
 
+/// `expr` with every local name it binds renamed apart: no two bindings of the result bind one name,
+/// and none binds a name of `occupied` or a free variable of `expr`. A binding whose name is free of
+/// those keeps it; the others get fresh names `#v{n}`.
 pub fn run_on_expr(expr: &Arc<ExprNode>, mut occupied: Set<FullName>) -> Arc<ExprNode> {
     let free_vars = expr.free_vars();
     occupied.extend(free_vars.iter().cloned());
@@ -22,16 +25,22 @@ pub fn run_on_expr(expr: &Arc<ExprNode>, mut occupied: Set<FullName>) -> Arc<Exp
     renamer.traverse(expr).expr
 }
 
+/// The traversal of `run_on_expr`, renaming each binding as it enters its scope.
 struct Renamer {
-    // The renaming map
+    /// The name each local name in scope is renamed to. A name absent from the map keeps its name.
     map: Map<FullName, FullName>,
-    // The set of names that are already used.
+    /// The names already used: those `run_on_expr` was told to avoid, the free variables of the
+    /// expression, and every name a binding visited so far binds.
     occupied: Set<FullName>,
-    // The counter to determine the next name.
+    /// The number of the next fresh name `#v{n}` to try. Every `#v{k}` with `k` below it is in
+    /// `occupied`.
     name_no: usize,
 }
 
 impl Renamer {
+    /// The renaming of `local_names`, the names one binding introduces: each name already in
+    /// `occupied` goes to a fresh name, and the others keep their names. Every name the binding ends
+    /// up binding is added to `occupied`.
     fn create_rename_of_local_names(
         &mut self,
         local_names: &Vec<FullName>,
@@ -57,11 +66,12 @@ impl Renamer {
 }
 
 impl ExprVisitor for Renamer {
+    /// Writes the name a local variable is renamed to in scope.
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         let mut var = expr.get_var().clone();
 
         if let Some(to) = self.map.get(&var.name) {
@@ -72,11 +82,12 @@ impl ExprVisitor for Renamer {
         StartVisitResult::ReplaceAndReturn(expr)
     }
 
+    /// Writes the names the builtin operation reads as they are renamed in scope.
     fn start_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         let mut builtin = expr.get_builtin().as_ref().clone();
 
         let op = &mut builtin.op;
@@ -91,17 +102,14 @@ impl ExprVisitor for Renamer {
         StartVisitResult::ReplaceAndReturn(expr)
     }
 
+    /// Gives each parameter a name no other binding of the expression uses, and renames the body
+    /// to match.
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         let mut params = expr.get_lam_params();
-        assert_eq!(
-            params.len(),
-            1,
-            "This function does not support multi-parameter lambdas."
-        );
         let introduced_names: Vec<FullName> = params.iter().map(|p| p.name.clone()).collect();
 
         let bak_map = self.map.clone();
@@ -130,11 +138,13 @@ impl ExprVisitor for Renamer {
         StartVisitResult::ReplaceAndReturn(expr)
     }
 
+    /// Gives each name the pattern binds a name no other binding of the expression uses, and renames
+    /// the value to match. The bound expression is renamed in the scope outside the `let`.
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         let bound = expr.get_let_bound();
         let bound_res = self.traverse(&bound);
         let bound = bound_res.expr;
@@ -171,11 +181,13 @@ impl ExprVisitor for Renamer {
         StartVisitResult::ReplaceAndReturn(expr)
     }
 
+    /// Gives each name an arm's pattern binds a name no other binding of the expression uses, and
+    /// renames the arm's value to match.
     fn start_visit_match(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         let cond = expr.get_match_cond();
         let cond_res = self.traverse(&cond);
         let cond = cond_res.expr;

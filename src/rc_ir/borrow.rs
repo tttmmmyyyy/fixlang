@@ -10,14 +10,16 @@
 //!    parameter it originates from. Ownership is a fixed point: whether an argument position consumes
 //!    depends on the callee's ownership, which is itself being decided.
 //!
-//! 2. *Version routing*: a function with a borrowable parameter is materialized in two versions, the
-//!    all-`Own` baseline (`f_own`, the original) and a borrowing clone (`f_borrow`). Each direct call
-//!    is routed to one version. A call is routed to the borrow version only when it is *safe* — the
-//!    call is not in tail position, or it passes no owned argument — so a tail call is never turned
-//!    into a non-tail one by an after-call release. Indirect calls keep the all-`Own` original.
+//! 2. *Version routing*: each direct call is routed to a version of its callee that borrows every
+//!    argument unit it can without keeping an argument alive longer. An owned value at its last use
+//!    goes to an owned position, where the callee frees it; every other unit the inference left
+//!    borrowable goes to a borrowed one. A version is keyed by the ownership of each parameter unit
+//!    (`BorrowKey`) and materialized once some call reaches it; the all-`Own` original keeps its
+//!    name and takes the indirect calls. A tail call passes only values at their last use, so no
+//!    release is ever left after a tail call.
 //!
-//! 3. *Reference-count rewrite*: the borrow clone drops the reference counting on its borrowed
-//!    parameter leaves, and each call site takes over the counting the callee no longer does — a
+//! 3. *Reference-count rewrite*: a borrowing version drops the reference counting on its borrowed
+//!    parameter units, and each call site takes over the counting the callee no longer does — a
 //!    release after the call for an owned value passed to a borrowed position, and a retain before it
 //!    for a borrowed value passed to an owning position.
 //!
@@ -33,8 +35,14 @@
 //! value is consumed. That keeps the value `Unique` for the uniqueness analysis, the reason
 //! borrow-ification exists.
 //!
+//! `sink_retains` moves each retain `cancel` leaves down every path, to where that path consumes the
+//! reference, and deletes it with the release on a path that releases the reference. It runs after
+//! the passes that decide uniqueness from provenance, which reads a retain as demoting only the
+//! variable it names.
+//!
 //! Which construct consumes which reference, and which object a reference belongs to, is the shared
-//! model in `ownership`, so every part of this pass gives the same answer.
+//! model in `ownership`. `BodyModel` reads that model for one body, so `cancel`, `sink_retains` and
+//! `lend::lend_reads` give the same answer.
 
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
@@ -42,24 +50,24 @@ use crate::ast::types::{Type, TypeNode};
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    for_each_node, FieldPath, FuncRef, Ownership, OwnershipShape, RcExpr, RcExprNode, RcFunc,
-    RcGlobalInit, RcProgram, RcRhs, RcState, RcVar, VarPath,
+    for_each_node, is_value_used, map_children, map_continuation, FieldPath, FuncRef, Ownership,
+    OwnershipShape, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
-    acted_references, all_owned_units, collect_consumes, destructure_consumes, origin, rc_units,
-    rhs_consumes, truncate_to_unit, unit_step, units_under, References, UnitStep, VarTable,
+    acted_references, alias_step, all_owned_units, collect_consumes, origin, rc_units,
+    read_container, rhs_consumes, truncate_to_unit, unit_step, units_under, AliasStep, References,
+    UnitStep, VarTable,
 };
-use crate::rc_ir::rename::{copy_suffix, fresh_rename_function};
+use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneKey, CloneRegistry};
 use std::sync::Arc;
 
 /// The parameter leaves borrow inference found `Own`, keyed by the parameter variable's name and the
 /// leaf path; a leaf absent from the set is `Borrow`.
 ///
-/// These are **leaves**, one per reference a parameter holds. The `owned_units` this pass carries
-/// beside them are **units**, one per reference-count operation, and `truncate_to_unit` turns a leaf
-/// into the unit it keys to. Both are sets of `VarPath`, so the name is what tells one from the
-/// other.
+/// These are **leaves**, one per reference a parameter holds. The keys a version is named by are
+/// stated over **units**, one per reference-count operation, and `truncate_to_unit` turns a leaf into
+/// the unit it keys to.
 struct OwnedLeaves(Set<VarPath>);
 
 impl OwnedLeaves {
@@ -69,27 +77,34 @@ impl OwnedLeaves {
     }
 }
 
+/// Whether `owned_leaves` holds a leaf of the parameter `var`, of type `ty`, that truncates to
+/// `unit`. A unit is owned once any of its leaves is.
+fn owns_a_leaf_of_unit(
+    owned_leaves: &Set<VarPath>,
+    var: &FullName,
+    ty: &Arc<TypeNode>,
+    unit: &FieldPath,
+    type_env: &TypeEnv,
+) -> bool {
+    boxed_leaf_paths(ty, type_env).iter().any(|leaf| {
+        truncate_to_unit(ty, leaf, type_env) == *unit
+            && owned_leaves.contains(&(var.clone(), leaf.clone()))
+    })
+}
+
 /// Infer parameter ownership for every function of `prog` by a fixed point: start every parameter
 /// leaf `Borrow`, then repeatedly demote to `Own` any leaf that a consume site traces back to, until
 /// nothing changes. Demotion is monotone (`Borrow` to `Own` only), so it terminates.
-fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
-    let var_tables: Map<FuncRef, VarTable> = prog
-        .funcs
-        .values()
-        .map(|f| (f.name.clone(), VarTable::of(f)))
-        .collect();
-
-    let sites: Map<FuncRef, Vec<(RcVar, FieldPath)>> = prog
-        .funcs
-        .values()
-        .map(|f| (f.name.clone(), levelled_sites(f, type_env)))
-        .collect();
-
+fn infer_ownership(
+    prog: &RcProgram,
+    bodies: &Map<FuncRef, LevellingFacts>,
+    type_env: &TypeEnv,
+) -> OwnedLeaves {
     let mut owned_leaves: Set<VarPath> = Set::default();
     loop {
         let mut changed = false;
         for func in prog.funcs.values() {
-            let vars = &var_tables[&func.name];
+            let LevellingFacts { vars, sites } = &bodies[&func.name];
             let mut consumed = vec![];
             collect_consumes(
                 &func.body,
@@ -111,9 +126,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
                     }
                 }
             }
-            for site in &sites[&func.name] {
-                changed |= level_ownership(vars, type_env, site, &mut owned_leaves);
-            }
+            changed |= level_sites(vars, type_env, sites, &mut owned_leaves);
         }
         if !changed {
             break;
@@ -142,9 +155,24 @@ fn levelled_sites(func: &RcFunc, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> 
                 }
             }
         }
-        RcExpr::Let(..) | RcExpr::Destructure(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => {}
+        RcExpr::Let(..) | RcExpr::DestructureUnboxed(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => {}
     });
     sites
+}
+
+/// For each of `sites`, own every parameter leaf its candidate objects reach where the version owns
+/// any of them. Returns whether any leaf became owned.
+fn level_sites(
+    vars: &VarTable,
+    type_env: &TypeEnv,
+    sites: &[(RcVar, FieldPath)],
+    owned_leaves: &mut Set<VarPath>,
+) -> bool {
+    let mut changed = false;
+    for site in sites {
+        changed |= level_ownership(vars, type_env, site, owned_leaves);
+    }
+    changed
 }
 
 /// Own every parameter leaf a site's candidate objects reach, where the version owns any of them.
@@ -189,9 +217,9 @@ fn level_ownership(
 ///
 /// This is `RewriteCtx::owns_object` asked of the inference's own state. The two have to answer
 /// alike, because `level_ownership` fires on this answer and the rewrite acts on that one. A unit is
-/// owned once **any** leaf truncating to it is owned, which is how `borrow_ify` turns the inferred
-/// leaves into `owned_units`, so a unit's other leaves are owned by that step whether or not the
-/// inference ever named them. Reading the leaves directly here would miss exactly those, and the
+/// owned once **any** leaf truncating to it is owned, which is how `Versions::levelled_key` turns
+/// owned leaves into a version's key, so a unit's other leaves are owned by that step whether or not
+/// the inference ever named them. Reading the leaves directly here would miss exactly those, and the
 /// unit would be rewritten as owned while the levelling never fired.
 fn owns_object_yet(
     vars: &VarTable,
@@ -205,16 +233,12 @@ fn owns_object_yet(
     let Some(ty) = vars.param_tys.get(root) else {
         return true;
     };
-    let leaves = boxed_leaf_paths(ty, type_env);
     units_under(ty, path, type_env).iter().all(|unit| {
         // `units_under` answers with the path itself where the path runs below a unit -- into a
         // variant of an unboxed union, say -- so the answer is truncated before it is a key, as
         // `owns_object` truncates it.
-        let key = truncate_to_unit(ty, unit, type_env);
-        leaves.iter().any(|leaf| {
-            truncate_to_unit(ty, leaf, type_env) == key
-                && owned_leaves.contains(&(root.clone(), leaf.clone()))
-        })
+        let unit = truncate_to_unit(ty, unit, type_env);
+        owns_a_leaf_of_unit(owned_leaves, root, ty, &unit, type_env)
     })
 }
 
@@ -231,133 +255,213 @@ fn covered_leaves(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> V
 
 // --- borrow-ification ---
 
-/// Borrow-ify a program: materialize a borrowing version of every function with a borrowable
-/// parameter, route each direct call to a version, rewrite the reference counting accordingly, and
-/// annotate every output version with the parameter/capture units it borrows
+/// What borrow-ification reads of one function's body, built once per function however many of its
+/// versions are rewritten.
+struct LevellingFacts {
+    /// The function's variables: what binds each one and its type, which decide the object a leaf
+    /// belongs to.
+    vars: VarTable,
+    /// The sites whose ownership the pass reads as one truth value (`levelled_sites`).
+    sites: Vec<(RcVar, FieldPath)>,
+}
+
+/// What identifies one version of a function: the ownership of each of its parameters, one shape
+/// per parameter. It covers the parameters alone, since only a function taking no capture gets a
+/// borrowing version. The all-`Own` key is the canonical one, whose version keeps the function's
+/// name.
+type BorrowKey = Vec<OwnershipShape>;
+
+/// A key holds one shape per parameter of its function, each of that parameter's type, so the keys
+/// of one function spell strings that differ wherever the keys do.
+impl CloneKey for BorrowKey {
+    fn spelling(&self) -> String {
+        self.iter().map(OwnershipShape::spelling).collect()
+    }
+}
+
+/// Borrow-ify a program: route each direct call to the version of its callee that borrows what the
+/// call can lend, materialize every version some call reaches, rewrite the reference counting
+/// accordingly, and annotate every output version with the parameter units it borrows
 /// (`RcFunc::borrowed_units`).
 pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
-    let owned_leaves = infer_ownership(prog, type_env);
+    let bodies: Map<FuncRef, LevellingFacts> = prog
+        .funcs
+        .values()
+        .map(|f| {
+            let facts = LevellingFacts {
+                vars: VarTable::of(f),
+                sites: levelled_sites(f, type_env),
+            };
+            (f.name.clone(), facts)
+        })
+        .collect();
+    let owned_leaves = infer_ownership(prog, &bodies, type_env);
 
-    // The uncurried functions that get a borrow version, and the name of that version. Only
-    // uncurried functions are considered: a closure is reached only by an indirect call, which
-    // keeps the all-`Own` original, so a borrow clone of it would never be routed to.
-    let mut borrow_versions: Map<FuncRef, FuncRef> = Map::default();
+    // Only uncurried functions are considered: a closure is reached only by an indirect call, which
+    // keeps the all-`Own` original, so a borrowing version of it would never be routed to.
     let observing = funcs_observing_uniqueness(prog);
-    for func in prog.funcs.values() {
-        if observing.contains(&func.name) {
-            continue;
-        }
-        if !func.takes_capture() && func_has_borrowable_param(func, &owned_leaves, type_env) {
-            borrow_versions.insert(func.name.clone(), borrow_funcref(&func.name));
-        }
+    let borrowers = prog
+        .funcs
+        .values()
+        .filter(|f| {
+            !observing.contains(&f.name)
+                && !f.takes_capture()
+                && func_has_borrowable_param(f, &owned_leaves, type_env)
+        })
+        .map(|f| f.name.clone())
+        .collect();
+    let mut versions = Versions {
+        prog,
+        type_env,
+        bodies: &bodies,
+        owned_leaves: &owned_leaves,
+        borrowers,
+        registry: CloneRegistry::new("borrow"),
+        levelled: Map::default(),
+    };
+    // Keep every function's all-`Own` version: indirect calls reach it, and this pass reads no root
+    // set, so any function may be the one called from outside.
+    for (fref, func) in &prog.funcs {
+        versions
+            .registry
+            .keep_canonical(fref, all_own_key(func, type_env));
     }
 
-    // The owned parameter units of every output version, keyed by the version's own parameter names:
-    // an original (`f_own`) owns all of them, a borrow clone (`f_borrow`) owns the inferred subset.
-    let mut owned_units: Set<VarPath> = Set::default();
-    let mut clones: Vec<(FuncRef, RcFunc)> = vec![];
-    for func in prog.funcs.values() {
-        // `f_own`: every parameter and capture unit is owned.
-        owned_units.extend(param_capture_units(func, type_env));
-        // `f_borrow`: a fresh clone whose owned units are the inferred owned leaves, each truncated
-        // to its unit.
-        if let Some(borrow_version) = borrow_versions.get(&func.name) {
-            let (clone, rename) = clone_func(func, borrow_version.clone());
-            for p in &func.params {
-                for leaf in boxed_leaf_paths(&p.ty, type_env) {
-                    if owned_leaves.owns(&p.name, &leaf) {
-                        let unit = truncate_to_unit(&p.ty, &leaf, type_env);
-                        owned_units.insert((rename[&p.name].clone(), unit));
-                    }
-                }
-            }
-            clones.push((borrow_version.clone(), clone));
-        }
-    }
-
-    // The parameter names and types of every output version, so a call site can read the ownership
-    // of the routed callee's positions.
-    let mut callee_params: Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>> = Map::default();
-    for func in prog.funcs.values() {
-        callee_params.insert(func.name.clone(), param_names_and_types(func));
-    }
-    for (borrow_version, clone) in &clones {
-        callee_params.insert(borrow_version.clone(), param_names_and_types(clone));
-    }
-
-    // Rewrite every version's body: route its calls and adjust the reference counting.
-    let mut funcs: Map<FuncRef, RcFunc> = Map::default();
-    for func in prog.funcs.values() {
-        let mut f_own = func.clone();
-        let ctx = RewriteCtx::new(
-            &f_own,
-            false,
-            &owned_units,
-            &borrow_versions,
-            &callee_params,
-            type_env,
-        );
-        f_own.body = ctx.rewrite(&f_own.body);
-        funcs.insert(f_own.name.clone(), f_own);
-    }
-    for (borrow_version, mut clone) in clones {
-        let ctx = RewriteCtx::new(
-            &clone,
-            true,
-            &owned_units,
-            &borrow_versions,
-            &callee_params,
-            type_env,
-        );
-        if develop_mode {
-            ctx.check_ownership_is_levelled(&clone);
-        }
-        clone.body = ctx.rewrite(&clone.body);
-        assert!(
-            funcs.insert(borrow_version.clone(), clone).is_none(),
-            "a borrow version takes the name `{}` of another function",
-            borrow_version.name.to_string()
-        );
-    }
-
-    // Globals are param-less function bodies: route and rewrite them the same way (as `f_own`).
+    // Globals are param-less bodies: route and rewrite them the same way.
     let globals = prog
         .globals
         .iter()
         .map(|g| {
             let vars = VarTable::body_only(&g.init);
-            let ctx = RewriteCtx {
-                type_env,
-                is_borrow_version: false,
-                owned_units: &owned_units,
-                borrow_versions: &borrow_versions,
-                callee_params: &callee_params,
-                tail: tail_result_vars(&g.init),
-                vars,
-            };
-            RcGlobalInit {
-                symbol: g.symbol.clone(),
-                ty: g.ty.clone(),
-                init: ctx.rewrite(&g.init),
-                owns_initializer: true,
-                owns_storage: true,
-            }
+            g.with_init(RewriteCtx::new(&vars, &[], &[], &g.init, &mut versions).rewrite(&g.init))
         })
         .collect();
 
-    // Annotate every version with the parameter/capture units it borrows (those not in `owned_units`).
-    for func in funcs.values_mut() {
-        func.borrowed_units = param_capture_units(func, type_env)
-            .into_iter()
-            .filter(|unit_path| !owned_units.contains(unit_path))
-            .collect();
+    // Rewrite every version the program reaches. Rewriting one routes its calls, which may reach
+    // versions not yet rewritten.
+    let mut funcs: Map<FuncRef, RcFunc> = Map::default();
+    while let Some((fref, key)) = versions.registry.pop() {
+        let func = &prog.funcs[&fref];
+        let body = {
+            let mut ctx = RewriteCtx::new(
+                &bodies[&fref].vars,
+                &func.params,
+                &key,
+                &func.body,
+                &mut versions,
+            );
+            if develop_mode {
+                ctx.check_ownership_is_levelled(func);
+            }
+            ctx.rewrite(&func.body)
+        };
+        let annotated = RcFunc {
+            borrowed_units: borrowed_param_units(func, &key, type_env),
+            ..func.clone()
+        };
+        let version = versions.registry.finish_clone(&annotated, &key, body);
+        let name = version.name.clone();
+        assert!(
+            funcs.insert(name.clone(), version).is_none(),
+            "a version takes the name `{}` of another function",
+            name.name.to_string()
+        );
     }
 
-    RcProgram {
-        funcs,
-        globals,
-        roots: prog.roots.clone(),
+    prog.with_code(funcs, globals)
+}
+
+/// The versions of the program's functions, and what deciding the key of one reads.
+struct Versions<'a> {
+    /// The input program, whose functions every version is rewritten from.
+    prog: &'a RcProgram,
+    /// The type definitions, for resolving a value's type to its reference-counting units.
+    type_env: &'a TypeEnv,
+    /// The body facts of every function of `prog`.
+    bodies: &'a Map<FuncRef, LevellingFacts>,
+    /// The parameter leaves the inference found every version has to own.
+    owned_leaves: &'a OwnedLeaves,
+    /// The functions that get a version borrowing a parameter where a call reaches one: those taking
+    /// no capture, observing no uniqueness (`funcs_observing_uniqueness`), and left with a
+    /// borrowable parameter leaf by the inference. A call of any other function keeps the all-`Own`
+    /// original.
+    borrowers: Set<FuncRef>,
+    /// The name of each version a call has reached, and the versions yet to be rewritten.
+    registry: CloneRegistry<BorrowKey>,
+    /// The key `levelled_key` answered for each key a call asked for, so that a key many calls ask
+    /// for is levelled once.
+    levelled: Map<(FuncRef, BorrowKey), BorrowKey>,
+}
+
+impl Versions<'_> {
+    /// The version of `callee` a call reaches when it can lend the units `lendable` marks `Borrow`:
+    /// its name and its key, or `None` for the all-`Own` original.
+    ///
+    /// The version borrows each lendable unit the inference left borrowable, and the levelling
+    /// keeps. Past the clone budget (`CloneRegistry::request`) the call reaches the original.
+    fn request(&mut self, callee: &FuncRef, lendable: BorrowKey) -> Option<(FuncRef, BorrowKey)> {
+        let key = self.levelled_key(callee, lendable);
+        let name = self.registry.request(callee, key.clone());
+        (name != *callee).then_some((name, key))
     }
+
+    /// The key of `callee` that borrows a unit where `lendable` marks it `Borrow` and the version
+    /// can borrow it: the inference left every leaf of the unit borrowable, and no levelled site
+    /// mixes the unit with one the version owns (`level_ownership`).
+    fn levelled_key(&mut self, callee: &FuncRef, lendable: BorrowKey) -> BorrowKey {
+        if let Some(key) = self.levelled.get(&(callee.clone(), lendable.clone())) {
+            return key.clone();
+        }
+        let type_env = self.type_env;
+        let func = &self.prog.funcs[callee];
+        let LevellingFacts { vars, sites } = &self.bodies[callee];
+        let mut owned: Set<VarPath> = Set::default();
+        for (p, lent) in func.params.iter().zip(&lendable) {
+            for leaf in boxed_leaf_paths(&p.ty, type_env) {
+                let unit = truncate_to_unit(&p.ty, &leaf, type_env);
+                if self.owned_leaves.owns(&p.name, &leaf) || lent.at(&unit) == Ownership::Own {
+                    owned.insert((p.name.clone(), leaf));
+                }
+            }
+        }
+        while level_sites(vars, type_env, sites, &mut owned) {}
+        // A unit is owned once any leaf truncating to it is owned, as `owns_object_yet` reads it.
+        let key: BorrowKey = func
+            .params
+            .iter()
+            .map(|p| {
+                ownership_shape(&p.ty, type_env, &|unit| {
+                    Ownership::owned_if(owns_a_leaf_of_unit(&owned, &p.name, &p.ty, unit, type_env))
+                })
+            })
+            .collect();
+        self.levelled
+            .insert((callee.clone(), lendable), key.clone());
+        key
+    }
+}
+
+/// The all-`Own` key of a function: the key of the original, which keeps the function's name.
+fn all_own_key(func: &RcFunc, type_env: &TypeEnv) -> BorrowKey {
+    func.params
+        .iter()
+        .map(|p| ownership_shape(&p.ty, type_env, &|_| Ownership::Own))
+        .collect()
+}
+
+/// The parameter units the version of `func` keyed on `key` borrows, each as the `(parameter,
+/// unit path)` pair `RcFunc::borrowed_units` holds.
+fn borrowed_param_units(func: &RcFunc, key: &BorrowKey, type_env: &TypeEnv) -> Set<VarPath> {
+    func.params
+        .iter()
+        .zip(key)
+        .flat_map(|(p, shape)| {
+            rc_units(&p.ty, type_env)
+                .into_iter()
+                .filter(|unit| shape.at(unit) == Ownership::Borrow)
+                .map(|unit| (p.name.clone(), unit))
+        })
+        .collect()
 }
 
 /// The ownership shape of every parameter and capture variable of the program, keyed by the
@@ -371,39 +475,26 @@ pub fn param_ownership_shapes(
     let mut shapes = Map::default();
     for func in prog.funcs.values() {
         for p in func.params.iter().chain(func.capture.iter()) {
-            shapes.insert(
-                p.name.clone(),
-                param_ownership_shape(&p.name, &p.ty, &owned_units, type_env),
-            );
+            let shape = ownership_shape(&p.ty, type_env, &|unit| {
+                Ownership::owned_if(owned_units.contains(&(p.name.clone(), unit.clone())))
+            });
+            shapes.insert(p.name.clone(), shape);
         }
     }
     shapes
 }
 
-/// The suffix a function's borrow version adds to the function's name and to the name of each of its
-/// variables. A function has at most one borrow version, so the suffix needs nothing to tell one
-/// borrow version of a function from another.
-fn borrow_clone_suffix() -> String {
-    copy_suffix("borrow", "")
-}
-
-/// The name of a function's borrow version: its name followed by `borrow_clone_suffix`.
-fn borrow_funcref(name: &FuncRef) -> FuncRef {
-    let mut borrow_name = name.name.clone();
-    borrow_name.name.push_str(&borrow_clone_suffix());
-    FuncRef { name: borrow_name }
-}
-
-/// Whether borrow inference left any of a function's parameter leaves `Borrow`.
+/// Whether borrow inference left any of a function's parameter units `Borrow`: a unit none of whose
+/// leaves it owns.
 fn func_has_borrowable_param(
     func: &RcFunc,
     owned_leaves: &OwnedLeaves,
     type_env: &TypeEnv,
 ) -> bool {
     func.params.iter().any(|p| {
-        boxed_leaf_paths(&p.ty, type_env)
+        rc_units(&p.ty, type_env)
             .iter()
-            .any(|leaf| !owned_leaves.owns(&p.name, &leaf))
+            .any(|unit| !owns_a_leaf_of_unit(&owned_leaves.0, &p.name, &p.ty, unit, type_env))
     })
 }
 
@@ -452,13 +543,14 @@ fn binds_a_destructor(node: &RcExprNode) -> bool {
                 || match rhs {
                     RcRhs::Match(_, arms) => arms
                         .iter()
-                        .any(|arm| mentions_a_destructor(&arm.payload.ty)),
+                        .filter_map(|arm| arm.binder.as_ref())
+                        .any(|payload| mentions_a_destructor(&payload.ty)),
                     RcRhs::Var(..) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Builtin(..) => {
                         false
                     }
                 }
         }
-        RcExpr::Destructure(_, fields, _, _) => fields
+        RcExpr::DestructureUnboxed(_, fields, _) => fields
             .iter()
             .any(|(_, field)| mentions_a_destructor(&field.ty)),
         RcExpr::Retain(..) | RcExpr::Release(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => false,
@@ -492,8 +584,8 @@ fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
     let mut closure_targets: Set<FuncRef> = Set::default();
     let mut calls_indirectly: Set<FuncRef> = Set::default();
     // One body's contribution. `owner` is the function the body belongs to, and `None` for a global
-    // initializer — an initializer gets no borrow version, so nothing is recorded against it, but the
-    // closures it builds are ones an indirect call anywhere can arrive at.
+    // initializer — an initializer gets no borrowing version, so nothing is recorded against it,
+    // but the closures it builds are ones an indirect call anywhere can arrive at.
     let mut scan = |body: &RcExprNode, owner: Option<&FuncRef>| {
         let mut cs = vec![];
         for_each_node(body, &mut |node| {
@@ -569,68 +661,25 @@ fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
                 .extend(closure_targets.iter().cloned());
         }
     }
-    // Least fixed point over that graph: a caller of an observing function reaches the op.
-    loop {
-        let mut grew = false;
-        for (fref, cs) in &callees {
-            if !observing.contains(fref) && cs.iter().any(|c| observing.contains(c)) {
-                observing.insert(fref.clone());
-                grew = true;
-            }
-        }
-        if !grew {
-            return observing;
-        }
-    }
+    // A caller of an observing function reaches the op.
+    callers_of(observing, &callees)
 }
 
-/// The name/type of each parameter and capture, in order.
-fn param_names_and_types(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
-    func.params
-        .iter()
-        .chain(func.capture.iter())
-        .map(|p| (p.name.clone(), p.ty.clone()))
-        .collect()
-}
-
-/// Every reference-counting unit of a function's parameters and capture, each as the
-/// `(variable, unit path)` pair the owned and borrowed unit sets are keyed by.
-fn param_capture_units(func: &RcFunc, type_env: &TypeEnv) -> Vec<VarPath> {
-    func.params
-        .iter()
-        .chain(func.capture.iter())
-        .flat_map(|p| {
-            rc_units(&p.ty, type_env)
-                .into_iter()
-                .map(|unit| (p.name.clone(), unit))
-        })
-        .collect()
-}
-
-/// The ownership shape of one parameter, read from the owned-unit set: `Own` at a reference-counting
-/// unit that is owned, else `Borrow`.
-fn param_ownership_shape(
-    var: &FullName,
+/// The ownership shape of a value of type `ty`, with `ownership_of` deciding each of its
+/// reference-counting units from the unit's path.
+fn ownership_shape(
     ty: &Arc<TypeNode>,
-    owned_units: &Set<VarPath>,
     type_env: &TypeEnv,
+    ownership_of: &dyn Fn(&FieldPath) -> Ownership,
 ) -> OwnershipShape {
-    /// The shape of the subtree of type `ty` that `path` names within `var`, `path` being the field
-    /// path from the parameter root down to that subtree.
+    /// The shape of the subtree of type `ty` that `path` names, `path` being the field path from the
+    /// value's root down to that subtree.
     fn go(
-        var: &FullName,
         ty: &Arc<TypeNode>,
-        owned_units: &Set<VarPath>,
         type_env: &TypeEnv,
+        ownership_of: &dyn Fn(&FieldPath) -> Ownership,
         path: &mut FieldPath,
     ) -> OwnershipShape {
-        let ownership_at = |path: &FieldPath| {
-            if owned_units.contains(&(var.clone(), path.clone())) {
-                Ownership::Own
-            } else {
-                Ownership::Borrow
-            }
-        };
         match unit_step(ty, type_env) {
             UnitStep::NoUnit => OwnershipShape::NoUnit,
             UnitStep::Capture {
@@ -638,13 +687,13 @@ fn param_ownership_shape(
                 field_count,
             } => {
                 path.push(capture_idx);
-                let capture_ownership = ownership_at(path);
+                let capture_ownership = ownership_of(path);
                 path.pop();
                 let mut children = vec![OwnershipShape::NoUnit; field_count];
                 children[capture_idx] = OwnershipShape::Unit(capture_ownership);
                 OwnershipShape::Fields(children)
             }
-            UnitStep::Unit => OwnershipShape::Unit(ownership_at(path)),
+            UnitStep::Unit => OwnershipShape::Unit(ownership_of(path)),
             UnitStep::Fields {
                 field_count,
                 held_fields,
@@ -654,14 +703,14 @@ fn param_ownership_shape(
                 let mut children = vec![OwnershipShape::NoUnit; field_count];
                 for (i, fty) in held_fields {
                     path.push(i);
-                    children[i] = go(var, &fty, owned_units, type_env, path);
+                    children[i] = go(&fty, type_env, ownership_of, path);
                     path.pop();
                 }
                 OwnershipShape::Fields(children)
             }
         }
     }
-    go(var, ty, owned_units, type_env, &mut vec![])
+    go(ty, type_env, ownership_of, &mut vec![])
 }
 
 // --- tail-call recognition ---
@@ -702,7 +751,7 @@ fn mark_tail(node: &RcExprNode, in_tail: bool, out: &mut Set<FullName>) {
         }
         RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
-        | RcExpr::Destructure(_, _, _, k)
+        | RcExpr::DestructureUnboxed(_, _, k)
         | RcExpr::Eval(_, k) => mark_tail(k, in_tail, out),
         RcExpr::Ret(_) => {}
     }
@@ -719,212 +768,284 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
         RcExpr::Let(..)
         | RcExpr::Retain(..)
         | RcExpr::Release(..)
-        | RcExpr::Destructure(..)
+        | RcExpr::DestructureUnboxed(..)
         | RcExpr::Eval(..) => false,
     }
 }
 
-// --- cloning a function with fresh names ---
-
-/// Clone a function as its borrow version: give every bound variable (parameters, capture, `let`
-/// bindings, destructure fields, match-arm payloads) its name followed by `borrow_clone_suffix`, and
-/// rewrite all occurrences. A function has at most one borrow version, and its variables are bound
-/// nowhere else, so the names stay globally unique. References to top-level functions stay free
-/// here, for routing to retarget. Returns the clone and the binder renaming.
-fn clone_func(func: &RcFunc, new_ref: FuncRef) -> (RcFunc, Map<FullName, FullName>) {
-    let (params, capture, body, rename) = fresh_rename_function(
-        &func.params,
-        &func.capture,
-        &func.body,
-        &borrow_clone_suffix(),
-    );
-    (
-        RcFunc {
-            name: new_ref,
-            fn_ty: func.fn_ty.clone(),
-            params,
-            capture,
-            ret_ty: func.ret_ty.clone(),
-            body,
-            source: func.source.clone(),
-            borrowed_units: Set::default(),
-            inline_into_callers: func.inline_into_callers,
-        },
-        rename,
-    )
-}
-
 // --- routing and reference-count rewrite ---
 
-/// The per-version state the body rewrite reads: this version's aliasing vars and tail calls,
-/// whether it is the borrow clone, and the whole-program ownership and version tables.
-struct RewriteCtx<'a> {
-    /// The type definitions, for resolving a value's type to its reference-counting units.
-    type_env: &'a TypeEnv,
-    /// Whether this version is the borrow clone, whose reference counting on its borrowed parameter
-    /// leaves is dropped. The all-owning original keeps every node it was given.
-    is_borrow_version: bool,
-    /// The inferred `Own` parameter leaves of the whole program, one `(parameter-name, unit-path)`
-    /// each. A parameter leaf absent from it is borrowed.
-    owned_units: &'a Set<VarPath>,
-    /// The borrow clone of each function that got one, which a call is routed to where routing is
-    /// safe and saves a reference count.
-    borrow_versions: &'a Map<FuncRef, FuncRef>,
-    /// The parameter names and types of every version, original and borrow clone alike, so a call
-    /// can look its callee's parameters up in `owned_units`.
-    callee_params: &'a Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>>,
-    /// The bindings of this version's tail-position calls and matches, whose calls stay on the
-    /// owning version so that no after-call release lands on a tail call.
+/// The per-version state the body rewrite reads: this version's variables, the ownership its key
+/// gives its parameters, its tail calls, and the versions every call is routed among.
+struct RewriteCtx<'a, 'v> {
+    /// The ownership this version's key gives each of its parameters, by the parameter's name. A
+    /// capture is owned at every unit, since no function taking one gets a borrowing version.
+    param_ownership: Map<FullName, OwnershipShape>,
+    /// The versions every call of this body is routed among, which a call adds to.
+    versions: &'v mut Versions<'a>,
+    /// The bindings of this version's tail-position calls and matches. No after-call release may
+    /// land on such a call, which the rewrite asserts.
     tail: Set<FullName>,
     /// This version's variables: what binds each one and its type, which decide the object a leaf
     /// belongs to and whether this version owns it.
-    vars: VarTable,
+    vars: &'v VarTable,
 }
 
-impl<'a> RewriteCtx<'a> {
-    /// The rewrite state of one output version of `func`. `is_borrow_version` marks the borrow
-    /// clone, the version whose reference counting on its borrowed parameter leaves is dropped.
+impl<'a, 'v> RewriteCtx<'a, 'v> {
+    /// The rewrite state of the version keyed on `key` of the function whose parameters are
+    /// `params` and whose body is `body`.
     fn new(
-        func: &RcFunc,
-        is_borrow_version: bool,
-        owned_units: &'a Set<VarPath>,
-        borrow_versions: &'a Map<FuncRef, FuncRef>,
-        callee_params: &'a Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>>,
-        type_env: &'a TypeEnv,
-    ) -> RewriteCtx<'a> {
+        vars: &'v VarTable,
+        params: &[RcVar],
+        key: &[OwnershipShape],
+        body: &RcExprNode,
+        versions: &'v mut Versions<'a>,
+    ) -> RewriteCtx<'a, 'v> {
+        assert_eq!(
+            params.len(),
+            key.len(),
+            "a key of {} shapes names a version of a function of {} parameters",
+            key.len(),
+            params.len()
+        );
         RewriteCtx {
-            type_env,
-            is_borrow_version,
-            owned_units,
-            borrow_versions,
-            callee_params,
-            tail: tail_result_vars(&func.body),
-            vars: VarTable::of(func),
+            param_ownership: params
+                .iter()
+                .map(|p| p.name.clone())
+                .zip(key.iter().cloned())
+                .collect(),
+            versions,
+            tail: tail_result_vars(body),
+            vars,
         }
+    }
+
+    /// The type definitions, for resolving a value's type to its reference-counting units.
+    fn type_env(&self) -> &'a TypeEnv {
+        self.versions.type_env
+    }
+
+    /// Whether this version borrows any parameter unit. The all-`Own` original keeps every
+    /// reference-count node it was given.
+    fn borrows_any(&self) -> bool {
+        self.param_ownership
+            .values()
+            .any(OwnershipShape::borrows_any)
     }
 
     /// Rewrite a body for this version: route each direct call to a callee version, bracket a call
     /// with the reference counting the routed callee no longer does, and drop the counting this
     /// version's borrowed parameters no longer need.
-    fn rewrite(&self, node: &RcExprNode) -> RcExprNode {
-        grow_stack(|| self.rewrite_inner(node))
+    fn rewrite(&mut self, node: &RcExprNode) -> RcExprNode {
+        self.rewrite_in(node, None)
+    }
+
+    /// Rewrite `node`. `enclosing` is the code that runs once `node` returns: the continuations of
+    /// the matches whose arms hold `node`, or `None` at the top of the body.
+    fn rewrite_in(&mut self, node: &RcExprNode, enclosing: Option<&After>) -> RcExprNode {
+        grow_stack(|| self.rewrite_inner(node, enclosing))
     }
 
     /// One node of the rewrite, rebuilt over its rewritten continuation.
-    fn rewrite_inner(&self, node: &RcExprNode) -> RcExprNode {
+    fn rewrite_inner(&mut self, node: &RcExprNode, enclosing: Option<&After>) -> RcExprNode {
         match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
-                let callee = self.route(x, callee, args, k);
-                let (before, after) = self.call_rc(&callee, args);
-                let k = prepend_rc(after, true, self.rewrite(k));
-                let app = expr_node(
-                    RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k),
-                    &node.source,
+                let in_tail = self.tail.contains(&x.name);
+                let (callee, key) = self.route(callee, args, &After { k, enclosing }, in_tail);
+                let (rc_before, rc_after) = self.call_rc(key.as_deref(), args);
+                assert!(
+                    rc_after.is_empty() || !in_tail,
+                    "a call in tail position was routed to a version that leaves a release after it"
                 );
-                prepend_rc(before, false, app)
+                let k = prepend_rc(rc_after, true, self.rewrite_in(k, enclosing));
+                let app = RcExprNode::new(
+                    RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k),
+                    node.source.clone(),
+                );
+                prepend_rc(rc_before, false, app)
             }
             RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
+                let after_arms = After { k, enclosing };
                 let arms = arms
                     .iter()
-                    .map(|arm| arm.with_body(self.rewrite(&arm.body)))
+                    .map(|arm| arm.with_body(self.rewrite_in(&arm.body, Some(&after_arms))))
                     .collect();
-                expr_node(
+                RcExprNode::new(
                     RcExpr::Let(
                         x.clone(),
                         RcRhs::Match(scrut.clone(), arms),
-                        self.rewrite(k),
+                        self.rewrite_in(k, enclosing),
                     ),
-                    &node.source,
+                    node.source.clone(),
                 )
             }
-            RcExpr::Let(x, rhs, k) => expr_node(
-                RcExpr::Let(x.clone(), rhs.clone(), self.rewrite(k)),
-                &node.source,
-            ),
             RcExpr::Retain(v, path, state, k) => {
-                self.rewrite_rc(v, path, *state, false, k, &node.source)
+                self.rewrite_rc(v, path, *state, false, k, enclosing, &node.source)
             }
             RcExpr::Release(v, path, state, k) => {
-                self.rewrite_rc(v, path, *state, true, k, &node.source)
+                self.rewrite_rc(v, path, *state, true, k, enclosing, &node.source)
             }
-            RcExpr::Destructure(container, fields, state, k) => expr_node(
-                RcExpr::Destructure(container.clone(), fields.clone(), *state, self.rewrite(k)),
-                &node.source,
-            ),
-            RcExpr::Eval(v, k) => expr_node(RcExpr::Eval(v.clone(), self.rewrite(k)), &node.source),
-            RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
+            RcExpr::Let(..)
+            | RcExpr::DestructureUnboxed(..)
+            | RcExpr::Eval(..)
+            | RcExpr::Ret(..) => map_continuation(node, |k| self.rewrite_in(k, enclosing)),
         }
     }
 
-    /// Route a direct call: retarget the callee to its borrow version when that has a version and
-    /// routing to it is both safe and beneficial; otherwise keep the original (the all-`Own` version,
-    /// or an indirect callee this leaves untouched). `k` is the call's continuation, which the
-    /// benefit test reads to tell an argument's last use from a use that outlives the call.
-    fn route(&self, x: &RcVar, callee: &RcVar, args: &[RcVar], k: &RcExprNode) -> RcVar {
-        let orig = FuncRef {
-            name: callee.name.clone(),
-        };
-        if let Some(borrow_version) = self.borrow_versions.get(&orig) {
-            if self.routing_is_safe(x, args) && self.routing_saves_retain(borrow_version, args, k) {
-                let mut routed = callee.clone();
-                routed.name = borrow_version.name.clone();
-                return routed;
-            }
-        }
-        callee.clone()
-    }
-
-    /// A call is safe to route to the borrow version when it is not in tail position, or it passes no
-    /// owned argument — so the after-call release the borrow version needs never lands on a tail call.
-    fn routing_is_safe(&self, x: &RcVar, args: &[RcVar]) -> bool {
-        !self.tail.contains(&x.name) || !args.iter().any(|a| self.any_owned_unit(a))
-    }
-
-    /// Whether routing this call to the borrow version removes a reference count it would otherwise
-    /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows
-    /// and that would otherwise be retained. Two kinds qualify: a borrowed value, which an owning
-    /// callee makes the caller retain before the call, and an owned value whose object outlives the
-    /// call, where the borrow cancels the retain made ahead of it. An owned value whose object ends
-    /// at the call is moved either way, so borrowing it removes no retain and only delays its
-    /// release.
-    fn routing_saves_retain(
-        &self,
-        borrow_version: &FuncRef,
+    /// Route a direct call to the version of its callee that borrows what the call can lend
+    /// (`lendable`): the callee retargeted to that version, and the version's key. The key is `None`
+    /// where the call keeps its callee, which then owns every position: the all-`Own` original of a
+    /// function, or an indirect callee this leaves untouched. `after` is the code that runs after the
+    /// call, which tells an argument's last use from a use that outlives the call, and `in_tail`
+    /// says whether the call is in tail position.
+    fn route(
+        &mut self,
+        callee: &RcVar,
         args: &[RcVar],
-        k: &RcExprNode,
-    ) -> bool {
-        // `borrow_ify` registers the parameters of every version, so a borrow version is a key here.
-        let borrow_params = &self.callee_params[borrow_version];
-        args.iter().enumerate().any(|(arg_idx, arg)| {
-            let arg_used_later = used_later(&arg.name, k);
-            rc_units(&arg.ty, self.type_env).iter().any(|unit| {
-                // `arg_idx` is in range since `args.len() <= params.len()`.
-                let callee_borrows = !self
-                    .owned_units
-                    .contains(&(borrow_params[arg_idx].0.clone(), unit.clone()));
-                callee_borrows
-                    && !(self.owns_unit(arg, unit)
-                        && !arg_used_later
-                        && !self.comes_from_a_value_used_later(arg, unit, k))
-            })
-        })
+        after: &After,
+        in_tail: bool,
+    ) -> (RcVar, Option<BorrowKey>) {
+        let Some(fref) = specializable_callee(self.versions.prog, callee, &self.versions.borrowers)
+        else {
+            return (callee.clone(), None);
+        };
+        let lendable = self.lendable(&fref, args, after, in_tail);
+        match self.versions.request(&fref, lendable) {
+            Some((version, key)) => {
+                let mut routed = callee.clone();
+                routed.name = version.name;
+                (routed, Some(key))
+            }
+            None => (callee.clone(), None),
+        }
     }
 
-    /// Whether `arg@unit` was read out of a value this function uses after the call. Such a leaf
-    /// holds a reference this function made for the call, and routing to the borrow version removes
-    /// that reference together with the retain that made it.
-    fn comes_from_a_value_used_later(&self, arg: &RcVar, unit: &FieldPath, k: &RcExprNode) -> bool {
-        origin(&self.vars, self.type_env, &arg.name, unit)
+    /// The units of a call's arguments the call can lend its callee `callee`, marked `Borrow`. Each
+    /// argument unit is one of three kinds:
+    ///
+    /// - a borrowed value, which an owning callee makes the caller retain before the call, so
+    ///   lending it removes that retain;
+    /// - an owned value whose object is held after the call, where lending cancels the retain made
+    ///   ahead of it;
+    /// - an owned value whose object ends at the call. An owning callee frees it at its last use
+    ///   inside the callee, and a borrowing one leaves it to the caller to release after the call.
+    ///   Its object then lives through the rest of the callee, where a value read out of it is
+    ///   shared, so an update of that value copies it.
+    ///
+    /// The units of the first two kinds are lendable, and those of the third are not.
+    /// `Versions::levelled_key` decides which lendable units the callee can borrow. A call in tail
+    /// position (`in_tail`) lends no owned value, so no release is left after a tail call.
+    fn lendable(
+        &self,
+        callee: &FuncRef,
+        args: &[RcVar],
+        after: &After,
+        in_tail: bool,
+    ) -> BorrowKey {
+        let params = &self.versions.prog.funcs[callee].params;
+        // A function a call names directly takes no capture here (`Versions::borrowers`), so the call
+        // passes one argument per parameter.
+        assert_eq!(
+            args.len(),
+            params.len(),
+            "a direct call of `{}` passes {} arguments to {} parameters",
+            callee.name.to_string(),
+            args.len(),
+            params.len()
+        );
+        params
+            .iter()
+            .zip(args)
+            .map(|(p, arg)| {
+                ownership_shape(&p.ty, self.type_env(), &|unit| {
+                    Ownership::owned_if(
+                        self.owns_unit(arg, unit)
+                            && (in_tail
+                                || !self.held_after(
+                                    &(arg.name.clone(), unit.clone()),
+                                    after,
+                                    &mut Map::default(),
+                                )),
+                    )
+                })
+            })
+            .collect()
+    }
+
+    /// Whether the object at `value` is held past the call, whichever object `value` turns out to
+    /// be.
+    ///
+    /// Every name on the alias chain from `value` back to its object holds the reference `value`
+    /// holds (`alias_step`): the container a field was destructured out of, the match binding an
+    /// arm result flows into, the variable a move-bind renamed. A use of any of them after the call
+    /// keeps the object alive past it. A value read out of a boxed container (`read_container`) is
+    /// held by the container's field as well, so it is held past the call when the container is:
+    /// one a variable used after the call holds, or one that outlives the body
+    /// (`outlives_the_body`).
+    /// Where the value may be one of several objects — a match binding, or an op result whose
+    /// leaves come from several operands — each of them has to be held, unless a use of the value
+    /// itself holds whichever it is.
+    ///
+    /// # Arguments
+    /// * `held` - the answers given so far in this query. A chain of match bindings, each rebuilding
+    ///   the one before, reaches one value along many paths, and answering each value once keeps
+    ///   the walk proportional to the chain.
+    fn held_after(&self, value: &VarPath, after: &After, held: &mut Map<VarPath, bool>) -> bool {
+        if let Some(answer) = held.get(value) {
+            return *answer;
+        }
+        let (var, path) = value;
+        let answer = after.uses(var)
+            || match alias_step(self.vars, self.type_env(), var, path) {
+                AliasStep::Stops => {
+                    read_container(self.vars, self.type_env(), var).is_some_and(|container| {
+                        let units = rc_units(&container.ty, self.type_env());
+                        assert!(
+                            !units.is_empty(),
+                            "the container `{}` that `{}` is read out of holds no reference",
+                            container.name.to_string(),
+                            var.to_string()
+                        );
+                        units.into_iter().all(|unit| {
+                            self.outlives_the_body(container, &unit)
+                                || self.held_after(&(container.name.clone(), unit), after, held)
+                        })
+                    })
+                }
+                AliasStep::Projects(source) => self.held_after(&source, after, held),
+                AliasStep::Gathers(gathered) => {
+                    // A leaf produced here belongs to this value alone, and a value with no leaf
+                    // beneath the path holds no reference to keep alive.
+                    !gathered.produced_here
+                        && !gathered.operand_units.is_empty()
+                        && gathered
+                            .operand_units
+                            .iter()
+                            .all(|operand_unit| self.held_after(operand_unit, after, held))
+                }
+                AliasStep::Joins(arm_results) => {
+                    assert!(
+                        !arm_results.is_empty(),
+                        "the match binding `{}` joins no arm result",
+                        var.to_string()
+                    );
+                    arm_results
+                        .iter()
+                        .all(|arm_result| self.held_after(arm_result, after, held))
+                }
+            };
+        held.insert(value.clone(), answer);
+        answer
+    }
+
+    /// Whether the object at the unit `unit` of `var` lives for the whole body whichever object it
+    /// is: the object of a parameter this version borrows, which the caller holds throughout, or a
+    /// global's object, which is never freed.
+    fn outlives_the_body(&self, var: &RcVar, unit: &FieldPath) -> bool {
+        origin(self.vars, self.type_env(), &var.name, unit)
             .candidates()
             .iter()
-            .any(|(root, _)| used_later(root, k))
-    }
-
-    /// Whether this version owns the value at any of `arg`'s reference-counting units.
-    fn any_owned_unit(&self, arg: &RcVar) -> bool {
-        rc_units(&arg.ty, self.type_env)
-            .iter()
-            .any(|unit| self.owns_unit(arg, unit))
+            .all(|(root, path)| !root.is_local() || !self.owns_object(root, path))
     }
 
     /// Whether this version owns the value at `arg@unit`: a leaf that comes from an owned parameter,
@@ -932,7 +1053,7 @@ impl<'a> RewriteCtx<'a> {
     /// that comes from a borrowed parameter is not. A leaf that may be one of several objects is
     /// owned only when it is owned whichever it is.
     fn owns_unit(&self, arg: &RcVar, unit: &FieldPath) -> bool {
-        origin(&self.vars, self.type_env, &arg.name, unit)
+        origin(self.vars, self.type_env(), &arg.name, unit)
             .candidates()
             .iter()
             .all(|(root, path)| self.owns_object(root, path))
@@ -947,11 +1068,14 @@ impl<'a> RewriteCtx<'a> {
     /// reference the borrowed leaf was only lent. `level_ownership` is what makes the answers agree,
     /// and this states that agreement where the rewrite reads it.
     ///
-    /// Only the borrow version needs checking. The all-owning original holds every parameter and
-    /// capture unit in `owned_units`, so `owns_object` is true of each of its objects.
+    /// Only a borrowing version needs checking. The all-`Own` original owns every parameter and
+    /// capture unit, so `owns_object` is true of each of its objects.
     fn check_ownership_is_levelled(&self, func: &RcFunc) {
-        for (v, unit) in levelled_sites(func, self.type_env) {
-            let where_from = origin(&self.vars, self.type_env, &v.name, &unit);
+        if !self.borrows_any() {
+            return;
+        }
+        for (v, unit) in &self.versions.bodies[&func.name].sites {
+            let where_from = origin(self.vars, self.type_env(), &v.name, unit);
             let mut answers = where_from
                 .candidates()
                 .into_iter()
@@ -971,46 +1095,44 @@ impl<'a> RewriteCtx<'a> {
 
     /// Whether this version owns the object a leaf comes from.
     fn owns_object(&self, root: &FullName, path: &FieldPath) -> bool {
-        match self.vars.param_tys.get(root) {
-            // The value is owned only when every reference-counting unit the path covers is owned.
-            // Each covered path is truncated to its unit, so a path that descends into a union
-            // variant keys to the union itself, which is what `owned_units` records.
-            Some(root_ty) => units_under(root_ty, path, self.type_env)
-                .iter()
-                .all(|unit| {
-                    self.owned_units
-                        .contains(&(root.clone(), truncate_to_unit(root_ty, unit, self.type_env)))
-                }),
+        let Some(root_ty) = self.vars.param_tys.get(root) else {
             // A root this version takes no parameter for is a producer, or a global — whose reachable
             // graph is refcount-exempt. Either way the caller lent no reference of it, so the value
             // here is this version's.
-            None => true,
-        }
+            return true;
+        };
+        let Some(shape) = self.param_ownership.get(root) else {
+            // `param_tys` holds the parameters and the capture, and `param_ownership` every
+            // parameter, so this is a capture, which every version owns.
+            return true;
+        };
+        // The value is owned only when every reference-counting unit the path covers is owned. Each
+        // covered path is truncated to its unit, so a path that descends into a union variant keys
+        // to the union itself, which is where the shape states its ownership.
+        units_under(root_ty, path, self.type_env())
+            .iter()
+            .all(|unit| {
+                shape.at(&truncate_to_unit(root_ty, unit, self.type_env())) == Ownership::Own
+            })
     }
 
     /// The reference-count operations a call site takes over: for each argument unit, a release after
     /// the call when an owned value is passed to a borrowed position, and a retain before the call
     /// when a borrowed value is passed to an owning position.
+    ///
+    /// # Arguments
+    /// * `key` - the key of the version the call is routed to, one shape per argument, or `None`
+    ///   for a callee that owns every position: the all-`Own` original, or an indirect callee.
     fn call_rc(
         &self,
-        callee: &RcVar,
+        key: Option<&[OwnershipShape]>,
         args: &[RcVar],
     ) -> (Vec<(RcVar, FieldPath)>, Vec<(RcVar, FieldPath)>) {
-        let params = self.callee_params.get(&FuncRef {
-            name: callee.name.clone(),
-        });
         let mut before = vec![];
         let mut after = vec![];
         for (arg_idx, arg) in args.iter().enumerate() {
-            for unit in rc_units(&arg.ty, self.type_env) {
-                // An unresolved (indirect) callee owns every position (the all-`Own` ABI); a resolved
-                // one is indexed by `arg_idx`, which is in range since `args.len() <= params.len()`.
-                let callee_owns = match params {
-                    None => true,
-                    Some(params) => self
-                        .owned_units
-                        .contains(&(params[arg_idx].0.clone(), unit.clone())),
-                };
+            for unit in rc_units(&arg.ty, self.type_env()) {
+                let callee_owns = key.map_or(true, |key| key[arg_idx].at(&unit) == Ownership::Own);
                 let arg_owned = self.owns_unit(arg, &unit);
                 if !callee_owns && arg_owned {
                     after.push((arg.clone(), unit));
@@ -1022,36 +1144,44 @@ impl<'a> RewriteCtx<'a> {
         (before, after)
     }
 
-    /// Rewrite a `Retain`/`Release`: in the borrow clone, drop the units that root at a borrowed
+    /// Rewrite a `Retain`/`Release`: in a borrowing version, drop the units that root at a borrowed
     /// parameter (the callee no longer counts them); otherwise keep the node unchanged.
     fn rewrite_rc(
-        &self,
+        &mut self,
         v: &RcVar,
         path: &FieldPath,
         state: RcState,
         is_release: bool,
         k: &RcExprNode,
+        enclosing: Option<&After>,
         source: &Option<Span>,
     ) -> RcExprNode {
-        let k = self.rewrite(k);
-        if !self.is_borrow_version {
+        let k = self.rewrite_in(k, enclosing);
+        if !self.borrows_any() {
             return rc_node(is_release, v.clone(), path.clone(), state, k, source);
         }
-        let kept: Vec<FieldPath> = units_under(&v.ty, path, self.type_env)
-            .into_iter()
-            .filter(|unit| self.owns_unit(v, unit))
-            .collect();
-        kept.into_iter().rev().fold(k, |cont, unit| {
-            rc_node(is_release, v.clone(), unit, state, cont, source)
+        let type_env = self.type_env();
+        rc_of_units(v, path, state, is_release, k, source, type_env, |unit| {
+            self.owns_unit(v, unit)
         })
     }
 }
 
-/// An expression node with the given source span.
-fn expr_node(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
-    RcExprNode {
-        expr: Arc::new(expr),
-        source: source.clone(),
+/// The code that runs after a point of a body: the continuation there, then the continuation of
+/// each match whose arm holds that point, innermost first. An arm's result is the match's binding,
+/// so control goes on into the match's continuation once the arm ends.
+struct After<'b> {
+    /// The continuation at this point.
+    k: &'b RcExprNode,
+    /// The code that runs once `k` returns: the continuations of the matches whose arms hold this
+    /// point, or `None` at the top of the body.
+    enclosing: Option<&'b After<'b>>,
+}
+
+impl After<'_> {
+    /// Whether the variable named `name` is used in the code that runs after this point.
+    fn uses(&self, name: &FullName) -> bool {
+        is_value_used(name, self.k) || self.enclosing.is_some_and(|outer| outer.uses(name))
     }
 }
 
@@ -1069,7 +1199,7 @@ fn rc_node(
     } else {
         RcExpr::Retain(var, path, state, k)
     };
-    expr_node(expr, source)
+    RcExprNode::new(expr, source.clone())
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
@@ -1077,39 +1207,6 @@ fn prepend_rc(units: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -
     units.into_iter().rev().fold(k, |cont, (var, path)| {
         rc_node(is_release, var, path, RcState::Unknown, cont, &None)
     })
-}
-
-/// Whether the variable named `name` is used again in an expression subtree — any occurrence as a
-/// value: a move, a call callee or argument, an operand of a builtin operation, a closure capture,
-/// a match scrutinee, a destructured container, or the returned variable. A `Retain`/`Release`
-/// names its variable only for reference counting, not as a use, so those are transparent — which
-/// lets a call be recognized as an argument's last use even when the lowering brackets it with
-/// reference counts.
-fn used_later(name: &FullName, node: &RcExprNode) -> bool {
-    grow_stack(|| match node.expr.as_ref() {
-        RcExpr::Ret(v) => v.name == *name,
-        RcExpr::Let(_, rhs, k) => rhs_uses(name, rhs) || used_later(name, k),
-        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => used_later(name, k),
-        RcExpr::Destructure(container, _, _state, k) => {
-            container.name == *name || used_later(name, k)
-        }
-        // `Eval` observes its variable, so it counts as a use.
-        RcExpr::Eval(v, k) => v.name == *name || used_later(name, k),
-    })
-}
-
-/// Whether the variable named `name` occurs as a value in a right-hand side.
-fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
-    match rhs {
-        RcRhs::Var(v) => v.name == *name,
-        RcRhs::App(callee, args) => callee.name == *name || args.iter().any(|a| a.name == *name),
-        RcRhs::Closure(_, caps) => caps.iter().any(|c| c.name == *name),
-        // The op's embedded names are its operand list again (`validate` checks it).
-        RcRhs::Builtin(_, args) => args.iter().any(|a| a.name == *name),
-        RcRhs::Match(scrut, arms) => {
-            scrut.name == *name || arms.iter().any(|arm| used_later(name, &arm.body))
-        }
-    }
 }
 
 // --- unit normalization ---
@@ -1137,49 +1234,19 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
     match node.expr.as_ref() {
         RcExpr::Retain(v, path, state, k) => {
             let k = split_body(k, type_env);
-            split_rc(v, path, *state, false, k, &node.source, type_env)
+            rc_of_units(v, path, *state, false, k, &node.source, type_env, |_| true)
         }
         RcExpr::Release(v, path, state, k) => {
             let k = split_body(k, type_env);
-            split_rc(v, path, *state, true, k, &node.source, type_env)
+            rc_of_units(v, path, *state, true, k, &node.source, type_env, |_| true)
         }
-        RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
-            let arms = arms
-                .iter()
-                .map(|arm| arm.with_body(split_body(&arm.body, type_env)))
-                .collect();
-            expr_node(
-                RcExpr::Let(
-                    x.clone(),
-                    RcRhs::Match(scrut.clone(), arms),
-                    split_body(k, type_env),
-                ),
-                &node.source,
-            )
-        }
-        RcExpr::Let(x, rhs, k) => expr_node(
-            RcExpr::Let(x.clone(), rhs.clone(), split_body(k, type_env)),
-            &node.source,
-        ),
-        RcExpr::Destructure(container, fields, state, k) => expr_node(
-            RcExpr::Destructure(
-                container.clone(),
-                fields.clone(),
-                *state,
-                split_body(k, type_env),
-            ),
-            &node.source,
-        ),
-        RcExpr::Eval(v, k) => expr_node(
-            RcExpr::Eval(v.clone(), split_body(k, type_env)),
-            &node.source,
-        ),
-        RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
+        _ => map_children(node, |child| split_body(child, type_env)),
     }
 }
 
-/// Rebuild a `Retain`/`Release` as one node per unit under its path, preserving the state and span.
-fn split_rc(
+/// A `Retain` (or `Release`, when `is_release`) of `v` at `path` rebuilt over `k` as one node for
+/// each unit under the path that `keep` accepts, preserving the state and span.
+pub(crate) fn rc_of_units(
     v: &RcVar,
     path: &FieldPath,
     state: RcState,
@@ -1187,9 +1254,11 @@ fn split_rc(
     k: RcExprNode,
     source: &Option<Span>,
     type_env: &TypeEnv,
+    keep: impl Fn(&FieldPath) -> bool,
 ) -> RcExprNode {
     units_under(&v.ty, path, type_env)
         .into_iter()
+        .filter(keep)
         .rev()
         .fold(k, |cont, unit| {
             rc_node(is_release, v.clone(), unit, state, cont, source)
@@ -1260,7 +1329,7 @@ fn un_bump(pending: &mut PendingRetains, un_bumped: &References) -> UnBump {
     UnBump::InBracket(retain)
 }
 
-/// What `un_bump` did to `pending`, read back from its answer (P17).
+/// Panics unless `answer`, the answer of `un_bump`, describes what the call did to `pending`.
 ///
 /// The answer is what the walk acts on -- `InBracket` records the release as one that closes its
 /// retain, and the other two mark retains needed -- so an answer that does not describe what the
@@ -1344,12 +1413,14 @@ fn node_id(node: &RcExprNode) -> NodeId {
 /// functions own — the complement of their `RcFunc::borrowed_units`, set by borrow-ification.
 pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
     let owned_units = all_owned_units(prog, type_env);
-    let cancel_body = |vars: &VarTable, body: &RcExprNode| {
+    rewrite_bodies(prog, |vars, body| {
         let mut analysis = CancelAnalysis {
-            vars,
-            prog,
-            owned_units: &owned_units,
-            type_env,
+            model: BodyModel {
+                vars,
+                prog,
+                owned_units: &owned_units,
+                type_env,
+            },
             needed_retains: Set::default(),
             un_bump_releases: Map::default(),
             all_retains: vec![],
@@ -1357,15 +1428,22 @@ pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -
         };
         analysis.walk(body, PendingRetains::default(), true);
         drop_nodes(body, &analysis.cancelled())
-    };
+    })
+}
 
+/// `prog` with every function body and global initializer replaced by what `rewrite` makes of it,
+/// given the table of the variables the body binds.
+pub(crate) fn rewrite_bodies(
+    prog: &RcProgram,
+    rewrite: impl Fn(&VarTable, &RcExprNode) -> RcExprNode,
+) -> RcProgram {
     let funcs = prog
         .funcs
         .values()
         .map(|f| {
             let vars = VarTable::of(f);
             let mut clone = f.clone();
-            clone.body = cancel_body(&vars, &f.body);
+            clone.body = rewrite(&vars, &f.body);
             (f.name.clone(), clone)
         })
         .collect();
@@ -1374,47 +1452,30 @@ pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -
         .iter()
         .map(|g| {
             let vars = VarTable::body_only(&g.init);
-            RcGlobalInit {
-                symbol: g.symbol.clone(),
-                ty: g.ty.clone(),
-                init: cancel_body(&vars, &g.init),
-                owns_initializer: true,
-                owns_storage: true,
-            }
+            g.with_init(rewrite(&vars, &g.init))
         })
         .collect();
-    RcProgram {
-        funcs,
-        globals,
-        roots: prog.roots.clone(),
-    }
+    prog.with_code(funcs, globals)
 }
 
-/// The forward must-analysis for one function: it decides which retain and release nodes to delete.
-struct CancelAnalysis<'a> {
-    /// This function's variables: what binds each one and its type, which decide the objects a
-    /// retain and a release act on, and so which of them pair.
-    vars: &'a VarTable,
+/// What the reference-count nodes and the consumes of one body act on. Every pass that deletes or
+/// moves a retain decides by these answers, so they all judge a retain alike.
+pub(crate) struct BodyModel<'a> {
+    /// The body's variables: what binds each one and its type, which decide the objects a retain
+    /// and a release act on, and so which of them pair.
+    pub(crate) vars: &'a VarTable,
     /// The whole program, so a call resolves to its callee's parameters.
-    prog: &'a RcProgram,
+    pub(crate) prog: &'a RcProgram,
     /// The parameter/capture units the program's functions own, which decide which argument
     /// positions of a call consume.
-    owned_units: &'a Set<VarPath>,
+    pub(crate) owned_units: &'a Set<VarPath>,
     /// The type definitions, for resolving a value's type to its reference-counting units.
-    type_env: &'a TypeEnv,
-    /// Retains that are load-bearing on some path, so they cannot be cancelled.
-    needed_retains: Set<NodeId>,
-    /// The releases each retain is un-bumped by; they are deleted together with the retain.
-    un_bump_releases: Map<NodeId, Vec<NodeId>>,
-    /// Every retain the walk saw, so the cancellable retains are those never marked needed.
-    all_retains: Vec<NodeId>,
-    /// Whether to check the walk's own invariants as it goes.
-    develop_mode: bool,
+    pub(crate) type_env: &'a TypeEnv,
 }
 
-impl<'a> CancelAnalysis<'a> {
-    /// The references a reference-count node of this function acts on, which decide whether a
-    /// release un-bumps a retain (`ownership::acted_references`).
+impl BodyModel<'_> {
+    /// The references a reference-count node of this body acts on, which decide whether a release
+    /// un-bumps a retain (`ownership::acted_references`).
     fn acted_references(&self, v: &RcVar, path: &FieldPath) -> References {
         let references = acted_references(self.vars, self.type_env, v, path);
         // Reference counting is inserted only for a value that holds a reference, and
@@ -1432,6 +1493,88 @@ impl<'a> CancelAnalysis<'a> {
         references
     }
 
+    /// The objects a right-hand side consumes a reference of.
+    pub(crate) fn rhs_consumed_objects(
+        &self,
+        rhs: &RcRhs,
+        result_ty: &Arc<TypeNode>,
+    ) -> Vec<VarPath> {
+        self.rhs_consumed_leaves(rhs, result_ty)
+            .iter()
+            .flat_map(|(var, leaf)| self.leaf_objects(var, leaf))
+            .collect()
+    }
+
+    /// The leaves of its operands a right-hand side consumes a reference of.
+    pub(crate) fn rhs_consumed_leaves(
+        &self,
+        rhs: &RcRhs,
+        result_ty: &Arc<TypeNode>,
+    ) -> Vec<VarPath> {
+        let owns = |p: &RcVar, leaf: &FieldPath| {
+            self.owned_units
+                .contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))
+        };
+        let mut consumed = vec![];
+        rhs_consumes(
+            rhs,
+            result_ty,
+            self.vars,
+            self.prog,
+            self.type_env,
+            &owns,
+            &mut consumed,
+        );
+        consumed
+    }
+
+    /// The objects the leaf of `var` under `path` may belong to.
+    pub(crate) fn leaf_objects(&self, var: &FullName, path: &[usize]) -> Vec<VarPath> {
+        origin(self.vars, self.type_env, var, path)
+            .acted_on()
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    /// The objects a reference-count node on `(v, path)` may act on besides the ones it names: for
+    /// each boxed leaf under the path, the candidates of its origin other than the one the leaf's
+    /// reference is counted under.
+    fn other_objects(&self, v: &RcVar, path: &FieldPath) -> Vec<VarPath> {
+        let mut out = vec![];
+        for leaf in boxed_leaf_paths(&v.ty, self.type_env) {
+            if !leaf.starts_with(path) {
+                continue;
+            }
+            let where_from = origin(self.vars, self.type_env, &v.name, &leaf);
+            let identity = where_from.identity().clone();
+            out.extend(
+                where_from
+                    .candidates()
+                    .into_iter()
+                    .filter(|candidate| **candidate != identity)
+                    .cloned(),
+            );
+        }
+        out
+    }
+}
+
+/// The forward must-analysis for one function: it decides which retain and release nodes to delete.
+struct CancelAnalysis<'a> {
+    /// What the body's nodes act on.
+    model: BodyModel<'a>,
+    /// Retains that are load-bearing on some path, so they cannot be cancelled.
+    needed_retains: Set<NodeId>,
+    /// The releases each retain is un-bumped by; they are deleted together with the retain.
+    un_bump_releases: Map<NodeId, Vec<NodeId>>,
+    /// Every retain the walk saw, so the cancellable retains are those never marked needed.
+    all_retains: Vec<NodeId>,
+    /// Whether to check the walk's own invariants as it goes.
+    develop_mode: bool,
+}
+
+impl<'a> CancelAnalysis<'a> {
     /// Walk a node forward, threading the pending-retain state. `returns_from_func` marks that a terminal
     /// `Ret` here returns from the function — consuming its value and closing no bracket; inside a
     /// match arm it is false, since the arm's `Ret` flows its value to the match binding. Returns the
@@ -1458,7 +1601,7 @@ impl<'a> CancelAnalysis<'a> {
                 let retain = node_id(node);
                 self.all_retains.push(retain);
                 self.un_bump_releases.entry(retain).or_default();
-                let outstanding = self.acted_references(v, path);
+                let outstanding = self.model.acted_references(v, path);
                 pending.push(PendingRetain {
                     node: retain,
                     outstanding,
@@ -1470,9 +1613,9 @@ impl<'a> CancelAnalysis<'a> {
                 // value, so it pairs on the reference it names. On the other objects it may be, it
                 // is a drop: a retain of one of them that is still pending cannot be cancelled
                 // across it.
-                let others = self.other_objects(v, path);
+                let others = self.model.other_objects(v, path);
                 self.consume_objects(&mut pending, &others);
-                let un_bumped = self.acted_references(v, path);
+                let un_bumped = self.model.acted_references(v, path);
                 let before = self.develop_mode.then(|| pending.clone());
                 let answer = un_bump(&mut pending, &un_bumped);
                 if let Some(before) = before {
@@ -1504,18 +1647,16 @@ impl<'a> CancelAnalysis<'a> {
                 self.walk(k, merged, returns_from_func)
             }
             RcExpr::Let(x, rhs, k) => {
-                self.consume_rhs(&mut pending, rhs, &x.ty);
+                let consumed = self.model.rhs_consumed_objects(rhs, &x.ty);
+                self.consume_objects(&mut pending, &consumed);
                 self.walk(k, pending, returns_from_func)
             }
-            RcExpr::Destructure(container, fields, _state, k) => {
-                for leaf in destructure_consumes(container, fields, self.type_env) {
-                    self.consume(&mut pending, &container.name, &leaf);
-                }
+            // A `DestructureUnboxed` consumes nothing (`collect_consumes`), and `Eval` only observes its
+            // variable, so both are transparent to the pending-retain state (any release inserted
+            // after them is a separate `Release` node).
+            RcExpr::DestructureUnboxed(_, _, k) | RcExpr::Eval(_, k) => {
                 self.walk(k, pending, returns_from_func)
             }
-            // `Eval` only observes its variable, so it is transparent to the pending-retain state
-            // (any release inserted after it is a separate `Release` node).
-            RcExpr::Eval(_, k) => self.walk(k, pending, returns_from_func),
             RcExpr::Ret(_) => {
                 if returns_from_func {
                     // A retain still pending at the function's return closes no bracket on this path.
@@ -1528,46 +1669,8 @@ impl<'a> CancelAnalysis<'a> {
         }
     }
 
-    /// Mark every retain the right-hand side consumes as needed.
-    fn consume_rhs(
-        &mut self,
-        pending: &mut PendingRetains,
-        rhs: &RcRhs,
-        result_ty: &Arc<TypeNode>,
-    ) {
-        let owns = |p: &RcVar, leaf: &FieldPath| {
-            self.owned_units
-                .contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))
-        };
-        let mut consumed = vec![];
-        rhs_consumes(
-            rhs,
-            result_ty,
-            self.vars,
-            self.prog,
-            self.type_env,
-            &owns,
-            &mut consumed,
-        );
-        for (var, leaf) in consumed {
-            self.consume(pending, &var, &leaf);
-        }
-    }
-
-    /// A consume of a leaf: every retain pending on an object the leaf may belong to is
-    /// load-bearing here.
-    fn consume(&mut self, pending: &mut PendingRetains, var: &FullName, path: &[usize]) {
-        let objects: Vec<VarPath> = origin(self.vars, self.type_env, var, path)
-            .acted_on()
-            .into_iter()
-            .cloned()
-            .collect();
-        self.consume_objects(pending, &objects);
-    }
-
     /// A consume of some objects: every retain pending on one of them is load-bearing here, so it
     /// leaves the pending list without having been un-bumped.
-    ///
     fn consume_objects(&mut self, pending: &mut PendingRetains, objects: &[VarPath]) {
         pending.retain(|retain| {
             if objects
@@ -1579,28 +1682,6 @@ impl<'a> CancelAnalysis<'a> {
             }
             true
         });
-    }
-
-    /// The objects a reference-count node on `(v, path)` may act on besides the ones it names: for
-    /// each boxed leaf under the path, the candidates of its origin other than the one the leaf's
-    /// reference is counted under.
-    fn other_objects(&self, v: &RcVar, path: &FieldPath) -> Vec<VarPath> {
-        let mut out = vec![];
-        for leaf in boxed_leaf_paths(&v.ty, self.type_env) {
-            if !leaf.starts_with(path) {
-                continue;
-            }
-            let where_from = origin(self.vars, self.type_env, &v.name, &leaf);
-            let identity = where_from.identity().clone();
-            out.extend(
-                where_from
-                    .candidates()
-                    .into_iter()
-                    .filter(|candidate| **candidate != identity)
-                    .cloned(),
-            );
-        }
-        out
     }
 
     /// Merge match arms into their continuation. A retain the match was entered with continues when
@@ -1751,62 +1832,201 @@ fn drop_nodes(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     grow_stack(|| drop_nodes_inner(node, to_delete))
 }
 
-/// One node of `drop_nodes`'s rebuild, over its rebuilt continuation.
+/// One node of `drop_nodes`'s rebuild, over its rebuilt continuation and arms.
 fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     match node.expr.as_ref() {
-        RcExpr::Retain(v, path, state, k) => {
-            let k = drop_nodes(k, to_delete);
-            if to_delete.contains(&node_id(node)) {
-                k
-            } else {
-                expr_node(
-                    RcExpr::Retain(v.clone(), path.clone(), *state, k),
-                    &node.source,
-                )
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k)
+            if to_delete.contains(&node_id(node)) =>
+        {
+            drop_nodes(k, to_delete)
+        }
+        _ => map_children(node, |child| drop_nodes(child, to_delete)),
+    }
+}
+
+// --- retain sinking ---
+
+/// Move each retain `cancel` left in place down every forward path to where that path needs the
+/// reference it adds.
+///
+/// `cancel` deletes a retain only where releases un-bump it on every path. A retain that one path
+/// consumes and another path releases stays, and the path that releases it pays for a retain and a
+/// release that do nothing. Sinking follows each path from the retain on its own. It passes the
+/// nodes that neither consume the object the retain acts on nor release it, and a match none of
+/// whose arms does either; it goes into the arms of any other match. Then, on each path:
+///
+/// - a release that un-bumps the retain is deleted, and the retain with it;
+/// - a node that consumes the object gets a copy of the retain right before it;
+/// - a `Ret` the path reaches, ending a match arm or the body, gets a copy right before it.
+///
+/// A retain moves only where it bumps one reference of one object, so a release un-bumps either all
+/// of it or none of it. What consumes, what un-bumps and which object a reference belongs to are
+/// `BodyModel`'s answers, the ones `cancel` decides by: a pair deleted on a path is a pair `cancel`
+/// would delete if that path were the only one.
+///
+/// The program returned is marked `RcProgram::retains_sunk`, which `provenance::analyze_program`
+/// refuses.
+///
+/// # Examples
+/// With `f` consuming its argument, the body
+/// ```text
+/// retain x
+/// let r = match c { case 0: release x; ret y, case 1: let z = f(x); ret z }
+/// ```
+/// becomes
+/// ```text
+/// let r = match c { case 0: ret y, case 1: retain x; let z = f(x); ret z }
+/// ```
+pub(crate) fn sink_retains(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
+    let owned_units = all_owned_units(prog, type_env);
+    let mut sunk = rewrite_bodies(prog, |vars, body| {
+        let sinker = RetainSinker {
+            model: BodyModel {
+                vars,
+                prog,
+                owned_units: &owned_units,
+                type_env,
+            },
+        };
+        sinker.rewrite(body)
+    });
+    sunk.retains_sunk = true;
+    sunk
+}
+
+/// The rewrite `sink_retains` makes of one body.
+struct RetainSinker<'a> {
+    /// What the body's nodes act on.
+    model: BodyModel<'a>,
+}
+
+/// A retain on its way down: the retain node, and the object it bumps one reference of.
+struct SinkingRetain<'n> {
+    /// The retain node, whose copies are placed where a path needs the reference.
+    retain: &'n RcExprNode,
+    /// The object the retain bumps one reference of.
+    object: VarPath,
+}
+
+impl SinkingRetain<'_> {
+    /// A copy of the retain placed right before `node`, which is where a path that has not
+    /// un-bumped it needs the reference.
+    ///
+    /// # Arguments
+    /// * `met_object` — whether the path met a node that consumes or releases the retain's
+    ///   object; it becomes `Sunk::met_object`.
+    fn placed_before(&self, node: &RcExprNode, met_object: bool) -> Sunk {
+        Sunk {
+            node: map_continuation(self.retain, |_| node.clone()),
+            met_object,
+        }
+    }
+}
+
+/// A node after a retain has sunk into it.
+struct Sunk {
+    /// The node, with the retain placed or deleted on each of its paths.
+    node: RcExprNode,
+    /// Whether some path through the node met a node that consumes or releases the retain's object.
+    /// Where none did, every copy of the retain stands before a `Ret`.
+    met_object: bool,
+}
+
+impl RetainSinker<'_> {
+    /// Rewrite a node, its continuation and its arms.
+    fn rewrite(&self, node: &RcExprNode) -> RcExprNode {
+        grow_stack(|| self.rewrite_inner(node))
+    }
+
+    /// One node of the rewrite. A retain sinks after what follows it has been rewritten, so the
+    /// retains below it have reached their places and the releases they paired with are gone.
+    fn rewrite_inner(&self, node: &RcExprNode) -> RcExprNode {
+        let rewritten = map_children(node, |child| self.rewrite(child));
+        let RcExpr::Retain(v, path, _, k) = rewritten.expr.as_ref() else {
+            return rewritten;
+        };
+        let references = self.model.acted_references(v, path);
+        let Some(object) = references.sole_object() else {
+            return rewritten;
+        };
+        let retain = SinkingRetain {
+            retain: &rewritten,
+            object: object.clone(),
+        };
+        self.sink(&retain, k).node
+    }
+
+    /// Sink a retain into `node`, which follows it on the path it is moving down.
+    fn sink(&self, r: &SinkingRetain, node: &RcExprNode) -> Sunk {
+        grow_stack(|| self.sink_inner(r, node))
+    }
+
+    /// One node of a retain's way down.
+    fn sink_inner(&self, r: &SinkingRetain, node: &RcExprNode) -> Sunk {
+        let consumes = |objects: Vec<VarPath>| objects.contains(&r.object);
+        match node.expr.as_ref() {
+            RcExpr::Ret(_) => r.placed_before(node, false),
+            RcExpr::Release(v, path, _, k) => {
+                // A release whose object is path-dependent is a drop of the other objects it may
+                // be.
+                if consumes(self.model.other_objects(v, path)) {
+                    return r.placed_before(node, true);
+                }
+                let un_bumped = self.model.acted_references(v, path);
+                if un_bumped.sole_object() == Some(&r.object) {
+                    return Sunk {
+                        node: k.clone(),
+                        met_object: true,
+                    };
+                }
+                // A release reaching more than the retain bumped un-bumps a reference something
+                // else added.
+                if un_bumped.names(&r.object) {
+                    return r.placed_before(node, true);
+                }
+                self.sink_past(r, node)
             }
-        }
-        RcExpr::Release(v, path, state, k) => {
-            let k = drop_nodes(k, to_delete);
-            if to_delete.contains(&node_id(node)) {
-                k
-            } else {
-                expr_node(
-                    RcExpr::Release(v.clone(), path.clone(), *state, k),
-                    &node.source,
-                )
+            RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => {
+                let sunk: Vec<Sunk> = arms.iter().map(|arm| self.sink(r, &arm.body)).collect();
+                if !sunk.iter().any(|arm| arm.met_object) {
+                    return self.sink_past(r, node);
+                }
+                let arms = arms
+                    .iter()
+                    .zip(sunk)
+                    .map(|(arm, sunk)| arm.with_body(sunk.node))
+                    .collect();
+                Sunk {
+                    node: RcExprNode::new(
+                        RcExpr::Let(x.clone(), RcRhs::Match(scrutinee.clone(), arms), k.clone()),
+                        node.source.clone(),
+                    ),
+                    met_object: true,
+                }
             }
+            RcExpr::Let(x, rhs, _) if consumes(self.model.rhs_consumed_objects(rhs, &x.ty)) => {
+                r.placed_before(node, true)
+            }
+            RcExpr::Let(..)
+            | RcExpr::DestructureUnboxed(..)
+            | RcExpr::Retain(..)
+            | RcExpr::Eval(..) => self.sink_past(r, node),
         }
-        RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
-            let arms = arms
-                .iter()
-                .map(|arm| arm.with_body(drop_nodes(&arm.body, to_delete)))
-                .collect();
-            expr_node(
-                RcExpr::Let(
-                    x.clone(),
-                    RcRhs::Match(scrut.clone(), arms),
-                    drop_nodes(k, to_delete),
-                ),
-                &node.source,
-            )
-        }
-        RcExpr::Let(x, rhs, k) => expr_node(
-            RcExpr::Let(x.clone(), rhs.clone(), drop_nodes(k, to_delete)),
-            &node.source,
-        ),
-        RcExpr::Destructure(container, fields, state, k) => expr_node(
-            RcExpr::Destructure(
-                container.clone(),
-                fields.clone(),
-                *state,
-                drop_nodes(k, to_delete),
-            ),
-            &node.source,
-        ),
-        RcExpr::Eval(v, k) => expr_node(
-            RcExpr::Eval(v.clone(), drop_nodes(k, to_delete)),
-            &node.source,
-        ),
-        RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
+    }
+
+    /// `node` with the retain sunk into its continuation, where every path through `node` goes on.
+    /// `node` is no `Ret`, which has no continuation.
+    fn sink_past(&self, r: &SinkingRetain, node: &RcExprNode) -> Sunk {
+        assert!(
+            !matches!(node.expr.as_ref(), RcExpr::Ret(_)),
+            "a retain sinks past a `Ret`"
+        );
+        let mut met_object = false;
+        let node = map_continuation(node, |k| {
+            let sunk = self.sink(r, k);
+            met_object = sunk.met_object;
+            sunk.node
+        });
+        Sunk { node, met_object }
     }
 }

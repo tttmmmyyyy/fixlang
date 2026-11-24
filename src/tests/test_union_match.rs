@@ -1,10 +1,10 @@
 // Memory-safety tests for `match`: on a boxed union with a boxed payload, and on a scrutinee an arm
 // body reads.
-// Matching a boxed union extracts the payload with `get_union_value`, whose boxed path retains the
-// payload and releases the scrutinee container. With a boxed payload, an arm that drops the payload,
-// and a scrutinee still used after the match, must leave every value released exactly once — checked
-// under valgrind. `test_match_option` matches the unboxed `Std::Option`, so the boxed-union
-// container's retain/release is never exercised; these tests use an explicit `box union`.
+// A variant arm of a match on a boxed union reads the payload out of the scrutinee, which the match
+// borrows, and the scrutinee is released where it is last used. With a boxed payload, an arm that
+// drops the payload, and a scrutinee still used after the match, must leave every value released
+// exactly once — checked under valgrind. `test_match_option` matches the unboxed `Std::Option`,
+// whose payload the arm moves out of the scrutinee; these tests use an explicit `box union`.
 
 #[cfg(test)]
 mod union_match_tests {
@@ -30,13 +30,13 @@ main : IO () = (
     let s2 = match u2 { some(a) => 99, none(_) => -1 };
     assert_eq(|_|"payload dropped", s2, 99);;
 
-    // scrutinee used after the match (retained before, released inside the arm)
+    // scrutinee used after the match
     let u3 = BoxOpt::some([7, 8, 9]);
     let s3 = match u3 { some(a) => a.@size, none(_) => -1 };
     let s3b = match u3 { some(a) => a.@(2), none(_) => -1 };
     assert_eq(|_|"used after match", s3 + s3b, 12);;
 
-    // none arm carries no payload; the scrutinee container is still released
+    // none arm reads no payload; the scrutinee is still released
     let u4 : BoxOpt = BoxOpt::none();
     let s4 = match u4 { some(a) => a.@size, none(_) => 0 };
     assert_eq(|_|"none arm", s4, 0);;
@@ -45,17 +45,17 @@ main : IO () = (
 );
 "#;
 
-    // A `match` consumes its scrutinee at the head of the arm it takes — a boxed union releases the
-    // container there, an unboxed union lets the payload carry it away — so an arm body that reads
-    // the scrutinee itself reads it after that consumption and needs its own reference. An arm that
-    // does not read it must release the extra reference exactly once, on top of the container release.
+    // A `match` borrows a boxed scrutinee, which each arm releases where it last reads it, and
+    // consumes an unboxed one at the head of the arm it takes, where the payload carries it away.
+    // So an arm body that reads an unboxed scrutinee itself reads it after that consumption and
+    // needs its own reference, which an arm that does not read it must release exactly once.
     const SCRUTINEE_READ_IN_ARM_SOURCE: &str = r#"
 module Main;
 
 type BoxOpt = box union { some : Array I64, none : () };
 type UnboxOpt = unbox union { some : Array I64, none : () };
 
-// The arm body reads the scrutinee after the arm's head released the container.
+// The arm body reads the scrutinee after reading the payload out of it.
 boxed_in_arm : BoxOpt -> I64 = |u| (
     match u {
         some(a) => a.@(0) + (if u.is_some { 1 } else { 0 }),

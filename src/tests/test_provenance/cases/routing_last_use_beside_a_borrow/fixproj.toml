@@ -1,0 +1,6 @@
+[general]
+name = "prov-routing-last-use-beside-a-borrow"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

@@ -3,8 +3,8 @@
 // pattern omits is bound all the same, and it and a field the pattern binds but the continuation never
 // uses are each released once as a dead binding. With boxed (`Array`) fields, a dropped field, and a
 // container still read after the destructure, every value must be released exactly once — checked
-// under valgrind. `test_struct_destructure` destructures a `box struct` (fields retained, container
-// released), so the unboxed move-out and the dropped-field releases are exercised only here.
+// under valgrind. `test_struct_destructure` destructures a `box struct`, whose fields getters read,
+// so the unboxed move-out and the dropped-field releases are exercised only here.
 
 #[cfg(test)]
 mod unbox_destructure_tests {

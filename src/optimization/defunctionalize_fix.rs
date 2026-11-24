@@ -27,20 +27,20 @@
 
 use crate::{
     ast::{
-        expr::{expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_var, Expr, ExprNode},
+        expr::{expr_app_typed, expr_var_typed, Expr, ExprNode},
         name::FullName,
         program::{Program, Symbol},
         traverse::{ExprVisitor, StartVisitResult, VisitState},
         types::{type_arrow, TyCon, TyConInfo},
     },
     constants::{FIX_CAP_PARAM_PREFIX, FIX_CAP_PREFIX, FIX_DEFUNCT_SUFFIX},
+    fixstd::stdlib::is_std_fix,
     misc::{Map, Set},
     optimization::{
         capture_struct::{captured_fields, CaptureStruct},
         let_elimination,
         minted_names::{insert_minted_symbol, names_of_globals, MintedNames},
         rename::substitute_free_name,
-        uncurry::{internalize_let_to_var_at_head, is_std_fix},
         unique_local_names,
     },
     tool::stopwatch::StopWatch,
@@ -239,7 +239,7 @@ impl FixDefunctionalizer {
         // Name the lifted function first: the capture struct is named after it, so that a value of
         // that capture struct says which function consumes it.
         let func_name = self.minted_names.fresh();
-        let cap = CaptureStruct::new(FIX_CAP_PREFIX, &func_name, &cap_fields);
+        let cap = CaptureStruct::new(FIX_CAP_PREFIX, &func_name, &cap_fields, true);
         // The capture parameter must not clash with a captured field name. A captured field can
         // itself be an outer lift's `#fixcap..` parameter that this lambda closed over, so `cap`'s
         // destructure would bind a variable of that name and shadow this parameter — then `G(cap)`
@@ -250,11 +250,10 @@ impl FixDefunctionalizer {
             .unwrap();
 
         // The recursive value `G(cap)`, of type `a -> b`.
-        let g_ref =
-            expr_var(func_name.clone(), None).set_type(type_arrow(cap.ty.clone(), ab_ty.clone()));
+        let g_ref = expr_var_typed(func_name.clone(), type_arrow(cap.ty.clone(), ab_ty.clone()));
         let self_replacement = expr_app_typed(
             g_ref.clone(),
-            vec![expr_var(cap_param_name.clone(), None).set_type(cap.ty.clone())],
+            vec![expr_var_typed(cap_param_name.clone(), cap.ty.clone())],
         );
 
         // `body[self := G(cap)]`: capture-avoiding, and it leaves shadowed occurrences of `self`
@@ -262,16 +261,7 @@ impl FixDefunctionalizer {
         let body = substitute_free_name(&f_body, &self_name, &self_replacement);
 
         // `G = |cap| let FixCap { .. } = cap; body`.
-        let g_body = expr_let_typed(
-            cap.pattern(),
-            expr_var(cap_param_name.clone(), None).set_type(cap.ty.clone()),
-            body,
-        );
-        let g_expr = internalize_let_to_var_at_head(&expr_abs_typed(
-            var_var(cap_param_name),
-            cap.ty.clone(),
-            g_body,
-        ));
+        let g_expr = cap.lifted_function(&cap_param_name, body);
 
         let cap_expr = cap.struct_expr();
         self.lifted.push(LiftedFix {

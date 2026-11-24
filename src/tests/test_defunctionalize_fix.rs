@@ -10,7 +10,7 @@ use crate::{configuration::Configuration, tests::test_util::test_source};
 // gives an indirect call (see `return_abi`), and above it on the loop this pass forms. The rest
 // check that the rewrite computes what the closure form computes.
 
-// The `fix` argument written inline, the common idiom.
+/// The `fix` argument written inline, the common idiom.
 #[test]
 fn test_deep_fix_sret_return_runs_in_constant_stack() {
     let source = r#"
@@ -35,8 +35,8 @@ fn test_deep_fix_sret_return_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// The `fix` argument is a `let`-bound lambda applied to `fix` at two sites, so it cannot be inlined
-// into either call; the pass resolves the binding and lifts each site.
+/// The `fix` argument is a `let`-bound lambda applied to `fix` at two sites, so it cannot be inlined
+/// into either call; the pass resolves the binding and lifts each site.
 #[test]
 fn test_multi_use_let_bound_fix_runs_in_constant_stack() {
     let source = r#"
@@ -63,7 +63,7 @@ fn test_multi_use_let_bound_fix_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// The `fix` argument is a global function.
+/// The `fix` argument is a global function.
 #[test]
 fn test_global_function_fix_runs_in_constant_stack() {
     let source = r#"
@@ -85,14 +85,14 @@ fn test_global_function_fix_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// Shape variety that the resolution and lifting must all compute correctly: a `fix` nested inside a
-// `fix`, two distinct `fix` lambdas of the same type, a global fixed at two sites (deduplicated to one
-// lifted function), a global that fixes itself and a pair that fix each other (deduplication must make
-// compilation terminate), a `fix` argument that is a `let`-bound value but not a bare lambda, and a
-// `fix` applied to a function parameter — both left as a closure `fix`, the first so a heavy
-// initializer is not duplicated, the second because the argument is only known at run time — and a
-// recursion functional that passes `self` by value, exercising the partial-application closure the
-// substitution leaves for a non-tail use.
+/// Shape variety that the resolution and lifting must all compute correctly: a `fix` nested inside a
+/// `fix`, two distinct `fix` lambdas of the same type, a global fixed at two sites (deduplicated to one
+/// lifted function), a global that fixes itself and a pair that fix each other (deduplication must make
+/// compilation terminate), a `fix` argument that is a `let`-bound value but not a bare lambda, and a
+/// `fix` applied to a function parameter — both left as a closure `fix`, the first so a heavy
+/// initializer is not duplicated, the second because the argument is only known at run time — and a
+/// recursion functional that passes `self` by value, exercising the partial-application closure the
+/// substitution leaves for a non-tail use.
 #[test]
 fn test_fix_resolution_variants_compute_correctly() {
     let source = r#"
@@ -166,11 +166,11 @@ fn test_fix_resolution_variants_compute_correctly() {
     test_source(source, Configuration::develop_mode());
 }
 
-// An inner `fix` that calls the outer `fix`'s self-reference. Lifting the outer `fix` names its
-// capture parameter `#fixcap..`; the inner `fix` closes over that parameter, so the inner capture
-// struct carries a field of the same name. The inner lifted function's own capture parameter must
-// stay distinct from that field, or destructuring the capture shadows the parameter and the inner
-// self-call forwards the outer capture struct in its place.
+/// An inner `fix` that calls the outer `fix`'s self-reference. Lifting the outer `fix` names its
+/// capture parameter `#fixcap..`; the inner `fix` closes over that parameter, so the inner capture
+/// struct carries a field of the same name. The inner lifted function's own capture parameter must
+/// stay distinct from that field, or destructuring the capture shadows the parameter and the inner
+/// self-call forwards the outer capture struct in its place.
 #[test]
 fn test_nested_fix_inner_calls_outer_self() {
     let source = r#"
@@ -191,13 +191,13 @@ fn test_nested_fix_inner_calls_outer_self() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A captured boxed value crosses the direct self-call: the capture struct owns a reference, so the
-// rewrite must keep retain/release balanced or the value leaks or is freed early. Under
-// `develop_mode` the program runs under valgrind, which surfaces such an imbalance. Each function
-// captures a boxed value read across the recursion and still live after the `fix` returns: an
-// `Array` read every iteration, `self` escaping as a closure over the capture, one `let`-bound
-// lambda fixed at two sites (each rebuilding its own capture of the shared array), and a nested
-// `Array` of `Array`.
+/// A captured boxed value crosses the direct self-call: the capture struct owns a reference, so the
+/// rewrite must keep retain/release balanced or the value leaks or is freed early. Under
+/// `develop_mode` the program runs under valgrind, which surfaces such an imbalance. Each function
+/// captures a boxed value read across the recursion and still live after the `fix` returns: an
+/// `Array` read every iteration, `self` escaping as a closure over the capture, one `let`-bound
+/// lambda fixed at two sites (each rebuilding its own capture of the shared array), and a nested
+/// `Array` of `Array`.
 #[test]
 fn test_fix_boxed_capture_is_memory_safe() {
     let source = r#"
@@ -250,11 +250,11 @@ fn test_fix_boxed_capture_is_memory_safe() {
     test_source(source, Configuration::develop_mode());
 }
 
-// The `fix` argument captures a variable introduced by a non-trivial binder: a `match`-arm pattern
-// variable, a tuple destructure, and a struct destructure. Each captured name must appear in the
-// lifted capture struct with the type it has in scope, so lifting must compute the same value as the
-// closure form. A boxed array captured from a `match` arm and read across the recursion also checks
-// reference-count balance under valgrind.
+/// The `fix` argument captures a variable introduced by a non-trivial binder: a `match`-arm pattern
+/// variable, a tuple destructure, and a struct destructure. Each captured name must appear in the
+/// lifted capture struct with the type it has in scope, so lifting must compute the same value as the
+/// closure form. A boxed array captured from a `match` arm and read across the recursion also checks
+/// reference-count balance under valgrind.
 #[test]
 fn test_fix_captures_from_nontrivial_binders_compute_correctly() {
     let source = r#"
@@ -311,9 +311,9 @@ fn test_fix_captures_from_nontrivial_binders_compute_correctly() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A cycle of six globals that fix each other round-robin. Each lifted function is deduplicated per
-// global, so the `run` fixpoint terminates instead of lifting without end. Each hop adds one, so
-// `fix(g0)(20)` counts down to 0 and yields 20, which also checks the rewrite preserves the value.
+/// A cycle of six globals that fix each other round-robin. Each lifted function is deduplicated per
+/// global, so the `run` fixpoint terminates instead of lifting without end. Each hop adds one, so
+/// `fix(g0)(20)` counts down to 0 and yields 20, which also checks the rewrite preserves the value.
 #[test]
 fn test_mutual_global_fix_cycle_terminates() {
     let source = r#"
@@ -344,8 +344,8 @@ fn test_mutual_global_fix_cycle_terminates() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A saturated tail self-call buried below a `let` chain inside a `match` arm still lowers to a direct
-// self-call, so it runs in constant stack.
+/// A saturated tail self-call buried below a `let` chain inside a `match` arm still lowers to a direct
+/// self-call, so it runs in constant stack.
 #[test]
 fn test_deep_tail_position_fix_runs_in_constant_stack() {
     let source = r#"
@@ -377,8 +377,8 @@ fn test_deep_tail_position_fix_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A `fix` whose recursion takes three arguments (four with the capture struct) lowers each self-call
-// to a direct call, so it runs in constant stack.
+/// A `fix` whose recursion takes three arguments (four with the capture struct) lowers each self-call
+/// to a direct call, so it runs in constant stack.
 #[test]
 fn test_three_arg_fix_runs_in_constant_stack() {
     let source = r#"
@@ -403,8 +403,8 @@ fn test_three_arg_fix_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// Two nested `fix`es where the inner one carries the deep recursion. The outer entry folds into the
-// inner and the inner self-call stays direct, so it runs in constant stack.
+/// Two nested `fix`es where the inner one carries the deep recursion. The outer entry folds into the
+/// inner and the inner self-call stays direct, so it runs in constant stack.
 #[test]
 fn test_nested_fix_inner_deep_runs_in_constant_stack() {
     let source = r#"
@@ -432,9 +432,9 @@ fn test_nested_fix_inner_deep_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// Captures of exotic value types, an empty capture, `self` used both as a tail self-call and as a
-// bare value, a polymorphic `fix` instantiated at two types, and a `fix` inside an iterator fold.
-// Each must compute the same value the closure form does.
+/// Captures of exotic value types, an empty capture, `self` used both as a tail self-call and as a
+/// bare value, a polymorphic `fix` instantiated at two types, and a `fix` inside an iterator fold.
+/// Each must compute the same value the closure form does.
 #[test]
 fn test_fix_exotic_captures_and_dual_use_self_compute_correctly() {
     let source = r#"
@@ -513,11 +513,11 @@ fn test_fix_exotic_captures_and_dual_use_self_compute_correctly() {
     test_source(source, Configuration::develop_mode());
 }
 
-// `self` and boxed captures crossing the direct self-call in demanding ways: `self` escaping into a
-// returned closure and into a returned boxed struct field called after the `fix` returns, a
-// triple-nested `fix` whose innermost closes over both outer self-references and a boxed capture, a
-// boxed state plus an array threaded through and returned together, and two `fix` expressions sharing
-// one boxed capture. `develop_mode` runs this under valgrind, so an unbalanced retain/release shows.
+/// `self` and boxed captures crossing the direct self-call in demanding ways: `self` escaping into a
+/// returned closure and into a returned boxed struct field called after the `fix` returns, a
+/// triple-nested `fix` whose innermost closes over both outer self-references and a boxed capture, a
+/// boxed state plus an array threaded through and returned together, and two `fix` expressions sharing
+/// one boxed capture. `develop_mode` runs this under valgrind, so an unbalanced retain/release shows.
 #[test]
 fn test_fix_self_escape_and_boxed_captures_are_memory_safe() {
     let source = r#"
@@ -591,13 +591,11 @@ fn test_fix_self_escape_and_boxed_captures_are_memory_safe() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A closure the closure specializer copies a function for also reaches the capture list this pass
-// mints. The specializer declines to follow a field of that capture list, because another pass built
-// it, so a copy receiving the closure as a bare capture list has to wrap it back for that field
-// while the chain narrows it everywhere else. `middle` holds both ends: it hands `op` to `terminal`,
-// which calls it, and stores `op` into the capture list of its own `fix` body.
+/// A function handed to a callee also reaches the capture struct this pass mints. `middle` holds
+/// both ends: it hands `op` to `terminal`, which calls it, and stores `op` into the capture struct of
+/// its own `fix` body.
 #[test]
-fn test_closure_specialized_argument_reaches_a_fix_capture_list() {
+fn test_a_function_handed_to_a_callee_and_captured_by_a_fix_body_computes_both() {
     let source = r#"
     module Main;
 

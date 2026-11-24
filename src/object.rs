@@ -927,14 +927,13 @@ impl ObjectFieldType {
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         variant_ty: &Arc<TypeNode>,
-        state: RcState,
     ) -> Object<'c> {
         let value =
             ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), variant_ty);
         if union.is_box(gc.type_env()) {
             // If the union is boxed, retain the value and release the union.
-            gc.retain(value.clone(), state);
-            gc.release(union, state);
+            gc.retain(value.clone(), RcState::Unknown);
+            gc.release(union, RcState::Unknown);
         } else {
             // If the union is unbox, retaining and releasing cancel each other out, so does nothing.
         }
@@ -1048,47 +1047,33 @@ impl ObjectFieldType {
         struct_obj
     }
 
-    /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
-    /// the struct: each returned field owns its reference and so outlives the struct it came from.
-    /// A boxed struct keeps the fields left out of `field_indices`, and its release drops them. An
-    /// unboxed struct has to be taken apart whole, so `field_indices` lists each of its unpunched
+    /// Take the unboxed `struct_obj` apart into owned objects, one for each field `field_indices`
+    /// lists: the fields are the struct's references, so each one taken out is released by whoever
+    /// receives it. The struct is taken apart whole, so `field_indices` lists each of its unpunched
     /// fields.
-    pub fn get_struct_fields<'c, 'm>(
+    pub fn take_unboxed_struct_fields<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
         field_indices: &[u32],
-        state: RcState,
     ) -> Vec<Object<'c>> {
-        // Collect unretained (but cloned) fields.
-        // We need clone here since lifetime of returned fields may be longer than that of struct object.
-        let mut fields = vec![];
-        for field_idx in field_indices {
-            // Move the field out as an object; it carries its own parts, so it outlives the struct.
-            let field = ObjectFieldType::move_out_struct_field(gc, struct_obj, *field_idx);
-            fields.push(field);
-        }
-
-        if struct_obj.is_box(gc.type_env()) {
-            // If struct is boxed, simply retain fields and release the struct.
-            for field in &fields {
-                gc.retain(field.clone(), state);
-            }
-            gc.release(struct_obj.clone(), state);
-        } else {
-            // The struct is unboxed, so its fields are its references, and each one taken out is
-            // released by whoever receives it.
-            assert!(
-                struct_obj.ty.lists_every_unpunched_field(
-                    field_indices.iter().map(|i| *i as usize),
-                    gc.type_env()
-                ),
-                "the unboxed `{}` is taken apart whole, but fields {:?} of it are taken",
-                struct_obj.ty.to_string(),
-                field_indices
-            );
-        }
-
-        fields
+        assert!(
+            !struct_obj.is_box(gc.type_env()),
+            "the boxed `{}` is taken apart as if it were unboxed",
+            struct_obj.ty.to_string()
+        );
+        assert!(
+            struct_obj.ty.lists_every_unpunched_field(
+                field_indices.iter().map(|i| *i as usize),
+                gc.type_env()
+            ),
+            "the unboxed `{}` is taken apart whole, but fields {:?} of it are taken",
+            struct_obj.ty.to_string(),
+            field_indices
+        );
+        field_indices
+            .iter()
+            .map(|field_idx| ObjectFieldType::move_out_struct_field(gc, struct_obj, *field_idx))
+            .collect()
     }
 }
 
@@ -1594,7 +1579,7 @@ fn primitive_field_types(name: &FullName) -> &'static [ObjectFieldType] {
             (make_f64_ty(), vec![ObjectFieldType::F64]),
         ]
         .into_iter()
-        .map(|(ty, fields)| (ty.toplevel_tycon().unwrap().name.clone(), fields))
+        .map(|(ty, fields)| (ty.expect_toplevel_tycon().name.clone(), fields))
         .collect()
     });
     fields_by_name
@@ -1636,7 +1621,7 @@ pub fn ty_to_object_ty(
             .field_types
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
     } else {
-        let tc = ty.toplevel_tycon().unwrap();
+        let tc = ty.expect_toplevel_tycon();
         // A value of an unwrapped newtype is a value of its one field, so no value is laid out at
         // one. Reaching here with one means a type escaped the rewrite, and its values would
         // silently be laid out as the struct they were to stop being: an unboxed struct of one

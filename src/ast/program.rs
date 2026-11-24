@@ -1,7 +1,7 @@
 use crate::ast::deprecation::{DeprecationInfo, DeprecationStatement};
 use crate::ast::equality::Equality;
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType};
-use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
+use crate::ast::expr::{expr_var_typed, Expr, ExprNode, Var};
 use crate::ast::import::{is_accessible, ImportItem, ImportStatement};
 use crate::ast::kind_scope::KindEnv;
 use crate::ast::name::{is_private_name, FullName, Name, NameSpace};
@@ -36,7 +36,7 @@ use crate::error::{
 };
 use crate::ffi::{c_entry_point_signature, unpassable_variadic_type_msg, CSignature};
 use crate::fixstd::builtin::{
-    boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
+    boxed_trait_instance, builtin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
     struct_act_const, struct_act_identity, struct_act_tuple2, struct_get, struct_mod,
     struct_plug_in, struct_punch, struct_set, tuple_defn, union_as, union_is, union_mod_function,
     union_new,
@@ -605,15 +605,21 @@ impl Program {
         None
     }
 
-    /// The expressions the entry point and the exported functions were instantiated as.
+    /// The expressions the entry point and the exported functions were instantiated as: the entry
+    /// point's first, if the program has one, then one for each export statement, in order.
+    ///
+    /// Panics where an export statement has not been instantiated yet.
     pub fn root_value_exprs(&self) -> Vec<&Arc<ExprNode>> {
         self.entry_io_value
             .iter()
-            .chain(
-                self.export_statements
-                    .iter()
-                    .filter_map(|stmt| stmt.value_expr.as_ref()),
-            )
+            .chain(self.export_statements.iter().map(|stmt| {
+                stmt.value_expr.as_ref().unwrap_or_else(|| {
+                    panic!(
+                        "the exported value `{}` is read before it is instantiated",
+                        stmt.value_name.to_string()
+                    )
+                })
+            }))
             .collect()
     }
 
@@ -632,6 +638,19 @@ impl Program {
             .iter()
             .map(|expr| expr.get_var().name.clone())
             .collect()
+    }
+
+    /// The symbols the root values reach: the root values themselves, and every symbol the body of
+    /// a reached symbol refers to.
+    pub fn reached_symbol_names(&self) -> Set<FullName> {
+        let mut reached: Set<FullName> = Set::default();
+        let mut stack = self.root_value_names();
+        while let Some(name) = stack.pop() {
+            if reached.insert(name.clone()) {
+                stack.extend(self.symbols[&name].expr.as_ref().unwrap().free_vars());
+            }
+        }
+        reached
     }
 
     /// Whether the entity named `name` is private: its name, or the name of its namespace or module,
@@ -882,7 +901,7 @@ impl Program {
     /// the environment.
     pub fn calculate_type_env(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        let mut tycons = bulitin_tycons();
+        let mut tycons = builtin_tycons();
         let mut aliases: Map<TyCon, TyAliasInfo> = Map::default();
         for type_decl in &mut self.type_defns {
             // Set kinds of type variables in the right hand side of type definition.
@@ -1656,7 +1675,7 @@ impl Program {
         };
         let symbol_name = self.require_instantiation(&value_name, &required_ty)?;
         self.instantiate_symbols(tc)?;
-        let expr = expr_var(symbol_name, None).set_type(required_ty);
+        let expr = expr_var_typed(symbol_name, required_ty);
         Ok((expr, exported_ty))
     }
 

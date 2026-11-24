@@ -11,15 +11,17 @@
 //! binding in scope, or to a global — a function or a global value, both referenceable by name (a
 //! direct call names its callee by that name); every `Retain`/`Release` names one
 //! reference-counting unit of its variable; a function carries a capture parameter exactly for the
-//! closure ABI; every match has at least one arm, with any catch-all arm last; a `Builtin`
+//! closure ABI; every match has at least one arm, with any catch-all arm last, and its arms bind
+//! a variable exactly over an unboxed scrutinee; a read of a payload known to be the variant the
+//! union holds sits in the arm that selected that variant; a `Builtin`
 //! operation's embedded operand names match its argument list; a closure value stores the capture
-//! layout its target function projects; and a `Destructure` of an unboxed container names each of
-//! its fields.
+//! layout its target function projects; the container of a `DestructureUnboxed` is unboxed, and
+//! the node names each of its fields; and no `Release` names a value its read lends.
 
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::fixstd::builtin::{CaptureProjectOp, NoStorageValueOp};
+use crate::fixstd::builtin::{CaptureProjectOp, NoStorageValueOp, UnionAsOp};
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar};
 use crate::rc_ir::ownership::{names_every_field, rc_units};
@@ -171,7 +173,7 @@ fn for_each_rhs(node: &RcExprNode, f: &mut impl FnMut(&RcRhs)) {
         RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
         | RcExpr::Eval(_, k)
-        | RcExpr::Destructure(_, _, _, k) => for_each_rhs(k, f),
+        | RcExpr::DestructureUnboxed(_, _, k) => for_each_rhs(k, f),
         RcExpr::Ret(_) => {}
     })
 }
@@ -200,9 +202,17 @@ struct Validator<'a, 'b> {
     /// The names bound to a value made by `NoStorageValueOp`. A value of a type that occupies no
     /// storage holds no boxed value, since a pointer takes storage, so no reference count acts on
     /// one. `lower_lam` leaves such a capture out of the closure on that ground, and this is where
-    /// the ground is checked: the passes that run between the stages this validator is called at —
-    /// reference-count insertion, `borrow_ify`, `cancel` — must place no node on one.
+    /// the ground is checked: every pass that runs between the stages this validator is called at
+    /// must place no node on one.
     made_without_storage: Set<FullName>,
+    /// The names bound to a value its read lends (`BuiltinOp::lends`). A lent value holds no
+    /// reference of its own, so nothing releases it: a release naming one would drop the
+    /// reference its container holds.
+    lent: Set<FullName>,
+    /// The variant each scrutinee is known to hold at the node being checked: the tag of the arm
+    /// the node is in, for every match around it. A read that checks no tag
+    /// (`UnionAsOp::variant_is_known`) reads the variant recorded here.
+    selected_variants: Map<FullName, usize>,
     /// The names currently in scope, which a use must resolve to.
     scope: Set<FullName>,
 }
@@ -232,6 +242,8 @@ impl<'a, 'b> Validator<'a, 'b> {
             location,
             bound_in,
             made_without_storage: Set::default(),
+            lent: Set::default(),
+            selected_variants: Map::default(),
             scope: Set::default(),
         }
     }
@@ -327,6 +339,9 @@ impl<'a, 'b> Validator<'a, 'b> {
                     if op.as_any().downcast_ref::<NoStorageValueOp>().is_some() {
                         self.made_without_storage.insert(x.name.clone());
                     }
+                    if op.lends() {
+                        self.lent.insert(x.name.clone());
+                    }
                 }
                 self.bind(&x.name);
                 self.check_expr(k);
@@ -343,6 +358,15 @@ impl<'a, 'b> Validator<'a, 'b> {
                         self.location,
                     );
                 }
+                if matches!(node.expr.as_ref(), RcExpr::Release(..)) && self.lent.contains(&v.name)
+                {
+                    panic!(
+                        "[RC IR validate] {}: a release names `{}`, a value its read lends, in `{}`",
+                        self.stage,
+                        v.name.to_string(),
+                        self.location,
+                    );
+                }
                 self.check_rc_unit(v, path);
                 self.check_expr(k);
             }
@@ -351,15 +375,23 @@ impl<'a, 'b> Validator<'a, 'b> {
                 self.use_var(&v.name);
                 self.check_expr(k);
             }
-            RcExpr::Destructure(container, fields, _state, k) => {
+            RcExpr::DestructureUnboxed(container, fields, k) => {
                 self.use_var(&container.name);
-                // A field an unboxed container's `Destructure` leaves out would be dropped inside code
-                // generation, out of reach of cancellation, so lowering binds every field.
-                if !container.ty.is_box(self.type_env)
-                    && !names_every_field(container, fields, self.type_env)
-                {
+                // A boxed container keeps its fields, and lowering reads them out of it with
+                // getters.
+                if container.ty.is_box(self.type_env) {
                     panic!(
-                        "[RC IR validate] {}: a `Destructure` of the unboxed `{}` names fields {:?} of it, in `{}`",
+                        "[RC IR validate] {}: a `DestructureUnboxed` takes the boxed `{}` apart, in `{}`",
+                        self.stage,
+                        container.ty.to_string(),
+                        self.location,
+                    );
+                }
+                // A field the `DestructureUnboxed` leaves out would be dropped inside code generation, out
+                // of reach of cancellation, so lowering binds every field.
+                if !names_every_field(container, fields, self.type_env) {
+                    panic!(
+                        "[RC IR validate] {}: a `DestructureUnboxed` of the unboxed `{}` names fields {:?} of it, in `{}`",
                         self.stage,
                         container.ty.to_string(),
                         fields.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
@@ -449,6 +481,23 @@ impl<'a, 'b> Validator<'a, 'b> {
                 }
             }
             RcRhs::Builtin(op, args) => {
+                // A payload read that checks no tag sits in the arm that selected its variant, on
+                // that match's scrutinee: anywhere else it would read whatever variant the union
+                // holds as the one it names.
+                if let Some(read) = op.as_any().downcast_ref::<UnionAsOp>() {
+                    let selected = args
+                        .first()
+                        .and_then(|union| self.selected_variants.get(&union.name));
+                    if read.variant_is_known() && selected != Some(&read.variant_index()) {
+                        panic!(
+                            "[RC IR validate] {}: `{}` reads a variant no enclosing match arm \
+                             selected in `{}`",
+                            self.stage,
+                            op.name(),
+                            self.location,
+                        );
+                    }
+                }
                 // The op embeds its operand names — code generation resolves the operands from
                 // them — while the `args` list carries the same names, in the same order, for the
                 // reference-counting analyses. Lowering builds one from the other and renaming rewrites
@@ -520,12 +569,37 @@ impl<'a, 'b> Validator<'a, 'b> {
                         }
                     }
                 }
-                // Each arm's payload is in scope only within that arm's body, so bind it, check the
-                // body, and unbind it before the next sibling arm.
+                // The variable an arm binds is in scope only within that arm's body, so bind it,
+                // check the body, and unbind it before the next sibling arm.
                 for arm in arms {
-                    self.bind(&arm.payload.name);
+                    // A match consumes an unboxed scrutinee into the variable each arm binds,
+                    // and borrows a boxed one, which its arms read with ops.
+                    if arm.binder.is_some() == scrutinee.ty.is_box(self.type_env) {
+                        panic!(
+                            "[RC IR validate] {}: an arm of the match on `{}`, of type `{}`, binds \
+                             a variable over a boxed scrutinee, or none over an unboxed one, in `{}`",
+                            self.stage,
+                            scrutinee.name.to_string(),
+                            scrutinee.ty.to_string(),
+                            self.location,
+                        );
+                    }
+                    if let Some(binder) = &arm.binder {
+                        self.bind(&binder.name);
+                    }
+                    let outer_selection = arm
+                        .tag
+                        .and_then(|tag| self.selected_variants.insert(scrutinee.name.clone(), tag));
                     self.check_expr(&arm.body);
-                    self.scope.remove(&arm.payload.name);
+                    if arm.tag.is_some() {
+                        match outer_selection {
+                            Some(tag) => self.selected_variants.insert(scrutinee.name.clone(), tag),
+                            None => self.selected_variants.remove(&scrutinee.name),
+                        };
+                    }
+                    if let Some(binder) = &arm.binder {
+                        self.scope.remove(&binder.name);
+                    }
                 }
             }
         }
@@ -535,6 +609,7 @@ impl<'a, 'b> Validator<'a, 'b> {
 #[cfg(test)]
 mod tests {
     use super::{validate, Validator};
+    use crate::ast::builtin_op::BuiltinOp;
     use crate::ast::name::FullName;
     use crate::ast::type_env::TypeEnv;
     use crate::ast::typedecl::Field;
@@ -543,8 +618,8 @@ mod tests {
         TyConVariant, TypeNode,
     };
     use crate::fixstd::builtin::{
-        bulitin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_ptr_ty,
-        CaptureProjectOp, NullPtrLitOp,
+        builtin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_ptr_ty,
+        CaptureProjectOp, NullPtrLitOp, StructGetOp, UnionAsOp,
     };
     use crate::misc::{Map, Set};
     use crate::rc_ir::ast::{
@@ -556,7 +631,7 @@ mod tests {
     /// boxed type from an unboxed one, and `Test::Pair`, an unboxed struct of an `Array I64` and an
     /// `I64`.
     fn type_env() -> TypeEnv {
-        let mut tycons = bulitin_tycons();
+        let mut tycons = builtin_tycons();
         tycons.insert(
             TyCon::new(FullName::from_strs(&["Test"], "Pair")),
             TyConInfo {
@@ -603,10 +678,7 @@ mod tests {
 
     /// An expression node carrying no source span, so a failure message quotes no code.
     fn node(expr: RcExpr) -> RcExprNode {
-        RcExprNode {
-            expr: Arc::new(expr),
-            source: None,
-        }
+        RcExprNode::new(expr, None)
     }
 
     /// A program with no functions and no globals, for a check that names none of its own.
@@ -615,6 +687,7 @@ mod tests {
             funcs: Map::default(),
             globals: vec![],
             roots: Set::default(),
+            retains_sunk: false,
         }
     }
 
@@ -655,6 +728,7 @@ mod tests {
             funcs,
             globals: vec![],
             roots: [root].into_iter().collect(),
+            retains_sunk: false,
         };
         validate(&prog, &Set::default(), &type_env(), "test");
     }
@@ -793,15 +867,13 @@ mod tests {
         // let m = match s { _ -> c; 1 -> p }; ret m   (a catch-all arm before a tagged arm)
         let arms = vec![
             MatchArm {
-                payload_state: RcState::Unknown,
                 tag: None,
-                payload: var("c"),
+                binder: Some(var("c")),
                 body: node(RcExpr::Ret(var("c"))),
             },
             MatchArm {
-                payload_state: RcState::Unknown,
                 tag: Some(1),
-                payload: var("p"),
+                binder: Some(var("p")),
                 body: node(RcExpr::Ret(var("p"))),
             },
         ];
@@ -843,13 +915,181 @@ mod tests {
         check(&body, &["x"]);
     }
 
+    /// A release of a value its read lends is caught: the value holds no reference of its own, so
+    /// the release would drop the one its container holds.
+    #[test]
+    #[should_panic(expected = "a value its read lends")]
+    fn rejects_a_release_of_a_lent_value() {
+        // let x = <lending getter of field 0>(c); release x; ret x
+        let read = StructGetOp::of_field(&FullName::local("c"), 0).lending();
+        let body = node(RcExpr::Let(
+            var("x"),
+            RcRhs::Builtin(read, vec![var("c")]),
+            node(RcExpr::Release(
+                var("x"),
+                vec![],
+                RcState::Unknown,
+                node(RcExpr::Ret(var("x"))),
+            )),
+        ));
+        check(&body, &["c"]);
+    }
+
+    /// A payload read that checks no tag is caught outside the arm that selected its variant:
+    /// there the union may hold another variant, which the read would take for the one it names.
+    #[test]
+    #[should_panic(expected = "reads a variant no enclosing match arm selected")]
+    fn rejects_a_known_variant_read_outside_its_arm() {
+        // let p = <read of variant 0, known>(u); ret p   (u is a parameter; no match selects it)
+        let read = UnionAsOp::of_known_variant(&FullName::local("u"), 0);
+        let body = node(RcExpr::Let(
+            var("p"),
+            RcRhs::Builtin(Box::new(read), vec![var("u")]),
+            node(RcExpr::Ret(var("p"))),
+        ));
+        check(&body, &["u"]);
+    }
+
+    /// A local variable of a boxed type, standing for a boxed scrutinee or container: the checks
+    /// it is used in read whether the type is boxed and nothing else of it.
+    fn boxed_var(name: &str) -> RcVar {
+        var_of(name, make_dynamic_object_ty())
+    }
+
+    /// A payload read that checks no tag is caught in an arm that selected another variant: there
+    /// the union holds that other variant, which the read would take for the one it names.
+    #[test]
+    #[should_panic(expected = "reads a variant no enclosing match arm selected")]
+    fn rejects_a_known_variant_read_in_the_arm_of_another_variant() {
+        // let m = match u { 1 -> let p = <read of variant 0, known>(u); ret p }; ret m
+        let read = UnionAsOp::of_known_variant(&FullName::local("u"), 0);
+        let arm = MatchArm {
+            tag: Some(1),
+            binder: None,
+            body: node(RcExpr::Let(
+                var("p"),
+                RcRhs::Builtin(Box::new(read), vec![boxed_var("u")]),
+                node(RcExpr::Ret(var("p"))),
+            )),
+        };
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(boxed_var("u"), vec![arm]),
+            node(RcExpr::Ret(var("m"))),
+        ));
+        check(&body, &["u"]);
+    }
+
+    /// A payload read that checks no tag is caught after the match whose arm selected its variant:
+    /// the selection holds inside the arm alone.
+    #[test]
+    #[should_panic(expected = "reads a variant no enclosing match arm selected")]
+    fn rejects_a_known_variant_read_after_the_match_that_selected_it() {
+        // let m = match u { 0 -> ret c }; let p = <read of variant 0, known>(u); ret p
+        let read = UnionAsOp::of_known_variant(&FullName::local("u"), 0);
+        let arm = MatchArm {
+            tag: Some(0),
+            binder: None,
+            body: node(RcExpr::Ret(var("c"))),
+        };
+        let after = node(RcExpr::Let(
+            var("p"),
+            RcRhs::Builtin(Box::new(read), vec![boxed_var("u")]),
+            node(RcExpr::Ret(var("p"))),
+        ));
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(boxed_var("u"), vec![arm]),
+            after,
+        ));
+        check(&body, &["u", "c"]);
+    }
+
+    /// A payload read that checks no tag is caught where an inner match on the same union has
+    /// closed: the variant its arm selected holds inside that arm alone, and after it the union
+    /// is known to hold the variant the outer arm selected.
+    #[test]
+    #[should_panic(expected = "reads a variant no enclosing match arm selected")]
+    fn rejects_a_known_variant_read_after_an_inner_match_that_selected_it() {
+        // let m = match u { 0 -> let i = match u { 1 -> ret c };
+        //                        let p = <read of variant 1, known>(u); ret p }; ret m
+        let read = UnionAsOp::of_known_variant(&FullName::local("u"), 1);
+        let inner_arm = MatchArm {
+            tag: Some(1),
+            binder: None,
+            body: node(RcExpr::Ret(var("c"))),
+        };
+        let after_inner = node(RcExpr::Let(
+            var("p"),
+            RcRhs::Builtin(Box::new(read), vec![boxed_var("u")]),
+            node(RcExpr::Ret(var("p"))),
+        ));
+        let outer_arm = MatchArm {
+            tag: Some(0),
+            binder: None,
+            body: node(RcExpr::Let(
+                var("i"),
+                RcRhs::Match(boxed_var("u"), vec![inner_arm]),
+                after_inner,
+            )),
+        };
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(boxed_var("u"), vec![outer_arm]),
+            node(RcExpr::Ret(var("m"))),
+        ));
+        check(&body, &["u", "c"]);
+    }
+
+    /// An arm binding a variable over a boxed scrutinee is caught: the match borrows a boxed
+    /// scrutinee, so nothing is moved into a variable of the arm.
+    #[test]
+    #[should_panic(
+        expected = "binds a variable over a boxed scrutinee, or none over an unboxed one"
+    )]
+    fn rejects_an_arm_binding_a_variable_over_a_boxed_scrutinee() {
+        // let m = match u { 0(p) -> ret c }; ret m   (u is boxed)
+        let arm = MatchArm {
+            tag: Some(0),
+            binder: Some(var("p")),
+            body: node(RcExpr::Ret(var("c"))),
+        };
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(boxed_var("u"), vec![arm]),
+            node(RcExpr::Ret(var("m"))),
+        ));
+        check(&body, &["u", "c"]);
+    }
+
+    /// An arm binding no variable over an unboxed scrutinee is caught: the match consumes an
+    /// unboxed scrutinee, and the variable the arm binds is what carries it away.
+    #[test]
+    #[should_panic(
+        expected = "binds a variable over a boxed scrutinee, or none over an unboxed one"
+    )]
+    fn rejects_an_arm_binding_no_variable_over_an_unboxed_scrutinee() {
+        // let m = match s { 0 -> ret c }; ret m   (s is unboxed)
+        let arm = MatchArm {
+            tag: Some(0),
+            binder: None,
+            body: node(RcExpr::Ret(var("c"))),
+        };
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(var("s"), vec![arm]),
+            node(RcExpr::Ret(var("m"))),
+        ));
+        check(&body, &["s", "c"]);
+    }
+
     /// A lifted closure function `f` reading captured value `cap_idx` of a capture object laid out as
     /// `cap_tys`, out of `read_var` — its capture parameter, in a well-formed function. It disposes of
     /// the capture it owns, so its reference counting balances.
     fn projecting_func(read_var: &RcVar, cap_idx: usize, cap_tys: Vec<Arc<TypeNode>>) -> RcFunc {
         let capture = var_of("cap", make_dynamic_object_ty());
         let proj = Box::new(CaptureProjectOp {
-            assume_local: false,
+            assumed_state: RcState::Unknown,
             cap_name: read_var.name.clone(),
             cap_idx,
             cap_tys,
@@ -971,18 +1211,31 @@ mod tests {
         validate_prog(vec![projecting_func(&capture, 1, vec![make_i64_ty()])]);
     }
 
-    /// A `Destructure` of an unboxed container that leaves one of its fields out is caught: code
+    /// A `DestructureUnboxed` that leaves one of its container's fields out is caught: code
     /// generation would drop that field inside the node, where no cancellation reaches the release.
     #[test]
-    #[should_panic(expected = "a `Destructure` of the unboxed")]
+    #[should_panic(expected = "a `DestructureUnboxed` of the unboxed")]
     fn rejects_destructure_of_an_unboxed_container_leaving_a_field_out() {
         // destructure p { 1 -> s }; ret s   (p : Test::Pair; field 0 is left out)
-        let body = node(RcExpr::Destructure(
+        let body = node(RcExpr::DestructureUnboxed(
             var_of("p", pair_ty()),
             vec![(1, var("s"))],
-            RcState::Unknown,
             node(RcExpr::Ret(var("s"))),
         ));
         check(&body, &["p"]);
+    }
+
+    /// A `DestructureUnboxed` of a boxed container is caught: a boxed container keeps its fields,
+    /// which getters read out of it.
+    #[test]
+    #[should_panic(expected = "a `DestructureUnboxed` takes the boxed")]
+    fn rejects_destructure_unboxed_of_a_boxed_container() {
+        // destructure a { 0 -> s }; ret s   (a is boxed)
+        let body = node(RcExpr::DestructureUnboxed(
+            boxed_var("a"),
+            vec![(0, var("s"))],
+            node(RcExpr::Ret(var("s"))),
+        ));
+        check(&body, &["a"]);
     }
 }

@@ -131,27 +131,46 @@ pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 /// The name standing for the captured environment of a lambda. Every lambda binds it implicitly, so
 /// it is the one local name that the free variables of an expression leave out.
 pub const CAP_NAME: &str = "#CAP";
-/// The name of the parameter through which a decaptured lambda receives its capture list.
-pub const CLOSURE_CAP_NAME: &str = "#closure_cap";
-/// The suffix, followed by a counter, of the global function a decaptured lambda becomes.
-pub const CLOSURE_LAM_SUFFIX: &str = "#closure_lam";
-/// The suffix, followed by a hash of which argument received which decaptured lambda, of a
-/// function specialized on the lambdas passed to it.
-pub const CLOSURE_SPEC_SUFFIX: &str = "#closure_spec";
-/// The suffix of the local binding holding the call of a decaptured lambda, which a builtin
-/// expression reads in place of the variable that held the lambda's capture list.
-pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
-/// The prefix of the type constructor naming a capture list that closure specialization builds. A
-/// parameter of this type is a function whose identity the receiving body knows.
-pub const CAP_LIST_PREFIX: &str = "#CapList";
+/// The suffix, followed by a hash of how the lambda sets it is made for are represented, of a copy
+/// of a symbol or of a type constructor that lambda set specialization makes.
+pub const LS_COPY_SUFFIX: &str = "#ls";
+/// The suffix, followed by the lambda's position among the lambdas of its symbol, of the global
+/// function lambda set specialization lifts a lambda to.
+pub const LS_LAM_SUFFIX: &str = "#ls_lam";
+/// The prefix of the type constructor of the capture struct that lambda set specialization
+/// represents a value of a set by, where the set's elements make one class.
+pub const LS_CAP_PREFIX: &str = "#LsCap";
+/// The name of the parameter through which a lambda lifted by lambda set specialization receives
+/// its capture struct.
+pub const LS_CAP_NAME: &str = "#ls_cap";
+/// The prefix, followed by `@` and the union's hash, of the type constructor of the unboxed union
+/// that lambda set specialization represents a value of a set by, where the set's elements make two
+/// or more classes.
+pub const LS_UNION_PREFIX: &str = "#LsUnion";
+/// The prefix, followed by the variant's position, of the name of a variant of a union named with
+/// `LS_UNION_PREFIX`.
+pub const LS_VARIANT_PREFIX: &str = "v";
+/// The local name lambda set specialization gives the capture struct a variant of a union named
+/// with `LS_UNION_PREFIX` holds, both where the variant is built and in an arm matching it.
+pub const LS_PAYLOAD_NAME: &str = "#ls_payload";
+/// The local name lambda set specialization binds the function of a call to, where the function is
+/// a value of a union named with `LS_UNION_PREFIX` that the call matches.
+pub const LS_FUNC_NAME: &str = "#ls_func";
+/// The local name lambda set specialization binds the argument of a call to, where the call matches
+/// a value of a union named with `LS_UNION_PREFIX` and passes the argument in each arm.
+pub const LS_ARG_NAME: &str = "#ls_arg";
+/// The prefix, followed by the operand's position, of the local name lambda set specialization binds
+/// an operand of a builtin to, where the operand names a global the rewritten program builds a
+/// value for in place of reading it.
+pub const LS_OPERAND_PREFIX: &str = "#ls_operand";
+/// The local name lambda set specialization binds a value to that it evaluates and then leaves
+/// unread: the capture struct of a call whose callee is known by name.
+pub const LS_UNREAD_NAME: &str = "#ls_unread";
 /// The prefix, followed by a counter, of the local names `decapture_scope_functions` binds.
 pub const DECAPTURE_PREFIX: &str = "#decapture";
 /// The prefix of the name `collapse_constructions` binds a field value to, so that a reader of the
 /// struct is given a name rather than the expression that produced the value.
 pub const BOUND_FIELD_PREFIX: &str = "#field";
-/// The suffix, followed by a counter, of the global function taking one argument per field of a
-/// struct argument of the function it is named after.
-pub const SPLIT_ARG_SUFFIX: &str = "#split_arg";
 /// The suffix, followed by a counter, of the global function the argument of an application of
 /// `Std::fix` is lifted to.
 pub const FIX_DEFUNCT_SUFFIX: &str = "#fix_defunct";
@@ -192,6 +211,84 @@ pub const UNION_DATA_IDX: u32 = UNION_TAG_IDX + 1;
 pub const UNION_TAG_BITS: u32 = 8;
 /// How many variants a union may declare: the indices a tag of `UNION_TAG_BITS` bits tells apart.
 pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
+/// How many capture structs a value of a lambda set represented by a capture struct or a union may
+/// lay out in place (lambda set specialization). A set past it is represented by closures.
+///
+/// A set whose elements capture values of another set held in place lays out that set's capture
+/// structs inside its own, once per class of its elements, so a chain of sets each of two classes
+/// capturing the one before lays out twice as many at each step. The passes of the RC IR walk a type
+/// once per capture struct it lays out (#1008), so without the bound their time doubles at each step
+/// of such a chain.
+///
+/// The bound also limits the boxed leaves of a value. A set past the bound is represented by a
+/// closure, and in each later set of the chain, every capture struct that captures that closure
+/// holds it as a boxed leaf. A value of a later set therefore holds up to half the bound of boxed
+/// leaves, and the provenance analysis copies every leaf of every variable in scope at each `match`
+/// (#1015).
+///
+/// The bound can go once those passes walk a type in time linear in its declaration and the
+/// provenance analysis copies only what a `match` arm changes.
+pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 6;
+/// How many words a value of a lambda set represented by a capture struct or a union may take, laid
+/// out in place, where an array or a boxed struct or union stores the set's values (lambda set
+/// specialization). Past it, the capture structs of the set's classes that take more than a word are
+/// boxed.
+///
+/// Each element of an array, and each object of a boxed type, holds a value of its own laid out in
+/// place. An array filled with one function capturing eight arrays would take 24 words per element
+/// with an unboxed capture struct, and one word with a boxed one, whose captured values the elements
+/// share.
+pub const MAX_LS_STORED_VALUE_WORDS: usize = 4;
+/// How many classes the elements of a lambda set represented by a union may make (lambda set
+/// specialization), which is how many variants that union may have. A set past it is represented
+/// by closures.
+///
+/// The time the passes of the RC IR spend on a value of a union grows faster than linearly in the
+/// union's variants (#1009). A set of a few dozen classes, such as a table of functions chosen at
+/// run time, would then build much more slowly as a union than as closures. The bound can go up
+/// once those passes take linear time, up to `MAX_UNION_VARIANTS`.
+pub const MAX_LS_UNION_VARIANTS: usize = 32;
+const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
+/// How many lambdas a lambda set variable may hold during inference (lambda set specialization,
+/// `Solver`), counted one for each time a lambda is recorded in the variable or in one unified with
+/// it. A variable past it is made Dynamic, so its values are closures built at run time.
+///
+/// The bound keeps inference from taking time exponential in the length of a chain of functions
+/// that return functions: where each function refers to the next from two places and returns
+/// either result, what it returns holds twice the lambdas of what the next returns, and each
+/// reference copies them all.
+///
+/// The value is a tuning value. The doubling of such a chain passes any bound within a few steps,
+/// so the chain builds in the same time whether the bound is 32 or 1024. A small bound would make
+/// closures of sets a capture struct or a union stands for: a variable's lambdas outnumber the
+/// elements of its concrete set wherever several of them build the same values, as where a
+/// function returns one of forty values that forty calls of one function build, which are forty
+/// lambdas in the variable and one element in the set. A variable holding over a thousand lambdas
+/// is one an ordinary program does not have.
+pub const MAX_LS_VARIABLE_LAMBDAS: usize = 1024;
+/// How many bodies of a component lambda set specialization may ask for (`specialize`), beyond
+/// one for each reference (`Component::sites`) on the chains of references from the entry to the
+/// component. The bodies of a component are the distinct lists of sets its copies give
+/// `Component::body_params`.
+///
+/// A component is asked for one body per distinct way the functions its bodies depend on are given:
+/// - A chain of functions, each handing the function it was given to the next, called from many
+///   places with a lambda of its own each, asks every function of the chain for one body per place.
+///   Each place is a reference on the way to the chain, so the bodies stay within the budget.
+/// - A function called from `n` places with a lambda of its own each, that calls another from `m`
+///   places, each with a lambda of its own wrapping the function it was given, asks the other for
+///   `n * m` bodies. These go past the budget once they outnumber the `n + m` references by more
+///   than `LS_COPY_BUDGET_BASE`.
+/// - A function that calls the next function of a chain from two places, each with a lambda of its
+///   own wrapping the function it was given, repeats that product at each step. The bodies a
+///   function far down the chain is asked for grow exponentially with the length of the chain above
+///   it, while the references on the way grow linearly, so the bodies pass the budget within a few
+///   steps.
+///
+/// A component asked for more bodies than its budget is inferred again with closures for the
+/// functions its bodies depend on (`infer`), so that it has one body and asks for no further
+/// copies.
+pub const LS_COPY_BUDGET_BASE: usize = 64;
 /// The index of the function pointer among a closure's fields.
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 /// The index, among a closure's fields, of the pointer to the captured values the function is

@@ -185,6 +185,37 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
+    /// `swapped` hands its parameters to `scaled` in the other order. Both bodies start with a
+    /// computed `let`, so `inline` puts neither in place before uncurrying; the eta expansions then
+    /// give the two uncurried functions the same parameter names, and putting `scaled`'s body into
+    /// `swapped` binds a parameter of `scaled` whose name the argument after it mentions.
+    #[test]
+    fn test_arguments_swapped_into_a_function_of_two_parameters_keep_their_meaning() {
+        let source = r#"
+        module Main;
+
+        scaled : I64 -> I64 -> I64;
+        scaled = (
+            let t = Iterator::range(0, 3).fold(0, |i, s| s + i);
+            |x, y| (x * 10 + y) * t
+        );
+
+        swapped : I64 -> I64 -> I64;
+        swapped = (
+            let u = Iterator::range(0, 2).fold(0, |i, s| s + i);
+            |p, q| scaled(q, p) + u
+        );
+
+        main : IO ();
+        main = (
+            let a = *get_args.map(|args| args.@size);
+            assert_eq(|_|"each argument reaches its parameter", swapped(a + 1, a + 5), ((a + 5) * 10 + a + 1) * 3 + 1);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
     /// Compiling this arity takes a few seconds while the cost is linear in it, and is out of reach
     /// while the cost doubles per parameter.
     const ARITY: usize = 25;

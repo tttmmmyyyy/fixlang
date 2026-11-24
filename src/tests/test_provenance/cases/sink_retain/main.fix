@@ -1,0 +1,23 @@
+module Main;
+
+type Tree = box union { leaf : I64, branch : (Tree, Tree) };
+
+// Walks down the tree by `bits`, starting again from the root at each leaf it reaches, and adds up
+// the leaves.
+walk : Tree -> Array Bool -> I64;
+walk = |root, bits| (
+    loop((root, 0, 0), |(node, at, sum)|
+        if at == bits.@size { break $ sum };
+        let (left, right) = node.as_branch;
+        let next = if bits.@(at) { right } else { left };
+        if next.is_branch { continue $ (next, at + 1, sum) };
+        continue $ (root, at + 1, sum + next.as_leaf)
+    )
+);
+
+main : IO ();
+main = (
+    let tree = Tree::branch((Tree::leaf(1), Tree::branch((Tree::leaf(2), Tree::leaf(3)))));
+    let bits = [false, true, false, true, true, false];
+    println $ walk(tree, bits).to_string
+);

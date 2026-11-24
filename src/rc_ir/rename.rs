@@ -8,7 +8,6 @@
 use crate::ast::name::FullName;
 use crate::misc::{grow_stack, Map};
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcRhs, RcVar};
-use std::sync::Arc;
 
 /// The suffix a copy's names take: `#`, the tag of the pass that makes the copy, and
 /// `distinguisher`, which tells the copy apart from the pass's other copies of the same code.
@@ -23,7 +22,7 @@ use std::sync::Arc;
 /// suffix too, and each pass that adds such copies asserts that no other function has that name.
 ///
 /// # Examples
-/// `copy_suffix("u", "UD")` yields `"#uUD"`, and `copy_suffix("borrow", "")` yields `"#borrow"`.
+/// `copy_suffix("u", "UD")` yields `"#uUD"`, and `copy_suffix("borrow", "OB")` yields `"#borrowOB"`.
 pub(crate) fn copy_suffix(tag: &str, distinguisher: &str) -> String {
     assert!(
         !tag.is_empty() && tag.chars().all(|c| c.is_ascii_lowercase()),
@@ -47,7 +46,7 @@ pub(crate) fn copy_suffix(tag: &str, distinguisher: &str) -> String {
 /// Clone a function's parameters, capture, and body, giving every bound variable (parameters,
 /// capture, `let` bindings, destructure fields, match-arm payloads) its name followed by `suffix`,
 /// and rewriting every occurrence. Returns the renamed pieces together with the binder renaming, which
-/// callers use to remap side tables and to route recursive references.
+/// callers use to remap side tables.
 pub(crate) fn fresh_rename_function(
     params: &[RcVar],
     cap: &Option<RcVar>,
@@ -107,7 +106,9 @@ fn assign_fresh_names_to_binders_inner(
             match rhs {
                 RcRhs::Match(_, arms) => {
                     for arm in arms {
-                        assign_fresh_name(&arm.payload.name, suffix, renaming);
+                        if let Some(binder) = &arm.binder {
+                            assign_fresh_name(&binder.name, suffix, renaming);
+                        }
                         assign_fresh_names_to_binders(&arm.body, suffix, renaming);
                     }
                 }
@@ -115,7 +116,7 @@ fn assign_fresh_names_to_binders_inner(
             }
             assign_fresh_names_to_binders(k, suffix, renaming);
         }
-        RcExpr::Destructure(_, fields, _state, k) => {
+        RcExpr::DestructureUnboxed(_, fields, k) => {
             for (_, fv) in fields {
                 assign_fresh_name(&fv.name, suffix, renaming);
             }
@@ -165,22 +166,18 @@ fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> R
             *state,
             rename_expr(k, renaming),
         ),
-        RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
+        RcExpr::DestructureUnboxed(container, fields, k) => RcExpr::DestructureUnboxed(
             rename_var(container, renaming),
             fields
                 .iter()
                 .map(|(i, v)| (*i, rename_var(v, renaming)))
                 .collect(),
-            *state,
             rename_expr(k, renaming),
         ),
         RcExpr::Eval(v, k) => RcExpr::Eval(rename_var(v, renaming), rename_expr(k, renaming)),
         RcExpr::Ret(v) => RcExpr::Ret(rename_var(v, renaming)),
     };
-    RcExprNode {
-        expr: Arc::new(expr),
-        source: node.source.clone(),
-    }
+    RcExprNode::new(expr, node.source.clone())
 }
 
 /// A right-hand side with every variable occurrence (including `Builtin` operand names) rewritten
@@ -209,9 +206,11 @@ fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
             rename_var(scrut, renaming),
             arms.iter()
                 .map(|arm| MatchArm {
-                    payload_state: arm.payload_state,
                     tag: arm.tag,
-                    payload: rename_var(&arm.payload, renaming),
+                    binder: arm
+                        .binder
+                        .as_ref()
+                        .map(|payload| rename_var(payload, renaming)),
                     body: rename_expr(&arm.body, renaming),
                 })
                 .collect(),

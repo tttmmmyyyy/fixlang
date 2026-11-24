@@ -1,0 +1,56 @@
+module Main;
+
+// Each type is built in one function alone, and read there by nothing but the code taking the
+// value apart, so the RC-IR simplifier cancels the construction and the program holds no value of
+// the type.
+type KnownOpt = box union { some : Array I64, none : () };
+type CatchAllOpt = box union { some : Array I64, none : () };
+type PatternPair = box struct { head : Array I64, tail : Array I64 };
+type GetterPair = box struct { head : Array I64, tail : Array I64 };
+
+// A boxed union matched where it is built.
+matched : Array I64 -> I64;
+matched = |a| (
+    let u = KnownOpt::some(a);
+    match u {
+        some(x) => x.@size,
+        none(_) => -1
+    }
+);
+
+// The arm for the variant built stands beside a catch-all arm, which binds the whole union and is
+// dropped with the match.
+matched_beside_catch_all : Array I64 -> I64;
+matched_beside_catch_all = |a| (
+    let u = CatchAllOpt::some(a);
+    match u {
+        some(x) => x.@size,
+        rest => if rest.is_none { -1 } else { -2 }
+    }
+);
+
+// A boxed struct taken apart by a pattern where it is built.
+taken_apart_by_pattern : Array I64 -> Array I64 -> I64;
+taken_apart_by_pattern = |a, b| (
+    let p = PatternPair { head : a, tail : b };
+    let PatternPair { head : h, tail : t } = p;
+    h.@size * 10 + t.@size
+);
+
+// A boxed struct read by getters alone: one right after the construction, and one in each branch.
+read_by_getters : Array I64 -> Array I64 -> Bool -> I64;
+read_by_getters = |a, b, first| (
+    let p = GetterPair { head : a, tail : b };
+    let h = p.@head;
+    if first { h.@size + p.@head.@(0) } else { h.@size * 100 + p.@tail.@(0) }
+);
+
+main : IO ();
+main = (
+    let a = [1, 2, 3];
+    let b = [4, 5];
+    println $ [
+        matched(a), matched_beside_catch_all(a), taken_apart_by_pattern(a, b),
+        read_by_getters(a, b, true), read_by_getters(a, b, false)
+    ].to_string
+);

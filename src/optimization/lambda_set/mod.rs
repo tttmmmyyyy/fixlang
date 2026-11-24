@@ -1,0 +1,961 @@
+// Lambda set specialization: which lambdas a value of function type can be, carried in its type.
+//
+// Every slot of a type where a function value sits (an arrow, and the arrows a struct, a union or an
+// array declares) carries a lambda set variable. Inference unifies the variables of two places whose
+// values flow into each other, as the type checker unifies their types, and records each lambda in
+// the variable of the place it is built at. A component of the call graph is inferred together and
+// generalized over the variables of its symbols' types, so that a function taking a function is
+// inferred once and copied for each lambda set it is given. The variables of a component that holds
+// a global value whose body is not a lambda are pinned instead: every reference shares them, so the
+// value has one copy and its body runs once. Specialization then walks from the program's entry,
+// and gives each copy the concrete lambda sets of its parameters. The program is then rewritten.
+// Each copy of a component becomes a copy of each of its symbols. The elements of a set fall into
+// classes, a class being the elements that name one lambda and make the same code. A value whose
+// set has one class becomes that class's capture struct, and a call of it calls the lambda
+// directly. A value whose set has two or more classes becomes an unboxed union of their capture
+// structs, and a call of it matches the variant and calls that class's lambda directly. A class's
+// capture struct is boxed where an array or a boxed struct or union storing its values would
+// otherwise hold many words per value (`represent::boxed_classes`). A set that no capture struct or
+// union can stand for stays a set of closures (`represent::represent` lists them).
+//
+// The design is laid out in `dev-docs/2026-10-24-lambda-set-specialization/design.md`.
+
+mod concrete;
+mod dump;
+mod flow;
+mod infer;
+mod partition;
+mod represent;
+mod rewrite;
+mod slots;
+mod solver;
+mod specialize;
+
+use crate::{
+    ast::{name::FullName, program::Program, type_agreement::validate_types},
+    constants::DOT_FIXLANG,
+    error::panic_if_err,
+    misc::Set,
+    project_fs::{write_file_guarding_project_links, DOT_FIXLANG_LINK_HINT},
+};
+pub use flow::BuiltinFlow;
+use infer::{infer, Analysis};
+use represent::represent;
+use rewrite::rewrite;
+use slots::SlotLayout;
+use specialize::{specialize, Specialization};
+use std::{fs, path::PathBuf};
+
+/// Infers the lambda sets of `prg` and the copies they ask for, and rewrites the program by them.
+/// The bodies of the lifted lambdas are moved into their callers on up to `num_threads` threads.
+/// With `dump_step`, writes the sets and the copies to a file under `.fixlang` named after it; a
+/// failure to write it ends the process with the error printed. With `develop_mode`, checks that
+/// the types of the rewritten program agree where its expressions meet.
+pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, develop_mode: bool) {
+    let rewritten = {
+        let layout = SlotLayout::new(&prg.type_env);
+        let (mut analysis, spec) = infer_within_copy_budgets(prg, &layout);
+        if let Some(step) = dump_step {
+            let text = dump::render(&mut analysis, &spec, &layout);
+            let path = PathBuf::from(format!("{}/{}.lambda_sets.txt", DOT_FIXLANG, step));
+            panic_if_err(write_file_guarding_project_links(
+                &path,
+                DOT_FIXLANG_LINK_HINT,
+                |tmp_path| fs::write(tmp_path, &text),
+            ));
+        }
+        let repr = represent(&analysis, &spec, &prg.type_env);
+        rewrite(prg, &layout, &analysis, &spec, &repr)
+    };
+    rewritten.apply(prg, num_threads);
+    if develop_mode {
+        validate_types(prg);
+    }
+}
+
+/// The lambda sets of `prg` and the copies they ask for, with no component asked for more bodies
+/// than its copy budget (`specialize`).
+///
+/// Inference starts with no component past its budget. Each time the listing of the copies stops
+/// at a component asked for more bodies than its budget, the program is inferred again with the
+/// symbols of that component among those past their budgets (`infer`), and the next listing asks
+/// that component for one body. Each round adds a component, so the rounds are at most as many as
+/// the components.
+fn infer_within_copy_budgets(prg: &Program, layout: &SlotLayout) -> (Analysis, Specialization) {
+    let mut symbols_past_copy_budget: Set<FullName> = Set::default();
+    loop {
+        let mut analysis = infer(prg, layout, &symbols_past_copy_budget);
+        match specialize(&mut analysis) {
+            Ok(spec) => return (analysis, spec),
+            Err(component) => {
+                let component = &analysis.components[component];
+                assert!(
+                    !component.past_copy_budget,
+                    "the component of `{}` is asked for more bodies than its budget, though it \
+                     was inferred as past it",
+                    component.symbols[0].to_string()
+                );
+                symbols_past_copy_budget.extend(component.symbols.iter().cloned());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        concrete::{Elem, SetId},
+        infer::Analysis,
+        infer_within_copy_budgets,
+        slots::{AType, SlotLayout},
+        specialize::Specialization,
+        BuiltinFlow,
+    };
+    use crate::{
+        ast::program::Program,
+        constants::{LS_COPY_BUDGET_BASE, MAX_LS_VARIABLE_LAMBDAS},
+        elaboration::elaborate_at_max,
+        optimization::{inline, inline_local, unwrap_newtype},
+    };
+
+    /// `source` elaborated into the form the inference reads: monomorphic, curried, and with its
+    /// newtypes unwrapped.
+    fn program_of(source: &str) -> Program {
+        let (mut prg, _) = elaborate_at_max(source, "lambda_set", 0);
+        unwrap_newtype::run(&mut prg, 0);
+        prg
+    }
+
+    /// `source` in the form the pass reads in the compiler: `program_of` after `inline` and
+    /// `inline_local`, which leave a getter's body, a builtin reading the struct by name, in its
+    /// caller.
+    fn program_after_inlining(source: &str) -> Program {
+        let mut prg = program_of(source);
+        inline::run(&mut prg, false, 0);
+        inline_local::run(&mut prg, 0);
+        prg
+    }
+
+    /// The lambda sets of a program and the copies they ask for.
+    struct Inferred<'p> {
+        /// The program inferred.
+        prg: &'p Program,
+        /// The slots of the types of `prg`.
+        layout: SlotLayout<'p>,
+        /// The lambda sets of `prg`.
+        analysis: Analysis,
+        /// The copies `prg` needs.
+        spec: Specialization,
+    }
+
+    impl<'p> Inferred<'p> {
+        /// Infers the lambda sets of `prg` and the copies they ask for.
+        fn new(prg: &'p Program) -> Self {
+            let layout = SlotLayout::new(&prg.type_env);
+            let (analysis, spec) = infer_within_copy_budgets(prg, &layout);
+            Inferred {
+                prg,
+                layout,
+                analysis,
+                spec,
+            }
+        }
+
+        /// The component of the one symbol instantiating the global value `name` of `Main`, and
+        /// its position there.
+        fn component_of(&self, name: &str) -> (usize, usize) {
+            let found: Vec<_> = self
+                .prg
+                .symbols
+                .values()
+                .filter(|s| s.generic_name.is(&["Main"], name))
+                .map(|s| &s.name)
+                .collect();
+            assert_eq!(
+                found.len(),
+                1,
+                "the symbols named `{}`: {:?}",
+                name,
+                found.iter().map(|s| s.to_string()).collect::<Vec<_>>()
+            );
+            let c = self.analysis.component_of[found[0]];
+            let pos = self.analysis.components[c]
+                .symbols
+                .iter()
+                .position(|s| s == found[0])
+                .unwrap();
+            (c, pos)
+        }
+
+        /// The annotated type of the symbol `name` of `Main`.
+        fn type_of(&self, name: &str) -> AType {
+            let (c, pos) = self.component_of(name);
+            self.analysis.components[c].types[pos].clone()
+        }
+
+        /// For each copy of the component of `name`, the set it gives the own slot of the type
+        /// that `path` reaches from the symbol's type, each step a type argument.
+        fn sets_at(&mut self, name: &str, path: &[usize]) -> Vec<SetId> {
+            let (c, _) = self.component_of(name);
+            let mut ty = self.type_of(name);
+            for i in path {
+                ty = self.layout.type_arg(&ty, *i);
+            }
+            let slot = self.layout.own_slots(&ty)[0];
+            let root = self.analysis.solver.find(slot);
+            let index = self.analysis.components[c].var_index[&root];
+            self.spec
+                .instances
+                .iter()
+                .filter(|inst| inst.component == c)
+                .map(|inst| inst.var_sets[index])
+                .collect()
+        }
+
+        /// The elements of `set`, each lambda as the unqualified name of the global value whose
+        /// symbol it is written in, and Dynamic as `None`.
+        fn writing_symbols(&self, set: SetId) -> Vec<Option<String>> {
+            self.spec
+                .store
+                .elems(set)
+                .iter()
+                .map(|e| match e {
+                    Elem::Dynamic => None,
+                    Elem::Lam(lam, _) => {
+                        let symbol = &self.analysis.lambdas[*lam as usize].symbol;
+                        Some(self.prg.symbols[symbol].generic_name.name.clone())
+                    }
+                })
+                .collect()
+        }
+    }
+
+    /// `v`, what `Inferred::writing_symbols` gives of a set, in ascending order.
+    fn sorted(mut v: Vec<Option<String>>) -> Vec<Option<String>> {
+        v.sort();
+        v
+    }
+
+    /// What `Inferred::writing_symbols` gives a lambda written in `main`.
+    fn main_lam() -> Option<String> {
+        Some("main".to_string())
+    }
+
+    /// A function given a different lambda at each of two calls gets a copy for each, and in each
+    /// the function parameter's set holds the one lambda that call passes.
+    #[test]
+    fn test_a_function_given_two_lambdas_is_copied_once_for_each() {
+        let prg = program_of(
+            r#"
+module Main;
+
+apply : (I64 -> I64) -> I64 -> I64;
+apply = |f, x| f(x);
+
+main : IO ();
+main = (
+    let n = 10;
+    let a = apply(|x| x + n, 1);
+    let b = apply(|x| x * 2, 2);
+    println((a + b).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("apply", &[0]);
+        assert_eq!(sets.len(), 2);
+        assert_ne!(sets[0], sets[1]);
+        for s in &sets {
+            assert_eq!(inf.writing_symbols(*s), vec![main_lam()]);
+        }
+    }
+
+    /// A recursion that passes itself a lambda wrapping the function it was given puts that lambda
+    /// in the same set as the one from outside: the program asks for one copy, and the set of that
+    /// copy holds the wrapping lambda, which captures a function of the set itself.
+    #[test]
+    fn test_a_recursion_wrapping_its_function_asks_for_one_copy_of_a_set_holding_itself() {
+        let prg = program_of(
+            r#"
+module Main;
+
+rec : (I64 -> I64) -> I64 -> I64;
+rec = |f, n| if n == 0 { f(0) } else { rec(|x| f(x) * 2, n - 1) };
+
+main : IO ();
+main = (
+    let k = 10;
+    println(rec(|x| x + k, 3).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("rec", &[0]);
+        assert_eq!(sets.len(), 1);
+        let s = sets[0];
+        assert_eq!(
+            sorted(inf.writing_symbols(s)),
+            vec![main_lam(), Some("rec".to_string())]
+        );
+        let holds_itself = inf.spec.store.lam_elems(s).any(|(lam, args)| {
+            inf.analysis.lambdas[lam as usize]
+                .symbol
+                .name
+                .starts_with("rec")
+                && args.contains(&s)
+        });
+        assert!(holds_itself);
+    }
+
+    /// Folding an array of functions into their composition puts in the state a lambda capturing
+    /// the state itself, so the set of the result holds a lambda that captures a function of the
+    /// set: however long the chain grows at run time, the set has the two lambdas, and the program
+    /// asks for one copy.
+    #[test]
+    fn test_a_fold_composing_functions_asks_for_one_copy_of_a_set_holding_itself() {
+        let prg = program_of(
+            r#"
+module Main;
+
+compose_all : Array (I64 -> I64) -> I64 -> I64;
+compose_all = |fs| fs.to_iter.fold(|x| x, |f, acc| |x| f(acc(x)));
+
+main : IO ();
+main = (
+    let k = *get_args.map(|args| args.@size);
+    let fs = [|x| x + k, |x| x * 2];
+    println(compose_all(fs)(3).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("compose_all", &[1]);
+        assert_eq!(sets.len(), 1);
+        let s = sets[0];
+        assert_eq!(
+            inf.writing_symbols(s),
+            vec![
+                Some("compose_all".to_string()),
+                Some("compose_all".to_string())
+            ]
+        );
+        let holds_itself = inf
+            .spec
+            .store
+            .lam_elems(s)
+            .any(|(_, args)| args.contains(&s));
+        assert!(holds_itself);
+    }
+
+    /// A `Std::fix` that `defunctionalize_fix` leaves applies the function it is given to a closure
+    /// the combinator builds at run time, so the set of that function holds Dynamic, and lists no
+    /// lambda beside it, though `main` passes one.
+    #[test]
+    fn test_a_function_given_to_fix_is_dynamic() {
+        let prg = program_of(
+            r#"
+module Main;
+
+run_fixed : ((I64 -> I64) -> I64 -> I64) -> I64 -> I64;
+run_fixed = |step, n| fix(step)(n);
+
+main : IO ();
+main = (
+    let k = 3;
+    println(run_fixed(|loop, i| if i == 0 { 0 } else { k * i + loop(i - 1) }, 10).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("run_fixed", &[0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(inf.writing_symbols(sets[0]), vec![None]);
+    }
+
+    /// The runtime runs the entry `IO` value, and C code calls an exported function through each
+    /// arrow its type has, so those sets hold Dynamic. `main` leaves `twice` alone, so that the
+    /// export is what asks for every copy of it.
+    #[test]
+    fn test_the_entry_and_an_exported_value_are_dynamic() {
+        let prg = program_of(
+            r#"
+module Main;
+
+twice : I64 -> I64 -> I64;
+twice = |x, y| x * 2 + y;
+
+FFI_EXPORT[twice, fixtwice];
+
+main : IO ();
+main = println("exported");
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        for (name, path) in [("main", vec![]), ("twice", vec![]), ("twice", vec![1])] {
+            let sets = inf.sets_at(name, &path);
+            assert!(!sets.is_empty());
+            for s in sets {
+                assert!(
+                    inf.writing_symbols(s).contains(&None),
+                    "{} {:?}",
+                    name,
+                    path
+                );
+            }
+        }
+    }
+
+    /// A lambda in a field of a struct keeps its set through the getter, the setter of another
+    /// field and an `if` choosing between two versions of the struct: the function taking the
+    /// struct gets the one lambda put in the field.
+    #[test]
+    fn test_a_lambda_in_a_struct_field_keeps_its_set() {
+        let prg = program_of(
+            r#"
+module Main;
+
+type Seg = box struct { op : (I64, I64) -> I64, data : Array I64 };
+
+use_seg : Seg -> I64;
+use_seg = |s| (s.@op)((s.@data.@(0), 2));
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let s = Seg { op : |(x, y)| max(x, y), data : [1, 2] };
+    let s = if n > 1 { s.set_data([5]) } else { s };
+    println(use_seg(s).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("use_seg", &[0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(inf.writing_symbols(sets[0]), vec![main_lam()]);
+    }
+
+    /// A type taking a type constructor without its arguments, given `Array`, tracks the function a
+    /// field of each node holds through the array of children the constructor makes: the function
+    /// walking the tree gets the two lambdas the program puts in the nodes.
+    #[test]
+    fn test_a_function_in_a_tree_built_over_a_type_constructor_argument_keeps_its_set() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+type [f : * -> *] Rose f = box struct { kids : f (Rose f), op : I64 -> I64 };
+
+call_rose : Rose Array -> I64 -> I64;
+call_rose = |r, x| r.@kids.to_iter.fold((r.@op)(x), |k, acc| acc + call_rose(k, x));
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let leaf = Rose { kids : [], op : |x| x - n };
+    let r = Rose { kids : [leaf], op : |x| x + 100 };
+    println(call_rose(r, 5).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("call_rose", &[0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(inf.writing_symbols(sets[0]), vec![main_lam(), main_lam()]);
+    }
+
+    /// A global array of functions that one caller extends with a lambda of its own and another
+    /// passes as it is: every reference to the global shares the set of its elements, so the
+    /// function taking the array is copied once, for the set holding the global's lambda and the
+    /// caller's.
+    #[test]
+    fn test_a_global_array_of_functions_extended_by_a_caller_shares_its_set() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+table : Array (I64 -> I64);
+table = [|x| x + 1000];
+
+run_all : I64 -> Array (I64 -> I64) -> I64 -> I64;
+run_all = |d, fs, x| if d > 0 { run_all(d - 1, fs, x) } else { fs.to_iter.fold(0, |f, acc| acc + f(x)) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let a = run_all(n, table.push_back(|x| x * n), 3);
+    let b = run_all(n, table, 4);
+    println((a + b).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let mut sets: Vec<Vec<Option<String>>> = inf
+            .sets_at("run_all", &[1, 0, 0])
+            .into_iter()
+            .map(|s| sorted(inf.writing_symbols(s)))
+            .collect();
+        sets.sort();
+        assert_eq!(sets, vec![vec![main_lam(), Some("table".to_string())]]);
+    }
+
+    /// A function field rewritten through `mod_`, which punches the field out and plugs the new
+    /// value back in, holds both the lambda put in first and the one wrapping it.
+    #[test]
+    fn test_a_function_field_rewritten_by_mod_holds_the_wrapping_lambda() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+type Seg = box struct { op : I64 -> I64, data : Array I64 };
+
+use_seg : I64 -> Seg -> I64;
+use_seg = |d, s| if d > 0 { use_seg(d - 1, s) } else { (s.@op)(s.@data.@(0)) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let s = Seg { op : |x| x + n, data : [1, 2] };
+    let s = if n > 1 { s } else { s.mod_op(|f| |x| f(x) * 2) };
+    println(use_seg(n, s).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("use_seg", &[1, 0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(inf.writing_symbols(sets[0]), vec![main_lam(), main_lam()]);
+    }
+
+    /// An element of an array of functions rewritten through `Array::mod`, which punches the
+    /// element out and plugs the new value back in, leaves the array's elements holding both the
+    /// lambda put in first and the one wrapping it.
+    #[test]
+    fn test_an_array_element_rewritten_by_mod_holds_the_wrapping_lambda() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+run_first : I64 -> Array (I64 -> I64) -> I64;
+run_first = |d, fs| if d > 0 { run_first(d - 1, fs) } else { (fs.@(0))(d) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let fs = [|x| x + n];
+    let fs = if n > 1 { fs } else { fs.mod(0, |f| |x| f(x) * 2) };
+    println(run_first(n, fs).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("run_first", &[1, 0, 0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(inf.writing_symbols(sets[0]), vec![main_lam(), main_lam()]);
+    }
+
+    /// A lambda capturing a struct depends on every set the struct's type carries, the sets of the
+    /// fields its body leaves unread included: the struct is part of its capture. Here the body
+    /// reads the field `f` of the captured `p` only through the getter, which inlining leaves as a
+    /// builtin reading `p` by name, and the field `g` not at all.
+    #[test]
+    fn test_a_lambda_depends_on_the_sets_of_a_struct_it_captures() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+type P = box struct { f : I64 -> I64, g : I64 -> I64 };
+
+mk : I64 -> P -> I64 -> I64;
+mk = |d, p| if d > 0 { mk(d - 1, p) } else { |x| (p.@f)(x) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let f = |x| x + n;
+    let a = mk(n, P { f : f, g : |x| x + 2 })(1);
+    let b = mk(n, P { f : f, g : |x| x * 3 })(1);
+    println((a + b).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let (c, _) = inf.component_of("mk");
+        let ty = inf.type_of("mk");
+        let p_ty = inf.layout.type_arg(&inf.layout.type_arg(&ty, 1), 0);
+        let p_slots: Vec<usize> = inf
+            .layout
+            .own_slots(&p_ty)
+            .iter()
+            .map(|v| {
+                let root = inf.analysis.solver.find(*v);
+                inf.analysis.components[c]
+                    .params
+                    .iter()
+                    .position(|p| *p == root)
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(p_slots.len(), 2);
+        let inner = inf
+            .analysis
+            .lambdas
+            .iter()
+            .find(|l| l.symbol.name.starts_with("mk") && l.index == 2)
+            .unwrap();
+        for p in p_slots {
+            assert!(
+                inner.param_deps.contains(&p),
+                "the lambda capturing `p` depends on {:?}, missing parameter {}",
+                inner.param_deps,
+                p
+            );
+        }
+    }
+
+    /// A global function whose body is a lambda depends on no set of its own type: it is the
+    /// symbol's function, built nowhere as a value, so the sets it is put into beside other lambdas
+    /// leave its body as it is, and one copy of it serves them all.
+    #[test]
+    fn test_a_global_function_put_into_several_sets_depends_on_none_of_them() {
+        let prg = program_of(
+            r#"
+module Main;
+
+g : I64 -> I64;
+g = |x| x * 3 + 1;
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let a = if n > 2 { g } else { |x| x + 1 };
+    let b = if n > 3 { g } else { |x| x + 2 };
+    println((a(1) + b(2)).to_string)
+);
+"#,
+        );
+        let inf = Inferred::new(&prg);
+        let (c, _) = inf.component_of("g");
+        assert_eq!(
+            inf.analysis.components[c].body_params,
+            Vec::<usize>::new(),
+            "the body of `g` depends on parameters of its component"
+        );
+    }
+
+    /// The source of a chain of `depth` symbols over `both`, which builds a value from two: each
+    /// symbol of the chain refers twice to the one below. With `of_functions` the symbols are
+    /// functions of a `P` passing it down, otherwise global values. `both` and each function of
+    /// the chain recurse, so that no inlining collapses the chain.
+    fn doubling_chain(depth: usize, of_functions: bool) -> String {
+        let mut source = String::from(
+            "module Main;\n\
+             type P = box struct { run : I64 -> I64 };\n\
+             both : P -> P -> P;\n\
+             both = |a, b| if (a.@run)(0) < -1000000 { both(b, a) } \
+             else { P { run : |x| (a.@run)((b.@run)(x)) } };\n",
+        );
+        if of_functions {
+            source += "c0 : P -> P;\n\
+                       c0 = |a| if (a.@run)(0) < -1000000 { c0(a) } \
+                       else { P { run : |x| (a.@run)(x) + 1 } };\n";
+            for i in 1..=depth {
+                source += &format!(
+                    "c{i} : P -> P;\n\
+                     c{i} = |a| if (a.@run)(0) < -1000000 {{ c{i}(a) }} \
+                     else {{ both(c{j}(a), c{j}(a)) }};\n",
+                    j = i - 1
+                );
+            }
+            source += &format!(
+                "main : IO ();\nmain = (let k = *get_args.map(|args| args.@size); \
+                 println((c{depth}(P {{ run : |x| x + k }}).@run)(k).to_string));\n"
+            );
+        } else {
+            source += "c0 : P;\nc0 = P { run : |x| x + 1 };\n";
+            for i in 1..=depth {
+                source += &format!("c{i} : P;\nc{i} = both(c{j}, c{j});\n", j = i - 1);
+            }
+            source += &format!(
+                "main : IO ();\nmain = (let k = *get_args.map(|args| args.@size); \
+                 println((c{depth}.@run)(k).to_string));\n"
+            );
+        }
+        source
+    }
+
+    /// Along a chain of symbols each referring twice to the one below, the scheme of each stays
+    /// small: that of a global value holds its pinned variable alone, and a function whose internal
+    /// classes depend on its parameter gets the two copies of them merged into one, so that its
+    /// scheme grows by one class per level.
+    #[test]
+    fn test_a_chain_of_symbols_referring_twice_to_the_one_below_keeps_its_schemes_small() {
+        for of_functions in [false, true] {
+            let prg = program_of(&doubling_chain(12, of_functions));
+            let inf = Inferred::new(&prg);
+            let (c, _) = inf.component_of("c12");
+            let classes = inf.analysis.components[c].scheme.classes.len();
+            let limit = if of_functions { 16 } else { 1 };
+            assert!(
+                classes <= limit,
+                "the scheme at the top of the chain of {} has {} classes",
+                if of_functions {
+                    "functions"
+                } else {
+                    "global values"
+                },
+                classes
+            );
+        }
+    }
+
+    /// Along a chain of functions that each take an `I64` and pass two results of the one below to
+    /// `both`, no class inside a scheme depends on a parameter: the scheme holds each such class as
+    /// a shared variable without following its members, so the schemes stay the same size along
+    /// the chain.
+    #[test]
+    fn test_a_chain_of_functions_given_no_function_keeps_its_schemes_from_growing() {
+        let depth = 12;
+        let mut source = String::from(
+            "module Main;\n\
+             type P = box struct { run : I64 -> I64 };\n\
+             both : P -> P -> P;\n\
+             both = |a, b| if (a.@run)(0) < -1000000 { both(b, a) } \
+             else { P { run : |x| (a.@run)((b.@run)(x)) } };\n\
+             c0 : I64 -> P;\n\
+             c0 = |n| if n < -1000000 { c0(n) } else { P { run : |x| x + n } };\n",
+        );
+        for i in 1..=depth {
+            source += &format!(
+                "c{i} : I64 -> P;\n\
+                 c{i} = |n| if n < -1000000 {{ c{i}(n) }} else {{ both(c{j}(n), c{j}(n)) }};\n",
+                j = i - 1
+            );
+        }
+        source += &format!(
+            "main : IO ();\nmain = (let k = *get_args.map(|args| args.@size); \
+             println((c{depth}(k).@run)(k).to_string));\n"
+        );
+        let prg = program_of(&source);
+        let inf = Inferred::new(&prg);
+        let classes_of = |name: &str| {
+            let (c, _) = inf.component_of(name);
+            inf.analysis.components[c].scheme.classes.len()
+        };
+        assert_eq!(classes_of("c6"), classes_of("c12"));
+    }
+
+    /// The source of a program whose `main` calls `callee`, a function of `Main` taking a function
+    /// and an `I64`, from `calls` places, each with a lambda of its own. `globals` defines `callee`
+    /// and what it refers to.
+    fn calls_with_a_lambda_each_source(globals: &str, callee: &str, calls: usize) -> String {
+        let mut source = format!(
+            "module Main;\n{globals}\nmain : IO ();\nmain = (\n    \
+             let n = *get_args.map(|args| args.@size);\n    let v = 0;\n"
+        );
+        for i in 0..calls {
+            source += &format!("    let v = v + {callee}(|y| y + n + {i}, n);\n");
+        }
+        source += "    println(v.to_string)\n);\n";
+        source
+    }
+
+    /// The copy budget of a component counts its bodies: a global function put into more sets than
+    /// its budget, by copies of a function within its own, gets a copy for each set, depends on
+    /// none of them, and stays within its budget.
+    #[test]
+    fn test_a_global_function_put_into_more_sets_than_its_copy_budget_is_within_it() {
+        let calls = LS_COPY_BUDGET_BASE;
+        let prg = program_of(&calls_with_a_lambda_each_source(
+            "g : I64 -> I64;\n\
+             g = |x| x * 3 + 1;\n\
+             pick : (I64 -> I64) -> I64 -> I64;\n\
+             pick = |h, x| (\n    \
+                 let a = if x > 2 { g } else { h };\n    \
+                 let b = if x > 3 { g } else { |y| h(y) + 1 };\n    \
+                 let c = if x > 4 { g } else { |y| h(y) + 2 };\n    \
+                 a(x) + b(x) + c(x)\n\
+             );\n",
+            "pick",
+            calls,
+        ));
+        let mut inf = Inferred::new(&prg);
+        let (g, _) = inf.component_of("g");
+        let copies_of_g = inf
+            .spec
+            .instances
+            .iter()
+            .filter(|inst| inst.component == g)
+            .count();
+        // The references on the way to `g`: the entry to `main`, `main` to `pick` from `calls`
+        // places, and `pick` to `g` from three.
+        assert!(copies_of_g > LS_COPY_BUDGET_BASE + 1 + calls + 3);
+        assert!(!inf.analysis.components[g].past_copy_budget);
+        assert_eq!(inf.analysis.components[g].body_params, Vec::<usize>::new());
+        let sets = inf.sets_at("pick", &[0]);
+        assert_eq!(sets.len(), calls);
+        for s in sets {
+            assert_eq!(
+                sorted(inf.writing_symbols(s)),
+                vec![Some("g".to_string()), main_lam()]
+            );
+        }
+    }
+
+    /// The sets the copies of `f0` give its function parameter, where `main` calls `f1` from
+    /// `calls` places with a lambda of its own each, and `f1` calls `f0` from two places with a
+    /// lambda of its own wrapping the function it was given: `f0` is asked for `2 * calls` bodies,
+    /// with `calls + 3` references on the way to it, the one to `main` from the entry among them.
+    fn sets_given_to_a_function_called_twice_by_each_copy_of_its_caller(
+        calls: usize,
+    ) -> Vec<Vec<Option<String>>> {
+        let prg = program_of(&calls_with_a_lambda_each_source(
+            "f0 : (I64 -> I64) -> I64 -> I64;\n\
+             f0 = |g, x| g(x);\n\
+             f1 : (I64 -> I64) -> I64 -> I64;\n\
+             f1 = |g, x| if x % 3 == 0 { f0(|y| g(y) + 1, x) } else { f0(|y| g(y) * 2, x) };\n",
+            "f1",
+            calls,
+        ));
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("f0", &[0]);
+        sets.into_iter().map(|s| inf.writing_symbols(s)).collect()
+    }
+
+    /// A component asked for as many bodies as its copy budget, `LS_COPY_BUDGET_BASE` and one for
+    /// each reference on the way to it, gets them all, each given a set of lambdas. Asked for one
+    /// more, it gets one body, given closures.
+    #[test]
+    fn test_a_component_is_given_closures_from_one_body_past_its_copy_budget() {
+        // `2 * calls` bodies against a budget of `LS_COPY_BUDGET_BASE + calls + 3`.
+        let calls_at_budget = LS_COPY_BUDGET_BASE + 3;
+        let at_budget =
+            sets_given_to_a_function_called_twice_by_each_copy_of_its_caller(calls_at_budget);
+        assert_eq!(at_budget.len(), 2 * calls_at_budget);
+        for set in at_budget {
+            assert_eq!(set, vec![Some("f1".to_string())]);
+        }
+        let past_budget =
+            sets_given_to_a_function_called_twice_by_each_copy_of_its_caller(calls_at_budget + 1);
+        assert_eq!(past_budget, vec![vec![None]]);
+    }
+
+    /// The set the one copy of `table` gives the elements of the array it returns, where `table`
+    /// returns an array of `count` lambdas, each written once: what `Inferred::writing_symbols`
+    /// gives of it.
+    fn set_of_an_array_of_lambdas(count: usize) -> Vec<Option<String>> {
+        let lambdas: Vec<String> = (0..count).map(|i| format!("|y| y + n + {i}")).collect();
+        let prg = program_of(&format!(
+            "module Main;\n\
+             table : I64 -> Array (I64 -> I64);\n\
+             table = |n| [{}];\n\
+             main : IO ();\n\
+             main = (\n    \
+                 let n = *get_args.map(|args| args.@size);\n    \
+                 println((table(n).@(0))(n).to_string)\n\
+             );\n",
+            lambdas.join(", ")
+        ));
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("table", &[1, 0]);
+        assert_eq!(sets.len(), 1);
+        inf.writing_symbols(sets[0])
+    }
+
+    /// A variable holding as many lambdas as `MAX_LS_VARIABLE_LAMBDAS` keeps them: its set holds
+    /// them all. Holding one more, it is Dynamic, and its set holds Dynamic alone.
+    #[test]
+    fn test_a_variable_is_dynamic_from_one_lambda_past_the_bound() {
+        let at_bound = set_of_an_array_of_lambdas(MAX_LS_VARIABLE_LAMBDAS);
+        assert_eq!(
+            at_bound,
+            vec![Some("table".to_string()); MAX_LS_VARIABLE_LAMBDAS]
+        );
+        let past_bound = set_of_an_array_of_lambdas(MAX_LS_VARIABLE_LAMBDAS + 1);
+        assert_eq!(past_bound, vec![None]);
+    }
+
+    /// A flow rule accounts for a slot by `same`, by `no_other_flow`, by `make_own_dynamic` or by
+    /// `make_all_dynamic`, and `BuiltinFlow::describe_unaccounted_slot` reports the rule until every
+    /// slot of every operand and of the result is accounted for. The operation here takes a struct
+    /// of two function fields and a function taking a function, and gives a function.
+    #[test]
+    fn test_a_flow_rule_is_reported_until_it_accounts_for_every_slot() {
+        let prg = program_of(
+            r#"
+module Main;
+
+type P = box struct { f : I64 -> I64, g : I64 -> I64 };
+
+p : P;
+p = P { f : |x| x + 1, g : |x| x * 2 };
+
+h : (I64 -> I64) -> I64;
+h = |f| f(3);
+
+main : IO ();
+main = println(((p.@f)(1) + h(p.@g)).to_string);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let p_ty = inf.type_of("p").ty;
+        let h_ty = inf.type_of("h").ty;
+        let f_ty = inf.layout.type_arg(&inf.type_of("h"), 0).ty;
+        // Whether a rule declaring what `declare` does leaves a slot unaccounted for.
+        let mut reported = |declare: &dyn Fn(&mut BuiltinFlow)| {
+            let solver = &mut inf.analysis.solver;
+            let operands = vec![
+                inf.layout.fresh(&p_ty, solver),
+                inf.layout.fresh(&h_ty, solver),
+            ];
+            let result = inf.layout.fresh(&f_ty, solver);
+            assert_eq!(operands[0].slots.len(), 2);
+            assert_eq!(operands[1].slots.len(), 2);
+            assert_eq!(result.slots.len(), 1);
+            let mut flow =
+                BuiltinFlow::new(&inf.layout, solver, operands, result, "op".to_string());
+            declare(&mut flow);
+            flow.describe_unaccounted_slot().is_some()
+        };
+        // A rule that accounts for every slot, using a different declaration for each place.
+        let complete_rule = |flow: &mut BuiltinFlow| {
+            flow.no_other_flow(&flow.operand(0));
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&taken, &flow.result());
+            flow.make_own_dynamic(&flow.operand(1));
+        };
+        assert!(!reported(&complete_rule));
+        assert!(!reported(&|flow| flow.make_all_dynamic()));
+        assert!(reported(&|_| {}));
+        // The first operand left out.
+        assert!(reported(&|flow| {
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&taken, &flow.result());
+            flow.make_own_dynamic(&flow.operand(1));
+        }));
+        // One field of the first operand left out.
+        assert!(reported(&|flow| {
+            let field = flow.field(&flow.operand(0), 0);
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&field, &taken);
+            flow.same(&taken, &flow.result());
+            flow.make_own_dynamic(&flow.operand(1));
+        }));
+        // The own slot of the second operand left out.
+        assert!(reported(&|flow| {
+            flow.no_other_flow(&flow.operand(0));
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&taken, &flow.result());
+        }));
+        // The function the second operand takes left out, with the result accounted for.
+        assert!(reported(&|flow| {
+            flow.no_other_flow(&flow.operand(0));
+            flow.make_own_dynamic(&flow.operand(1));
+            flow.no_other_flow(&flow.result());
+        }));
+        // The result left out.
+        assert!(reported(&|flow| {
+            flow.no_other_flow(&flow.operand(0));
+            flow.no_other_flow(&flow.operand(1));
+        }));
+    }
+}

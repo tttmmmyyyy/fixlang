@@ -1,7 +1,8 @@
 //! Reference-counting insertion (Phase B of the AST->RC IR lowering).
 //!
 //! Phase A produces the RC IR skeleton with no explicit `Retain`/`Release` nodes (the only baked-in
-//! reference counting is the boxed capture getter's retain and the `Destructure` node's extraction).
+//! reference counting is the retain of a value read out of a boxed container by a getter, and the
+//! moves of a `DestructureUnboxed`).
 //! This pass adds the explicit nodes by a backward last-use analysis over each function, at
 //! whole-value granularity (per-leaf paths and further precision come from later passes).
 //!
@@ -146,10 +147,7 @@ impl<'a> RcInserter<'a> {
                 // Returning `x` consumes it. If `x` is also live after this expression — e.g. a match
                 // arm returns a variable that is used again after the match — it is consumed twice, so
                 // retain it here to provide the extra reference.
-                let ret = RcExprNode {
-                    expr: Arc::new(RcExpr::Ret(x.clone())),
-                    source,
-                };
+                let ret = RcExprNode::new(RcExpr::Ret(x.clone()), source);
                 let node = self.retain_if_live(&x, live_after, ret);
                 (node, live)
             }
@@ -159,7 +157,7 @@ impl<'a> RcInserter<'a> {
             RcExpr::Let(x, rhs, cont) => {
                 self.insert_into_operation_let(x, rhs, cont, source, live_after)
             }
-            RcExpr::Destructure(container, fields, _state, cont) => {
+            RcExpr::DestructureUnboxed(container, fields, cont) => {
                 self.insert_into_destructure(container, fields, cont, source, live_after)
             }
             RcExpr::Eval(x, cont) => self.insert_into_eval(x, cont, source, live_after),
@@ -180,15 +178,12 @@ impl<'a> RcInserter<'a> {
         live_after: &Set<FullName>,
     ) -> (RcExprNode, Set<FullName>) {
         let (cont, live_cont) = self.insert_into_expr(cont, live_after);
-        let cont = if x.name.is_local() && !live_cont.contains(&x.name) && self.needs_rc(&x) {
+        let cont = if self.dies_borrowed(&x, &live_cont) {
             build_releases(vec![x.clone()], cont)
         } else {
             cont
         };
-        let node = RcExprNode {
-            expr: Arc::new(RcExpr::Eval(x.clone(), cont)),
-            source,
-        };
+        let node = RcExprNode::new(RcExpr::Eval(x.clone(), cont), source);
         let mut live_before = live_cont;
         insert_if_local(&mut live_before, &x.name);
         (node, live_before)
@@ -237,10 +232,7 @@ impl<'a> RcInserter<'a> {
         }
         let cont = build_releases(after, cont);
 
-        let node = RcExprNode {
-            expr: Arc::new(RcExpr::Let(x.clone(), rhs, cont)),
-            source,
-        };
+        let node = RcExprNode::new(RcExpr::Let(x.clone(), rhs, cont), source);
         let node = build_retains(retains_before, node);
 
         let mut live_before = live_cont;
@@ -251,12 +243,9 @@ impl<'a> RcInserter<'a> {
         (node, live_before)
     }
 
-    /// A `destructure container into fields; cont`. The container is consumed: RC insertion retains
-    /// it beforehand iff it is used after the destructure (mirroring `get_scoped_obj`'s
-    /// retain-if-used-later before `get_struct_fields`), and each field the continuation never uses is
-    /// released. Code generation performs the extraction itself: a boxed container retains the fields
-    /// and releases the container; an unboxed container, whose every field is named, moves the fields
-    /// out. So the field retains and the container release are not emitted here.
+    /// A `destructure container into fields; cont`. Each field the continuation never uses is
+    /// released. Code generation moves the fields out of the container, which is consumed, and so
+    /// retained beforehand iff it is used after the destructure.
     fn insert_into_destructure(
         &self,
         container: RcVar,
@@ -276,17 +265,12 @@ impl<'a> RcInserter<'a> {
         }
         let cont = build_releases(dead, cont);
 
-        let node = RcExprNode {
-            expr: Arc::new(RcExpr::Destructure(
-                container.clone(),
-                fields.clone(),
-                RcState::Unknown,
-                cont,
-            )),
+        let node = RcExprNode::new(
+            RcExpr::DestructureUnboxed(container.clone(), fields.clone(), cont),
             source,
-        };
-        // Retain the container before the destructure iff it is used afterward, so both the extracted
-        // fields and the later use are covered.
+        );
+        // Retain the container before the destructure iff it is used afterward, so both the
+        // moved-out fields and the later use are covered.
         let node = self.retain_if_live(&container, &live_cont, node);
 
         let mut live_before = live_cont;
@@ -315,11 +299,15 @@ impl<'a> RcInserter<'a> {
         let mut live_after_match = live_cont.clone();
         live_after_match.remove(&x.name);
 
+        // A match on an unboxed scrutinee consumes it at an arm's head, where the variable the arm
+        // binds carries it away. A match on a boxed scrutinee borrows it to read the tag, and the
+        // arms read it as they read any variable of the enclosing scope.
+        let consumes_scrut = !scrut.ty.is_box(self.type_env);
+
         // The local variables live at an arm's head: those some arm uses from the enclosing scope,
-        // plus those live after the match. The match consumes the scrutinee at an arm's head — a
-        // variant arm releases the container, and otherwise the payload carries the scrutinee away —
-        // so this, rather than the liveness after the match, is the liveness that follows that
-        // consumption. Both the dead-branch releases and the scrutinee retain read it.
+        // plus those live after the match, plus a borrowed scrutinee, which reaches every arm. For
+        // a consumed scrutinee this is the liveness that follows the consumption. Both the
+        // dead-branch releases and the scrutinee retain read it.
         let free_in_arms: Vec<Set<FullName>> =
             arms.iter().map(|arm| self.arm_free_locals(arm)).collect();
         let mut live_at_arm_head: Set<FullName> = live_after_match.clone();
@@ -328,19 +316,18 @@ impl<'a> RcInserter<'a> {
                 live_at_arm_head.insert(n.clone());
             }
         }
-
-        // A boxed union scrutinee's container is released in each arm (mirrors `get_union_value`);
-        // an unbox union cancels (payload retain and container release cancel), so nothing.
-        let release_container = scrut.ty.is_box(self.type_env);
+        if !consumes_scrut {
+            insert_if_local(&mut live_at_arm_head, &scrut.name);
+        }
 
         let mut new_arms = vec![];
         let mut live_before_arms: Set<FullName> = Set::default();
         for (arm, used) in arms.into_iter().zip(free_in_arms.iter()) {
-            let payload = arm.payload.clone();
+            let binder = arm.binder.clone();
             let (body, body_live) = self.insert_into_expr(arm.body, &live_after_match);
 
-            // Dead-branch (rule c): variables used in another arm but not this one, and dead after
-            // the match, are released at this arm's head.
+            // Dead-branch (rule c): variables live at the arm's head that this arm does not use,
+            // and dead after the match, are released at this arm's head.
             let mut head = vec![];
             for n in &live_at_arm_head {
                 if !used.contains(n) && !live_after_match.contains(n) {
@@ -354,27 +341,24 @@ impl<'a> RcInserter<'a> {
                     }
                 }
             }
-            // Then the scrutinee container release (boxed union), for a variant arm only. A
-            // catch-all arm binds the whole scrutinee as its payload, so the scrutinee flows into the
-            // arm and is disposed through the payload, not by a container release here.
-            if release_container && arm.tag.is_some() && self.needs_rc(&scrut) {
-                head.push(scrut.clone());
-            }
-            // Then release the payload if the arm body never uses it.
-            if !body_live.contains(&payload.name) && self.needs_rc(&payload) {
-                head.push(payload.clone());
+            // Then release the variable the arm binds if the arm body never uses it.
+            if let Some(binder) = &binder {
+                if !body_live.contains(&binder.name) && self.needs_rc(binder) {
+                    head.push(binder.clone());
+                }
             }
             let body = build_releases(head, body);
 
             for n in &body_live {
                 live_before_arms.insert(n.clone());
             }
-            live_before_arms.remove(&payload.name);
+            if let Some(binder) = &binder {
+                live_before_arms.remove(&binder.name);
+            }
 
             new_arms.push(MatchArm {
-                payload_state: arm.payload_state,
                 tag: arm.tag,
-                payload,
+                binder,
                 body,
             });
         }
@@ -386,20 +370,21 @@ impl<'a> RcInserter<'a> {
             cont
         };
 
-        let node = RcExprNode {
-            expr: Arc::new(RcExpr::Let(
-                x.clone(),
-                RcRhs::Match(scrut.clone(), new_arms),
-                cont,
-            )),
+        let node = RcExprNode::new(
+            RcExpr::Let(x.clone(), RcRhs::Match(scrut.clone(), new_arms), cont),
             source,
+        );
+        // A consumed scrutinee is owned, and the match consumes it at an arm's head, so a use of it
+        // inside an arm body is a use after that consumption just as a use after the match is:
+        // retain it when either occurs. One reference covers both — an arm that uses the scrutinee
+        // consumes the extra reference, an arm that does not releases it by the dead-branch rule
+        // above, and an arm whose body uses a scrutinee that also outlives the match retains it
+        // again at that use.
+        let node = if consumes_scrut {
+            self.retain_if_live(&scrut, &live_at_arm_head, node)
+        } else {
+            node
         };
-        // The scrutinee is owned, and the match consumes it at an arm's head, so a use of it inside an
-        // arm body is a use after that consumption just as a use after the match is: retain it when
-        // either occurs. One reference covers both — an arm that uses the scrutinee consumes the extra
-        // reference, an arm that does not releases it by the dead-branch rule above, and an arm whose
-        // body uses a scrutinee that also outlives the match retains it again at that use.
-        let node = self.retain_if_live(&scrut, &live_at_arm_head, node);
 
         let mut live_before = live_before_arms;
         live_before.remove(&x.name);
@@ -408,10 +393,12 @@ impl<'a> RcInserter<'a> {
     }
 
     /// The local variables an arm references from the enclosing scope (its free locals minus the
-    /// payload the arm binds).
+    /// variable the arm binds).
     fn arm_free_locals(&self, arm: &MatchArm) -> Set<FullName> {
         let mut free = free_locals(&arm.body);
-        free.remove(&arm.payload.name);
+        if let Some(binder) = &arm.binder {
+            free.remove(&binder.name);
+        }
         free
     }
 
@@ -421,9 +408,15 @@ impl<'a> RcInserter<'a> {
         !var.ty.is_fully_unboxed(self.type_env)
     }
 
+    /// Whether `var`, borrowed by a construct whose continuation has `live` live, is released after
+    /// it: a local that needs reference counting and is dead in `live`.
+    fn dies_borrowed(&self, var: &RcVar, live: &Set<FullName>) -> bool {
+        var.name.is_local() && !live.contains(&var.name) && self.needs_rc(var)
+    }
+
     /// Wrap `node` in a `Retain` of `var` iff `var` is a local that needs reference counting and is
-    /// live in `live` — the owned-operand rule for a variable a consuming construct (a `Ret`, a
-    /// `Destructure`, or a `Match` scrutinee) uses, when it is still live afterward.
+    /// live in `live` — the owned-operand rule for a variable a consuming construct (a `Ret`, the
+    /// `DestructureUnboxed`, or a `Match` scrutinee) uses, when it is still live afterward.
     fn retain_if_live(&self, var: &RcVar, live: &Set<FullName>, node: RcExprNode) -> RcExprNode {
         if var.name.is_local() && live.contains(&var.name) && self.needs_rc(var) {
             build_retains(vec![var.clone()], node)
@@ -452,11 +445,7 @@ fn rhs_operands(rhs: &RcRhs, type_env: &TypeEnv) -> Vec<(RcVar, Ownership)> {
             args.iter()
                 .enumerate()
                 .map(|(i, a)| {
-                    let ownership = if op.borrows_operand(i, &arg_tys, type_env) {
-                        Ownership::Borrow
-                    } else {
-                        Ownership::Own
-                    };
+                    let ownership = Ownership::owned_if(!op.borrows_operand(i, &arg_tys, type_env));
                     (a.clone(), ownership)
                 })
                 .collect()
@@ -471,10 +460,7 @@ fn rhs_operands(rhs: &RcRhs, type_env: &TypeEnv) -> Vec<(RcVar, Ownership)> {
 fn build_retains(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
     vars.into_iter().rev().fold(cont, |c, v| {
         let source = v.source.clone();
-        RcExprNode {
-            expr: Arc::new(RcExpr::Retain(v, vec![], RcState::Unknown, c)),
-            source,
-        }
+        RcExprNode::new(RcExpr::Retain(v, vec![], RcState::Unknown, c), source)
     })
 }
 
@@ -482,10 +468,7 @@ fn build_retains(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
 fn build_releases(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
     vars.into_iter().rev().fold(cont, |c, v| {
         let source = v.source.clone();
-        RcExprNode {
-            expr: Arc::new(RcExpr::Release(v, vec![], RcState::Unknown, c)),
-            source,
-        }
+        RcExprNode::new(RcExpr::Release(v, vec![], RcState::Unknown, c), source)
     })
 }
 
@@ -506,8 +489,8 @@ fn free_locals(node: &RcExprNode) -> Set<FullName> {
 }
 
 /// The traversal behind `free_locals`: record into `refs` every local name `node` references and
-/// into `bound` every local name it binds — a `Let` variable, a `Match` arm's payload variable, or
-/// a `Destructure` field — descending through the continuation and match arms.
+/// into `bound` every local name it binds — a `Let` variable, the variable a `Match` arm binds, or
+/// a `DestructureUnboxed` field — descending through the continuation and match arms.
 fn collect_referenced_and_bound(
     node: &RcExprNode,
     refs: &mut Set<FullName>,
@@ -538,14 +521,16 @@ fn collect_referenced_and_bound(
                 RcRhs::Match(scrut, arms) => {
                     insert_if_local(refs, &scrut.name);
                     for arm in arms {
-                        bound.insert(arm.payload.name.clone());
+                        if let Some(binder) = &arm.binder {
+                            bound.insert(binder.name.clone());
+                        }
                         collect_referenced_and_bound(&arm.body, refs, bound);
                     }
                 }
             }
             collect_referenced_and_bound(k, refs, bound);
         }
-        RcExpr::Destructure(container, fields, _state, k) => {
+        RcExpr::DestructureUnboxed(container, fields, k) => {
             insert_if_local(refs, &container.name);
             for (_, fv) in fields {
                 bound.insert(fv.name.clone());
@@ -593,14 +578,16 @@ fn collect_vars(node: &RcExprNode, vars: &mut Map<FullName, RcVar>) {
                 RcRhs::Match(scrut, arms) => {
                     record_if_local(vars, scrut);
                     for arm in arms {
-                        record_if_local(vars, &arm.payload);
+                        if let Some(binder) = &arm.binder {
+                            record_if_local(vars, binder);
+                        }
                         collect_vars(&arm.body, vars);
                     }
                 }
             }
             collect_vars(k, vars);
         }
-        RcExpr::Destructure(container, fields, _state, k) => {
+        RcExpr::DestructureUnboxed(container, fields, k) => {
             record_if_local(vars, container);
             for (_, fv) in fields {
                 record_if_local(vars, fv);

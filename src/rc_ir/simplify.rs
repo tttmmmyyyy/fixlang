@@ -4,8 +4,9 @@
 //! to a fixpoint:
 //!
 //! - **case-of-known-constructor**: a `match` on a value known to be a specific constructor collapses
-//!   to that constructor's arm, and a `destructure` of a just-built struct binds each field directly
-//!   to the value that built it. The construction and the match/destructure both vanish.
+//!   to that constructor's arm, and a `destructure` of a just-built struct, or the field getters
+//!   that are the only readers of a just-built boxed struct, bind each field directly to the value
+//!   that built it. The construction and the match/destructure/getters all vanish.
 //! - **case-of-case**: a `match` whose scrutinee is itself a `match` moves each outer arm into the
 //!   inner arm that builds its constructor, so the construction and the outer match cancel together.
 //!   The walk over an inner arm follows into a `match` that arm ends in, so it reaches the
@@ -34,10 +35,13 @@
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
-use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp};
-use crate::misc::{grow_stack, Map};
+use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp, StructGetOp, UnionAsOp};
+use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
+use crate::rc_ir::ast::{
+    continuation_of, count_value_uses, for_each_node, map_children, map_continuation, MatchArm,
+    RcExpr, RcExprNode, RcProgram, RcRhs, RcVar,
+};
 use crate::rc_ir::rename::{clone_fresh, copy_suffix, substitute_expr};
 use std::sync::Arc;
 
@@ -91,48 +95,9 @@ fn simplify_to_fixpoint(node: &RcExprNode, config: &Configuration) -> RcExprNode
 fn rewrite(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
     // The continuation chain recurses deeply for a large function; grow the stack on demand.
     grow_stack(|| {
-        let node = rewrite_children(node, counter, changed);
+        let node = map_children(node, |child| rewrite(child, counter, changed));
         try_local(&node, counter, changed)
     })
-}
-
-/// Rebuild a node with `rewrite` applied to its sub-expressions (match arms and the continuation).
-fn rewrite_children(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
-    let expr = match node.expr.as_ref() {
-        RcExpr::Ret(v) => RcExpr::Ret(v.clone()),
-        RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
-            let arms = arms
-                .iter()
-                .map(|arm| arm.with_body(rewrite(&arm.body, counter, changed)))
-                .collect();
-            RcExpr::Let(
-                x.clone(),
-                RcRhs::Match(scrut.clone(), arms),
-                rewrite(k, counter, changed),
-            )
-        }
-        RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), rewrite(k, counter, changed)),
-        RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
-            container.clone(),
-            fields.clone(),
-            *state,
-            rewrite(k, counter, changed),
-        ),
-        RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), rewrite(k, counter, changed)),
-        RcExpr::Retain(v, path, state, k) => RcExpr::Retain(
-            v.clone(),
-            path.clone(),
-            *state,
-            rewrite(k, counter, changed),
-        ),
-        RcExpr::Release(v, path, state, k) => RcExpr::Release(
-            v.clone(),
-            path.clone(),
-            *state,
-            rewrite(k, counter, changed),
-        ),
-    };
-    node_of(expr, &node.source)
 }
 
 /// Try the local rewrites at `node`, in order. Returns the rewritten node and sets `changed` if one
@@ -140,6 +105,7 @@ fn rewrite_children(node: &RcExprNode, counter: &mut u64, changed: &mut bool) ->
 fn try_local(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
     let rewritten = case_of_known_union(node)
         .or_else(|| destructure_of_struct(node))
+        .or_else(|| getters_of_struct(node))
         .or_else(|| case_of_case(node, counter));
     match rewritten {
         Some(rewritten) => {
@@ -160,7 +126,7 @@ pub(crate) fn node_count(node: &RcExprNode) -> u64 {
                 return 1 + arms_size(arms) + node_count(k);
             }
             RcExpr::Let(_, _, k)
-            | RcExpr::Destructure(_, _, _, k)
+            | RcExpr::DestructureUnboxed(_, _, k)
             | RcExpr::Eval(_, k)
             | RcExpr::Retain(_, _, _, k)
             | RcExpr::Release(_, _, _, k) => k,
@@ -191,8 +157,9 @@ fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
 }
 
 /// case-of-known-constructor on a union: `let x = union_tag(payload); let m = match x { .. }; k`,
-/// where `x` is consumed only by the match, collapses to the `tag` arm — its payload bound to the
-/// construction's operand, its result flowing into `m` — dropping both the construction and the match.
+/// where nothing reads `x` after the match and the `tag` arm reads it only to bind its payload,
+/// collapses to that arm — its payload bound to the construction's operand, its result flowing into
+/// `m` — dropping the construction, the match and its other arms.
 fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     let RcExpr::Let(x, rhs, k) = node.expr.as_ref() else {
         return None;
@@ -202,13 +169,64 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     // Pick the arm for the known tag. A catch-all arm binds the whole union, so the construction
     // stays to build it; skip when only a catch-all matches.
     let arm = arms.iter().find(|arm| arm.tag == Some(variant))?;
-    if !consumed_only_by_its_match(x, k) {
+    if !reads_scrut_for_payload_alone(arm, x) || count_value_uses(&x.name, k2) != 0 {
         return None;
     }
-    let body = substitute_expr(&arm.body, &single_subst(&arm.payload.name, &operand.name));
+    let body = with_payload_bound(arm, x, operand);
     Some(replace_tail(&body, &mut |arm_result| {
         substitute_expr(k2, &single_subst(&m.name, &arm_result.name))
     }))
+}
+
+/// Whether `rhs` reads the payload of the variant `variant` out of the union named `union`, known
+/// to hold that variant: what the arm for `variant` over a boxed union binds its payload with.
+fn is_payload_read_of(rhs: &RcRhs, union: &FullName, variant: usize) -> bool {
+    let RcRhs::Builtin(op, args) = rhs else {
+        return false;
+    };
+    op.as_any().downcast_ref::<UnionAsOp>().is_some_and(|read| {
+        read.variant_is_known() && read.variant_index() == variant && args[0].name == *union
+    })
+}
+
+/// The variables the body of `arm`, an arm of a match on `scrut`, binds to the payload it reads out
+/// of `scrut`: none for an arm that binds its payload itself, which is every arm over an unboxed
+/// union, and none for a catch-all arm.
+fn payload_read_vars(arm: &MatchArm, scrut: &RcVar) -> Set<FullName> {
+    let mut vars = Set::default();
+    let (Some(variant), None) = (arm.tag, &arm.binder) else {
+        return vars;
+    };
+    for_each_node(&arm.body, &mut |n| {
+        if let RcExpr::Let(p, rhs, _) = n.expr.as_ref() {
+            if is_payload_read_of(rhs, &scrut.name, variant) {
+                vars.insert(p.name.clone());
+            }
+        }
+    });
+    vars
+}
+
+/// The body of `arm`, a variant arm of a match on `scrut`, with the payload it matches being
+/// `operand`: the variable the arm binds over an unboxed union, and each variable its body reads
+/// the payload into over a boxed one, whose read is dropped.
+fn with_payload_bound(arm: &MatchArm, scrut: &RcVar, operand: &RcVar) -> RcExprNode {
+    match &arm.binder {
+        Some(payload) => substitute_expr(&arm.body, &single_subst(&payload.name, &operand.name)),
+        None => {
+            let read_vars = payload_read_vars(arm, scrut);
+            let subst = read_vars
+                .iter()
+                .map(|var| (var.clone(), operand.name.clone()))
+                .collect();
+            substitute_expr(&without_bindings(&arm.body, &read_vars), &subst)
+        }
+    }
+}
+
+/// The number of nodes `with_payload_bound` leaves of `arm`.
+fn size_with_payload_bound(arm: &MatchArm, scrut: &RcVar) -> u64 {
+    node_count(&arm.body) - payload_read_vars(arm, scrut).len() as u64
 }
 
 /// The match on `x` that `k` starts with, `let m = match x { arms }; k2`, as `m`, `arms` and `k2`.
@@ -225,13 +243,11 @@ fn match_on<'a>(
     Some((m, arms, k2))
 }
 
-/// Whether the match `k` starts with is the only consumer of `x` in `k`, so that a rewrite dropping
-/// what built `x` drops that match with it and leaves nothing else reading `x`.
-///
-/// This walks the whole of `k`, which is the rest of the function, so a rewrite asks it last: asked
-/// first at every match on a match, it would make a pass over a function quadratic in its length.
-fn consumed_only_by_its_match(x: &RcVar, k: &RcExprNode) -> bool {
-    count_value_uses(&x.name, k) == 1
+/// Whether the body of `arm`, a variant arm of a match on `scrut`, reads `scrut` only to bind its
+/// payload. A rewrite binding the payload to the operand that built it (`with_payload_bound`) then
+/// leaves nothing in the body reading `scrut`.
+fn reads_scrut_for_payload_alone(arm: &MatchArm, scrut: &RcVar) -> bool {
+    count_value_uses(&scrut.name, &arm.body) == payload_read_vars(arm, scrut).len()
 }
 
 /// case-of-known-constructor on a struct: `let x = make_struct(a, b, ..); destructure x { .i -> fi };
@@ -242,7 +258,7 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
         return None;
     };
     op.as_any().downcast_ref::<MakeStructOp>()?;
-    let RcExpr::Destructure(container, fields, _, k2) = k.expr.as_ref() else {
+    let RcExpr::DestructureUnboxed(container, fields, k2) = k.expr.as_ref() else {
         return None;
     };
     if container.name != x.name || count_value_uses(&x.name, k) != 1 {
@@ -264,12 +280,64 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
     Some(substitute_expr(k2, &subst))
 }
 
-/// case-of-case: `let s = match iScrut { iArms }; let m = match s { oArms }; k2`, where `s` is
-/// consumed only by the outer match, moves each outer arm into the inner arm whose result it
-/// matches. An inner arm ends in a union it builds and immediately returns — or in a `match` whose own
-/// arms do, which `replace_tail_union` follows into — so the outer arm for that constructor is the one
-/// that arm reaches; putting that arm in place of the construction cancels the two against each other,
-/// with the outer arm's payload binder becoming the construction's operand. The inner match then
+/// The field `rhs` reads out of the struct named `container`, where `rhs` is a field getter of it.
+fn field_read_of(rhs: &RcRhs, container: &FullName) -> Option<usize> {
+    let RcRhs::Builtin(op, args) = rhs else {
+        return None;
+    };
+    let getter = op.as_any().downcast_ref::<StructGetOp>()?;
+    (args[0].name == *container).then(|| getter.field_index())
+}
+
+/// case-of-known-constructor on a boxed struct: `let x = make_struct(a, b, ..); let f = x.i; k`,
+/// where every use of `x` is a field getter, binds each getter's variable directly to the operand
+/// that built that field, dropping the construction and the getters. This is what a struct pattern
+/// over a just-built boxed struct lowers to.
+fn getters_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
+    let RcExpr::Let(x, RcRhs::Builtin(op, args), k) = node.expr.as_ref() else {
+        return None;
+    };
+    op.as_any().downcast_ref::<MakeStructOp>()?;
+    // A getter right after the construction is the cheap sign of the shape, checked before the
+    // walks over the whole continuation.
+    let RcExpr::Let(_, first, _) = k.expr.as_ref() else {
+        return None;
+    };
+    field_read_of(first, &x.name)?;
+    let mut subst: Map<FullName, FullName> = Map::default();
+    for_each_node(k, &mut |n| {
+        if let RcExpr::Let(f, rhs, _) = n.expr.as_ref() {
+            if let Some(idx) = field_read_of(rhs, &x.name) {
+                subst.insert(f.name.clone(), args[idx].name.clone());
+            }
+        }
+    });
+    if count_value_uses(&x.name, k) != subst.len() {
+        return None;
+    }
+    let getter_vars: Set<FullName> = subst.keys().cloned().collect();
+    Some(substitute_expr(&without_bindings(k, &getter_vars), &subst))
+}
+
+/// `node` without the `Let` nodes binding the variables of `dropped`.
+fn without_bindings(node: &RcExprNode, dropped: &Set<FullName>) -> RcExprNode {
+    grow_stack(|| {
+        let node = map_children(node, |child| without_bindings(child, dropped));
+        match node.expr.as_ref() {
+            RcExpr::Let(x, _, k) if dropped.contains(&x.name) => k.clone(),
+            _ => node,
+        }
+    })
+}
+
+/// case-of-case: `let s = match iScrut { iArms }; let m = match s { oArms }; k2`, where nothing
+/// after the outer match reads `s` and each outer arm an inner arm reaches reads it only to bind
+/// its payload, moves each outer arm into the inner arm whose result it matches. An inner arm ends
+/// in a union it builds and immediately returns — or in a `match` whose own arms do, which
+/// `replace_tail_union` follows into — so the outer arm for that constructor is the one that arm
+/// reaches; putting that arm in place of the construction cancels the two against each other,
+/// with the outer arm's payload being the construction's operand (`with_payload_bound`). The inner
+/// match then
 /// produces what the outer match did, so it binds the outer match's variable, and `k2` follows it
 /// once, as it followed the outer match.
 ///
@@ -291,7 +359,7 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
         if let Some(tag) = arm.tag {
             outer_arm_of_variant
                 .entry(tag)
-                .or_insert_with(|| (arm, node_count(&arm.body)));
+                .or_insert_with(|| (arm, size_with_payload_bound(arm, s)));
         }
     }
     // Measure before building. Copying an outer arm into every tail is what this rewrite spends, so
@@ -300,8 +368,11 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     // the inner arms, the outer match and its arms they replace.
     let replaced_size = 1 + arms_size(inner_arms) + arms_size(outer_arms);
     let mut new_arms_size = 0;
+    // The variants the tails build, whose outer arms the rewrite keeps.
+    let mut reached: Set<usize> = Set::default();
     for arm in inner_arms {
         new_arms_size += size_after_replacing_tails(&arm.body, &mut |variant| {
+            reached.insert(variant);
             outer_arm_of_variant.get(&variant).map(|(_, size)| *size)
         })?;
     }
@@ -310,7 +381,14 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     if new_arms_size >= replaced_size {
         return None;
     }
-    if !consumed_only_by_its_match(s, k) {
+    // The outer match goes away with the arms no tail reaches, so `s` has to be read by nothing
+    // after it, and by each arm a tail reaches only to bind its payload. The walk over `k2` is the
+    // rest of the function, so it is asked last: asked first at every match on a match, it would
+    // make a pass over a function quadratic in its length.
+    let reached_read_scrut_for_payload_alone = reached
+        .iter()
+        .all(|variant| reads_scrut_for_payload_alone(outer_arm_of_variant[variant].0, s));
+    if !reached_read_scrut_for_payload_alone || count_value_uses(&s.name, k2) != 0 {
         return None;
     }
     let mut new_arms = Vec::with_capacity(inner_arms.len());
@@ -325,8 +403,11 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
             // Fresh binders per arm, so an outer arm two inner arms reach does not put one name in
             // two places.
             *counter += 1;
-            let moved = clone_fresh(&outer.body, &copy_suffix(PASS_TAG, &counter.to_string()));
-            substitute_expr(&moved, &single_subst(&outer.payload.name, &operand.name))
+            let moved = outer.with_body(clone_fresh(
+                &outer.body,
+                &copy_suffix(PASS_TAG, &counter.to_string()),
+            ));
+            with_payload_bound(&moved, s, operand)
         });
         new_arms.push(arm.with_body(body));
     }
@@ -337,13 +418,13 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
         new_arms_size,
         "the rewrite left arms of a size other than the one measured before building them"
     );
-    Some(node_of(
+    Some(RcExprNode::new(
         RcExpr::Let(
             m.clone(),
             RcRhs::Match(inner_scrut.clone(), new_arms),
             k2.clone(),
         ),
-        &node.source,
+        node.source.clone(),
     ))
 }
 
@@ -413,10 +494,7 @@ fn replace_tail_union(
             let (variant, operand) = union_construction(rhs).expect("the tail builds no union");
             f(variant, operand)
         }
-        _ => with_continuation(
-            node,
-            replace_tail_union(continuation_of(node), result_ty, f),
-        ),
+        _ => map_continuation(node, |k| replace_tail_union(k, result_ty, f)),
     })
 }
 
@@ -448,91 +526,23 @@ fn replace_tail_union_of_match(
 /// `let x = match scrut { arms }; ret x` — the shape a `match` takes where it stands in tail
 /// position.
 fn tail_match(x: RcVar, scrut: &RcVar, arms: Vec<MatchArm>, source: &Option<Span>) -> RcExprNode {
-    let ret = node_of(RcExpr::Ret(x.clone()), source);
-    node_of(
+    let ret = RcExprNode::new(RcExpr::Ret(x.clone()), source.clone());
+    RcExprNode::new(
         RcExpr::Let(x, RcRhs::Match(scrut.clone(), arms), ret),
-        source,
+        source.clone(),
     )
 }
 
 /// Replace the terminal `ret r` of `node` with `f(r)`, threading through the continuation chain. A
 /// `Match` is a right-hand side, so the tail is the final `Ret` reached through the
-/// `Let`/`Destructure`/`Eval`/`Retain`/`Release` continuations, and the arms of a `Match` are left as
+/// `Let`/`DestructureUnboxed`/`Eval`/`Retain`/`Release` continuations, and the arms of a `Match` are left as
 /// they are.
 fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> RcExprNode {
     // An arm body is a continuation chain that recurses to its full depth here; grow the stack.
     grow_stack(|| match node.expr.as_ref() {
         RcExpr::Ret(r) => f(r),
-        _ => with_continuation(node, replace_tail(continuation_of(node), f)),
+        _ => map_continuation(node, |k| replace_tail(k, f)),
     })
-}
-
-/// What `node` evaluates after its own step. A `ret` ends the chain and has none, so a caller answers
-/// for that case before asking.
-fn continuation_of(node: &RcExprNode) -> &RcExprNode {
-    match node.expr.as_ref() {
-        RcExpr::Ret(v) => unreachable!("`ret {}` ends the chain", v.name.to_string()),
-        RcExpr::Let(_, _, k)
-        | RcExpr::Destructure(_, _, _, k)
-        | RcExpr::Eval(_, k)
-        | RcExpr::Retain(_, _, _, k)
-        | RcExpr::Release(_, _, _, k) => k,
-    }
-}
-
-/// `node` with `k` in place of its continuation, its own step left as it is. A `ret` ends the chain,
-/// so a caller answers for that case before asking.
-fn with_continuation(node: &RcExprNode, k: RcExprNode) -> RcExprNode {
-    let expr = match node.expr.as_ref() {
-        RcExpr::Ret(v) => unreachable!("`ret {}` ends the chain", v.name.to_string()),
-        RcExpr::Let(x, rhs, _) => RcExpr::Let(x.clone(), rhs.clone(), k),
-        RcExpr::Destructure(container, fields, state, _) => {
-            RcExpr::Destructure(container.clone(), fields.clone(), *state, k)
-        }
-        RcExpr::Eval(v, _) => RcExpr::Eval(v.clone(), k),
-        RcExpr::Retain(v, path, state, _) => RcExpr::Retain(v.clone(), path.clone(), *state, k),
-        RcExpr::Release(v, path, state, _) => RcExpr::Release(v.clone(), path.clone(), *state, k),
-    };
-    node_of(expr, &node.source)
-}
-
-/// The number of times `name` occurs as a value in `node`: a move, a call callee or argument, an
-/// operand of a builtin operation, a closure capture, a match scrutinee, a destructured container,
-/// an `eval`, or the returned variable. Binders do not count. `Retain`/`Release` name a variable
-/// only for reference counting, so they are transparent.
-fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
-    // A deep continuation chain recurses to its full depth here; grow the stack on demand.
-    grow_stack(|| {
-        let hit = |v: &RcVar| (v.name == *name) as usize;
-        match node.expr.as_ref() {
-            RcExpr::Ret(v) => hit(v),
-            RcExpr::Let(_, rhs, k) => rhs_value_uses(name, rhs) + count_value_uses(name, k),
-            RcExpr::Destructure(container, _, _state, k) => {
-                hit(container) + count_value_uses(name, k)
-            }
-            RcExpr::Eval(v, k) => hit(v) + count_value_uses(name, k),
-            RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => count_value_uses(name, k),
-        }
-    })
-}
-
-/// The number of times `name` occurs as a value in `rhs`, counting the arms of a `Match` as well as
-/// its scrutinee. The arm payloads are binders, so they do not count.
-fn rhs_value_uses(name: &FullName, rhs: &RcRhs) -> usize {
-    let hit = |v: &RcVar| (v.name == *name) as usize;
-    match rhs {
-        RcRhs::Var(v) => hit(v),
-        RcRhs::App(callee, args) => hit(callee) + args.iter().map(hit).sum::<usize>(),
-        RcRhs::Closure(_, caps) => caps.iter().map(hit).sum(),
-        RcRhs::Builtin(_, args) => args.iter().map(hit).sum(),
-        RcRhs::Match(scrut, arms) => {
-            hit(scrut)
-                + arms
-                    .iter()
-                    .map(|arm| count_value_uses(name, &arm.body))
-                    .sum::<usize>()
-        }
-    }
 }
 
 /// A one-entry substitution map.
@@ -540,13 +550,4 @@ fn single_subst(from: &FullName, to: &FullName) -> Map<FullName, FullName> {
     let mut subst: Map<FullName, FullName> = Map::default();
     subst.insert(from.clone(), to.clone());
     subst
-}
-
-/// A node holding `expr` and reporting `source` as the place it comes from. A rewritten node carries
-/// the span of the node it replaces, so the simplified body still points into the source program.
-fn node_of(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
-    RcExprNode {
-        expr: Arc::new(expr),
-        source: source.clone(),
-    }
 }

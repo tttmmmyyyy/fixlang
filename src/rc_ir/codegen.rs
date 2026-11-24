@@ -310,18 +310,15 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let obj = self.eval_rc_rhs(rhs, &x.ty, func_vals);
                 self.bind_and_continue(x, obj, k, tail, func_vals)
             }
-            RcExpr::Destructure(container, fields, state, k) => {
-                // Extract all fields at once (the container was retained beforehand by a `Retain`
-                // node iff it is used afterward). `get_struct_fields` performs the whole-container
-                // reference counting: a boxed container retains the fields and releases itself, an
-                // unboxed container, whose every field is named, moves the fields out.
+            RcExpr::DestructureUnboxed(container, fields, k) => {
+                // Move all fields out at once. The container was retained beforehand by a `Retain`
+                // node iff it is used afterward.
                 let container_obj = self.get_scoped_obj_noretain(&container.name);
                 let field_indices: Vec<u32> = fields.iter().map(|(idx, _)| *idx as u32).collect();
-                let field_objs = ObjectFieldType::get_struct_fields(
+                let field_objs = ObjectFieldType::take_unboxed_struct_fields(
                     self,
                     &container_obj,
                     &field_indices,
-                    *state,
                 );
                 // One object per requested index; the pop below walks `fields`, so a shorter list
                 // would leave it popping names this loop never pushed.
@@ -576,9 +573,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Generate a `Match`. `tail` selects direct returns in each arm (no merge) versus a phi that
-    /// yields the match value. The scrutinee's per-arm container release and dead-branch releases are
-    /// already explicit `Release` nodes in the arm bodies; here only the payload retain-getter is
-    /// baked in (mirroring `get_union_value`).
+    /// yields the match value. Every release is an explicit `Release` node in the arm bodies.
     fn eval_rc_match(
         &mut self,
         result: &RcVar,
@@ -588,7 +583,6 @@ impl<'c, 'm> Generator<'c, 'm> {
         func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) -> Option<Object<'c>> {
         let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
-        let scrut_is_boxed = scrut_obj.ty.is_box(self.type_env());
 
         let current_func = self.current_function();
         let cont_bb = if tail {
@@ -635,29 +629,33 @@ impl<'c, 'm> Generator<'c, 'm> {
         for (i, arm) in arms.iter().enumerate() {
             self.builder().position_at_end(arm_bbs[i]);
 
-            // Bind the arm payload: a variant arm extracts (and, for a boxed union, retains) the
-            // variant value; a catch-all arm binds the whole scrutinee.
-            let payload_obj = match arm.tag {
-                Some(_) => {
-                    let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
-                    let value = ObjectFieldType::get_union_value_noretain_norelease(
-                        self,
-                        scrut_obj,
-                        &arm.payload.ty,
-                    );
-                    if scrut_is_boxed {
-                        let one = self.context.i64_type().const_int(1, false);
-                        self.build_retain(value.clone(), one, arm.payload_state);
-                    }
-                    value
-                }
-                None => self.get_scoped_obj_noretain(&scrut.name),
-            };
-            self.scope_push(&arm.payload.name, &payload_obj);
-            self.emit_debug_local_variable(&arm.payload, &payload_obj);
+            // Bind the variable the arm binds: a variant arm moves the variant's value out of the
+            // scrutinee, and a catch-all arm binds the whole scrutinee. The move counts no
+            // reference, which is correct for an unboxed scrutinee alone.
+            assert_eq!(
+                arm.binder.is_some(),
+                !scrut.ty.is_box(self.type_env()),
+                "an arm of the match on `{}`, of type `{}`, binds a variable over a boxed \
+                 scrutinee, or none over an unboxed one",
+                scrut.name.to_string(),
+                scrut.ty.to_string()
+            );
+            if let Some(binder) = &arm.binder {
+                let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
+                let payload_obj = match arm.tag {
+                    Some(_) => ObjectFieldType::get_union_value_noretain_norelease(
+                        self, scrut_obj, &binder.ty,
+                    ),
+                    None => scrut_obj,
+                };
+                self.scope_push(&binder.name, &payload_obj);
+                self.emit_debug_local_variable(binder, &payload_obj);
+            }
 
             let arm_obj = self.eval_rc_expr(&arm.body, tail, func_vals);
-            self.scope_pop(&arm.payload.name);
+            if let Some(binder) = &arm.binder {
+                self.scope_pop(&binder.name);
+            }
 
             // A non-tail arm that produced a value branches to the merge block and feeds the phi. An
             // arm that returned (tail) yields `None` and contributes nothing; a diverging arm feeds

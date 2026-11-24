@@ -1,0 +1,25 @@
+module Main;
+
+// Reads `key`, and updates an array read out of `rows`. Neither parameter is consumed, so both are
+// inferred Borrow. Recursive, so the inliner leaves it a call.
+tally : I64 -> Array (Array I64) -> Array I64 -> I64;
+tally = |d, rows, key| (
+    if d > 0 { tally(d - 1, rows, key) };
+    let row = rows.@(0);
+    let row = row.set(0, key.@(0));
+    row.@(0) + row.@(1)
+);
+
+main : IO ();
+main = (
+    pure();;
+    let key = Array::fill(3, 7);
+    // `rows` ends at this call and `key` is read after it, so the call lends `key` alone.
+    let rows = [Array::fill(4, 1)];
+    let a = tally(0, rows, key);
+    // `key` ends at this call and `rows2` is read after it, so the call lends `rows2` alone.
+    let rows2 = [Array::fill(4, 2)];
+    let b = tally(0, rows2, key);
+    let c = rows2.@(0).@(1);
+    println $ (a + b + c).to_string
+);

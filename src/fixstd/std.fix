@@ -722,6 +722,10 @@ namespace Array {
     // Merges the sorted runs `from[former_pos, former_end)` and `from[latter_pos, latter_end)` into
     // `into`, writing from `into_pos` on.
     //
+    // The caller must ensure `[former_pos, former_end)` and `[latter_pos, latter_end)` are in range of
+    // `from`, and `[into_pos, into_pos + (former_end - former_pos) + (latter_end - latter_pos))` is in
+    // range of `into`; an out-of-range index causes undefined behavior.
+    //
     // # Parameters
     // - `less_than`: A function that takes two elements and returns true if the first is
     //   less than the second.
@@ -734,17 +738,24 @@ namespace Array {
     // - `into`: The array to write the merged elements into.
     _merge_runs : ((a, a) -> Bool) -> I64 -> I64 -> I64 -> I64 -> I64 -> Array a -> Array a -> Array a;
     _merge_runs = |less_than, former_pos, former_end, latter_pos, latter_end, into_pos, from, into| (
-        if former_pos == former_end { into._unsafe_copy_range_bounds_unchecked(from, latter_pos, latter_end, into_pos) };
-        if latter_pos == latter_end { into._unsafe_copy_range_bounds_unchecked(from, former_pos, former_end, into_pos) };
-        let former_elem = from.@(former_pos);
-        let latter_elem = from.@(latter_pos);
-        if !less_than((latter_elem, former_elem)) { // Essential for stability.
-            into.set(into_pos, former_elem)
-                ._merge_runs(less_than, former_pos + 1, former_end, latter_pos, latter_end, into_pos + 1, from)
-        } else {
-            into.set(into_pos, latter_elem)
-                ._merge_runs(less_than, former_pos, former_end, latter_pos + 1, latter_end, into_pos + 1, from)
-        }
+        loop((into, former_pos, latter_pos, into_pos), |(into, former_pos, latter_pos, into_pos)|
+            if former_pos == former_end { break $ into._unsafe_copy_range_bounds_unchecked(from, latter_pos, latter_end, into_pos) };
+            if latter_pos == latter_end { break $ into._unsafe_copy_range_bounds_unchecked(from, former_pos, former_end, into_pos) };
+            // Neither run ends before `into_pos` reaches `into_stop`, so the inner loop skips the end checks.
+            let into_stop = into_pos + min(former_end - former_pos, latter_end - latter_pos);
+            let (into, former_pos, latter_pos) = loop((into, former_pos, latter_pos, into_pos), |(into, former_pos, latter_pos, into_pos)|
+                if into_pos == into_stop { break $ (into, former_pos, latter_pos) };
+                let former_elem = from.unsafe_get_bounds_unchecked(former_pos);
+                let latter_elem = from.unsafe_get_bounds_unchecked(latter_pos);
+                // Taking the former element on a tie keeps the sort stable.
+                if less_than((latter_elem, former_elem)) {
+                    continue $ (into.unsafe_set_bounds_unchecked(into_pos, latter_elem), former_pos, latter_pos + 1, into_pos + 1)
+                } else {
+                    continue $ (into.unsafe_set_bounds_unchecked(into_pos, former_elem), former_pos + 1, latter_pos, into_pos + 1)
+                }
+            );
+            continue $ (into, former_pos, latter_pos, into_stop)
+        )
     );
 
     // Overwrites `dst[dst_begin, dst_begin + end - begin)` with `src[begin, end)`, omitting the

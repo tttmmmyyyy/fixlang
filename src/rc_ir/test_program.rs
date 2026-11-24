@@ -11,7 +11,6 @@ use crate::misc::Set;
 use crate::rc_ir::ast::{
     FuncRef, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
-use std::sync::Arc;
 
 /// The name lowering gives a symbol of the program under test.
 pub fn global_name(name: &str) -> FullName {
@@ -33,13 +32,10 @@ pub fn var(name: FullName) -> RcVar {
 /// last value it bound. A body mentioning nothing returns its own parameter.
 fn body_mentioning(mentions: &[FullName]) -> RcExprNode {
     let last = FullName::local(&format!("v{}", mentions.len()));
-    let mut body = RcExprNode {
-        expr: Arc::new(RcExpr::Ret(var(last))),
-        source: None,
-    };
+    let mut body = RcExprNode::new(RcExpr::Ret(var(last)), None);
     for (i, mentioned) in mentions.iter().enumerate().rev() {
-        body = RcExprNode {
-            expr: Arc::new(RcExpr::Let(
+        body = RcExprNode::new(
+            RcExpr::Let(
                 var(FullName::local(&format!("v{}", i + 1))),
                 RcRhs::Closure(
                     FuncRef {
@@ -48,9 +44,9 @@ fn body_mentioning(mentions: &[FullName]) -> RcExprNode {
                     vec![],
                 ),
                 body,
-            )),
-            source: None,
-        };
+            ),
+            None,
+        );
     }
     body
 }
@@ -87,5 +83,6 @@ pub fn prog(funcs: Vec<RcFunc>, globals: Vec<RcGlobalInit>, roots: &[FullName]) 
         funcs: funcs.into_iter().map(|f| (f.name.clone(), f)).collect(),
         globals,
         roots: roots.iter().cloned().collect(),
+        retains_sunk: false,
     }
 }

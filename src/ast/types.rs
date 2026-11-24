@@ -292,7 +292,7 @@ impl TyCon {
             new_tyvars.push(type_from_tyvar(tv));
         }
 
-        apply_type_args(&Arc::new(self.clone()), &new_tyvars)
+        apply_tycon_args(&Arc::new(self.clone()), &new_tyvars)
     }
 
     /// Whether this is the unit type `()`, i.e. the tuple of no element.
@@ -988,7 +988,7 @@ impl TypeNode {
     /// This struct type punched at field `punched_at`: a type of the same memory layout, whose
     /// declaration marks that field as a hole the value has moved out of.
     pub fn to_punched_struct(self: &Arc<TypeNode>, punched_at: usize) -> Arc<TypeNode> {
-        let mut tycon = self.toplevel_tycon().unwrap().as_ref().clone();
+        let mut tycon = self.expect_toplevel_tycon().as_ref().clone();
         tycon.into_punched_type_name(punched_at);
         self.set_toplevel_tycon(Arc::new(tycon))
     }
@@ -1359,6 +1359,18 @@ impl TypeNode {
         }
     }
 
+    /// The type constructor at the head of this type, as `Array` heads `Array I64`. Panics, naming
+    /// this type, where a type variable or an associated type application heads it.
+    #[track_caller]
+    pub fn expect_toplevel_tycon(&self) -> Arc<TyCon> {
+        self.toplevel_tycon().unwrap_or_else(|| {
+            panic!(
+                "the type `{}` is headed by no type constructor",
+                Arc::new(self.clone()).to_string()
+            )
+        })
+    }
+
     /// This type with `tycon` at its head, keeping the arguments applied to it: `Array I64` with
     /// `Option` given here becomes `Option I64`. Panics for a type headed by a type variable or by
     /// an associated type application.
@@ -1416,7 +1428,7 @@ impl TypeNode {
     /// Panics where this type has no top-level type constructor, and where that constructor is not
     /// one of the numeric types of `Std`: `TyCon::is_signed_integer` answers for those alone.
     pub fn is_signed_integer(&self) -> bool {
-        self.toplevel_tycon().unwrap().is_signed_integer()
+        self.expect_toplevel_tycon().is_signed_integer()
     }
 
     /// Whether this type is `Std::PunchedArray`, an array with one element moved out of it.
@@ -1489,10 +1501,7 @@ impl TypeNode {
     /// absent from `type_env`.
     pub fn toplevel_tycon_info<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
         assert!(!self.is_arrow());
-        let tycon = self
-            .toplevel_tycon()
-            .unwrap_or_else(|| panic!("the type `{:?}` is headed by no type constructor", self));
-        type_env.tycon_info(&tycon)
+        type_env.tycon_info(&self.expect_toplevel_tycon())
     }
 
     /// Whether a value of this type is held in place, with its fields laid out where the value
@@ -2194,16 +2203,21 @@ pub fn tycon(name: FullName) -> Arc<TyCon> {
     Arc::new(TyCon { name })
 }
 
-/// The TyCon applied to the given type arguments, in order.
+/// `tycon` applied to the given type arguments, in order.
 ///
 /// # Examples
-/// `apply_type_args(Array, [I64])` is `Array I64`, and `apply_type_args(Array, [])` is `Array`.
-pub fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
-    let mut applied = type_tycon(tycon);
-    for arg in args {
-        applied = type_tyapp(applied, arg.clone());
-    }
-    applied
+/// `apply_tycon_args(Array, [I64])` is `Array I64`, and `apply_tycon_args(Array, [])` is `Array`.
+pub fn apply_tycon_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
+    apply_type_args(type_tycon(tycon), args)
+}
+
+/// `head` applied to the given type arguments, in order.
+///
+/// # Examples
+/// `apply_type_args(m, [I64])` is `m I64` for the type variable `m`.
+pub fn apply_type_args(head: Arc<TypeNode>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
+    args.iter()
+        .fold(head, |applied, arg| type_tyapp(applied, arg.clone()))
 }
 
 /// What a type node carries beside the type itself.

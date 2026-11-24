@@ -7,6 +7,7 @@
 mod tests {
     use crate::{
         configuration::{Configuration, FixOptimizationLevel, ValgrindTool},
+        constants::LS_CAP_PREFIX,
         tests::test_util::{
             build_run_and_read_rc_ir, build_within_and_run, rc_ir_function_bodies, test_source,
         },
@@ -20,10 +21,17 @@ mod tests {
     /// That a closure of the type is built at all is asserted alongside, so that a build where the
     /// lambda no longer stands as a closure fails here rather than passing on an empty search.
     fn assert_closures_at_type_store_nothing(dump: &str, closure_ty: &str) {
-        let held_at = format!(" : {} [", closure_ty);
+        // A binding's type is followed by the name it was minted under, `(as ...)`, or by its
+        // provenance, `[...]`.
+        let held_at = [
+            format!(" : {} (as ", closure_ty),
+            format!(" : {} [", closure_ty),
+        ];
         let built = dump
             .lines()
-            .filter(|line| line.contains("= closure ") && line.contains(&held_at))
+            .filter(|line| {
+                line.contains("= closure ") && held_at.iter().any(|at| line.contains(at.as_str()))
+            })
             .collect::<Vec<_>>();
         assert!(
             !built.is_empty(),
@@ -60,7 +68,7 @@ mod tests {
 
     /// A lambda with no free variable, handed to a built-in that stores it as a closure. The
     /// built-in is what leaves a closure to look at: a Fix function handed the same lambda is
-    /// specialized on it, and a built-in that applies its function in a scope takes the capture list
+    /// specialized on it, and a built-in that applies its function in a scope takes the capture struct
     /// through its environment, and then none is built.
     const NO_FREE_VARIABLE_SOURCE: &str = r#"
         module Main;
@@ -80,8 +88,8 @@ mod tests {
 
     /// A lambda with no free variable stores nothing.
     ///
-    /// The lifting that precedes the closure hands such a lambda a capture list of no field, and
-    /// that list is a value occupying no storage, so the closure built from it stores nothing. Left
+    /// The lifting that precedes the closure hands such a lambda a capture struct of no field, and
+    /// that struct is a value occupying no storage, so the closure built from it stores nothing. Left
     /// stored, it is one heap allocation per closure built.
     ///
     /// The dump is what this asserts against because the program cannot observe it: the answer is
@@ -174,9 +182,9 @@ mod tests {
             "((), Std::I64) -> Std::IO::IOState -> (Std::IO::IOState, ((), Std::I64))",
         );
 
-        // The capture list `Main` declares for the lambda is made where it is read, rather than
+        // The capture struct `Main` declares for the lambda is made where it is read, rather than
         // projected out of a capture object the closure would have had to carry it in.
-        assert_a_value_is_made_where_it_is_read(&dump, "Main::#CapList@");
+        assert_a_value_is_made_where_it_is_read(&dump, &format!("Main::{}@", LS_CAP_PREFIX));
     }
 
     /// Three lines of output around a call that takes a closure. The `IOState` an `IO` action
@@ -206,7 +214,7 @@ mod tests {
     ///
     /// Every level is covered because which captures reach a closure differs by level: below
     /// `-O max` a captured `IOState` is left out as itself, and at `-O max` it has been gathered
-    /// into a capture list first.
+    /// into a capture struct first.
     #[test]
     fn test_io_keeps_its_order_at_every_optimization_level() {
         for opt_level in ["none", "basic", "max"] {
@@ -227,8 +235,9 @@ mod tests {
     /// A captured `IOState` is left out of the closure and made where it is read.
     ///
     /// The level is `none` because that is where a closure meets an `IOState` as a captured value of
-    /// its own: closure specialization, which runs from `-O max` up, gathers a lambda's captures into
-    /// one capture list, and that list occupies storage as soon as one of the values in it does.
+    /// its own: lambda set specialization, which runs from `-O max` up, gathers a lambda's captures
+    /// into one capture struct, and that struct occupies storage as soon as one of the values in it
+    /// does.
     #[test]
     fn test_an_iostate_capture_is_left_out_of_the_closure() {
         let dump = build_run_and_read_rc_ir(
@@ -266,7 +275,7 @@ mod tests {
     /// closure stores, and the rest are made in the function the lambda became.
     ///
     /// The level is `none` for the reason `test_an_iostate_capture_is_left_out_of_the_closure`
-    /// gives: at `-O max` a lambda's captures arrive as one capture list, so no closure is handed a
+    /// gives: at `-O max` a lambda's captures arrive as one capture struct, so no closure is handed a
     /// mixture.
     #[test]
     fn test_a_closure_storing_some_of_its_captures_reads_them_all() {
@@ -356,16 +365,17 @@ mod tests {
     /// What `SCOPE_BUILTINS_SOURCE` prints.
     const SCOPE_BUILTINS_OUTPUT: &str = "n=13,3,AAA3456789";
 
-    /// The lines of `dump` building a closure that takes its capture list through the environment a
+    /// The lines of `dump` building a closure that takes its capture struct through the environment a
     /// built-in applying a function in a scope hands it. The standard library gives such a built-in
-    /// the environment `()`, so the function takes `(((), c), ...)`, where `c` is a capture list
-    /// closure specialization minted.
-    fn closures_taking_a_capture_list_through_the_environment(dump: &str) -> Vec<&str> {
+    /// the environment `()`, so the function takes `(((), c), ...)`, where `c` is the capture struct
+    /// of the lambda the function was lifted from.
+    fn closures_taking_a_capture_struct_through_the_environment(dump: &str) -> Vec<&str> {
+        let capture_struct = format!("{}@", LS_CAP_PREFIX);
         dump.lines()
             .filter(|line| {
                 line.contains("= closure ")
                     && line.contains(" : (((), ")
-                    && line.contains("#CapList@")
+                    && line.contains(&capture_struct)
             })
             .collect()
     }
@@ -381,11 +391,11 @@ mod tests {
             SCOPE_BUILTINS_OUTPUT,
             "lambdas capturing values, given to built-ins applying a function in a scope",
         );
-        let built = closures_taking_a_capture_list_through_the_environment(&dump);
+        let built = closures_taking_a_capture_struct_through_the_environment(&dump);
         // The standard library builds closures of this kind for what it prints, so the closure of
-        // each built-in's lambda is picked out by its type after the capture list: the rest of the
+        // each built-in's lambda is picked out by its type after the capture struct: the rest of the
         // tuple the lambda is applied to, and what the lambda returns.
-        for (builtin, type_after_capture_list) in [
+        for (builtin, type_after_capture_struct) in [
             ("borrow_elements", "), Std::Ptr) -> Std::I64 "),
             (
                 "mutate_elements",
@@ -399,8 +409,8 @@ mod tests {
             assert!(
                 built
                     .iter()
-                    .any(|line| line.contains(type_after_capture_list)),
-                "the lambda given to `{}` should be built as a closure taking its capture list \
+                    .any(|line| line.contains(type_after_capture_struct)),
+                "the lambda given to `{}` should be built as a closure taking its capture struct \
                  through the environment:\n{}",
                 builtin,
                 dump
@@ -456,13 +466,13 @@ mod tests {
             CALLS_ITS_ARGUMENT_IN_A_SCOPE_OUTPUT,
             "a function calling the function it takes inside a built-in applying it in a scope",
         );
-        // The lambda `mutate_elements` is given stands as a closure taking its capture list through
+        // The lambda `mutate_elements` is given stands as a closure taking its capture struct through
         // the environment, which is what says the build reached the scope at all.
-        let built = closures_taking_a_capture_list_through_the_environment(&dump);
+        let built = closures_taking_a_capture_struct_through_the_environment(&dump);
         assert!(
             built.iter().any(|line| line.contains("Std::Ptr, Std::IO::IOState)")),
             "the lambda given to `mutate_elements` should be built as a closure taking its capture \
-             list through the environment:\n{}",
+             struct through the environment:\n{}",
             dump
         );
         // What `main` passes as `write` is a known lambda, so no closure is built for it.

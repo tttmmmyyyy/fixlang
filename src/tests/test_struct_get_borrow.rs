@@ -174,7 +174,7 @@ make_node = |base| Node {
 
 // `b` is only field-read, so borrow inference can make it `Borrow` only under the rule that a read
 // out of a boxed container borrows it. `w` is what the caller uses after the call, so routing this
-// call to the borrow version saves a retain.
+// call to a borrowing version saves a retain.
 read_only : I64 -> Node -> Node -> I64;
 read_only = |n, b, w| (
     if n > 0 { read_only(n - 1, b, w) };
@@ -207,8 +207,8 @@ even_sum = |n, b| if n == 0 { b.@tag } else { odd_sum(n - 1, b) };
 odd_sum : I64 -> Node -> I64;
 odd_sum = |n, b| if n == 0 { b.@leaf.@v } else { even_sum(n - 1, b) };
 
-// A tail call passing an owned argument: routing it to a borrow version would put a release after a
-// tail call, so the routing test has to refuse it.
+// A tail call passing an owned argument at its last use: the call lends `b`, and the version it
+// reaches owns `owned`, so no release is left after the tail call.
 tail_owned : Node -> Node -> I64;
 tail_owned = |b, owned| read_only(0, b, owned);
 
@@ -221,7 +221,7 @@ main = (
     let b = make_node(1);
     let w = make_node(2);
 
-    // `w` is used after the call, so the call is worth routing to the borrow version.
+    // `w` is used after the call, so the call is worth routing to a borrowing version.
     let r = read_only(0, b, w);
     assert_eq(|_|"read_only", r, 1 + 1 + 1 + 21 + 2 + 1);;
     assert_eq(|_|"w outlives the call", w.@tag, 2);;
@@ -265,9 +265,9 @@ main = (
 );
 "#;
 
-    /// A function whose boxed container a call routes to its borrowing version computes the same
-    /// answers as the owning one. The borrowing version drops the release of that container, so a
-    /// field read that failed to carry a reference out would read a freed value here.
+    /// A function whose boxed container a call routes to a borrowing version computes the same
+    /// answers as the owning one. That version drops the release of that container, so a field
+    /// read that failed to carry a reference out would read a freed value here.
     #[test]
     pub fn test_borrowed_container_correctness() {
         let mut config = Configuration::develop_mode();

@@ -2,7 +2,8 @@ use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::generator::{Generator, Object};
-use crate::rc_ir::ast::{FieldPath, RcTarget, UniqueCheckOperand};
+use crate::optimization::lambda_set::BuiltinFlow;
+use crate::rc_ir::ast::{FieldPath, RcState, RcTarget, UniqueCheckOperand};
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::ExtShape;
 use crate::rc_ir::provenance::{LeafOrigin, Provenance};
@@ -98,6 +99,9 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     ///
     /// `Generator::apply_lambda` checks this in develop mode, so an op that starts applying an
     /// operand and does not say so here fails the test suite rather than quietly losing an edge.
+    ///
+    /// An op answering `true` makes the own slot of the operand it applies Dynamic in its
+    /// `lambda_set_flow`; the lambda set inference asserts that some operand's own slot is.
     fn applies_a_function_operand(&self) -> bool {
         self.env_operand().is_some()
     }
@@ -109,6 +113,24 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     /// so that the lambda captures nothing and needs no closure object.
     fn env_operand(&self) -> Option<EnvOperand> {
         None
+    }
+
+    /// How the functions this op's operands hold flow into its result, for lambda set inference.
+    /// Default: every function the operands and the result hold is a closure built at run time.
+    ///
+    /// The default is always sound: a value at a Dynamic place stays a closure, and a closure works
+    /// wherever a function does. An op that moves values without calling them or handing them to
+    /// code outside the program declares the flow instead, so that what passes through it keeps
+    /// the lambda set it had. An op that applies a function operand, as `applies_a_function_operand`
+    /// says, makes that operand's own slot Dynamic, since the code it generates calls a closure;
+    /// the default rule does so, making every slot Dynamic.
+    ///
+    /// A rule accounts for every slot of every operand and of the result: by the flow it declares
+    /// there (`BuiltinFlow::same`), by making it Dynamic, or by declaring that no function flows
+    /// there (`BuiltinFlow::no_other_flow`). The inference stops the compiler on a rule that leaves a
+    /// slot out (`BuiltinFlow::describe_unaccounted_slot`).
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.make_all_dynamic();
     }
 
     /// The container operand and boxed-leaf path whose runtime uniqueness this op branches on, for
@@ -125,20 +147,23 @@ pub trait BuiltinOp: DynClone + Send + Sync {
         None
     }
 
-    /// This op with every object it declared taken to be local: the one its uniqueness check tests,
-    /// and the ones `internal_rc_targets` names. `generate` then counts them and tests the count
-    /// without first reading the state. An op declaring either is asked for this, and every such op
-    /// overrides it.
+    /// This op with every object it declared taken to be in the state `state`: the one its
+    /// uniqueness check tests, and the ones `internal_rc_targets` names. `generate` then counts
+    /// them and tests the count under that state, without first reading it. An op declaring either
+    /// is asked for this, and every such op overrides it.
     ///
     /// A `generate` that emits a check or a reference count it does not declare leaves that one
     /// reading the state, so the declarations stay honest about what the annotation covers.
-    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
-        unreachable!("assuming_local called on an op that declares no uniqueness check and no reference counting")
+    fn assuming(&self, _state: RcState) -> Box<dyn BuiltinOp> {
+        unreachable!(
+            "assuming called on an op that declares no uniqueness check and no reference counting"
+        )
     }
 
-    /// Whether `assuming_local` was applied. The RC IR dump renders it.
-    fn assumes_local(&self) -> bool {
-        false
+    /// The state `assuming` was applied with, `Unknown` where it was not. The RC IR dump renders
+    /// it.
+    fn assumed_state(&self) -> RcState {
+        RcState::Unknown
     }
 
     /// This op with its runtime uniqueness branch dropped. Only an op that reports a branch through
@@ -170,14 +195,44 @@ pub trait BuiltinOp: DynClone + Send + Sync {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
+    /// The operand this op reads its result out of and can lend it out of, for the operand types
+    /// the op is instantiated at: a boxed container the op borrows, whose object holds a reference
+    /// to every boxed leaf of the result. Default: no operand is.
+    ///
+    /// While that operand's object lives, so does every object the result refers to. So the op can
+    /// lend the result (`lending`) where the operand's object stays referenced as long as the code
+    /// uses the result.
+    fn operand_holding_result(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Option<usize> {
+        None
+    }
+
+    /// This op reading its result out of the operand `operand_holding_result` names without
+    /// retaining it: the result is lent, holding no reference of its own while that operand goes on
+    /// holding its objects. An op that names such an operand has this form.
+    fn lending(&self) -> Box<dyn BuiltinOp> {
+        panic!(
+            "`{}` reads its result out of no operand, so it has no lending form",
+            self.name()
+        )
+    }
+
+    /// Whether this op is the lending form `lending` returns.
+    fn lends(&self) -> bool {
+        false
+    }
+
     /// The values this op reference-counts inside `generate`, for the operand types it is
     /// instantiated at. An op that counts none answers the empty list and is never annotated.
     ///
     /// **The declaration has to cover every retain and release `generate` emits under the state the
-    /// annotation carries** — that is, every one it counts through `assumed_state`. The annotation
+    /// annotation carries** — that is, every one it counts under `assumed_state`. The annotation
     /// says of all of them at once that the objects they touch are local, so one left out is the
     /// direction of error that corrupts memory. It is the same kind of hand-maintained claim as
-    /// `unique_check_operand`, and `assuming_local` is what carries the answer back.
+    /// `unique_check_operand`, and `assuming` is what carries the answer back.
     ///
     /// What the same `generate` reaches with `RcState::Unknown` pinned in is outside the declaration
     /// by construction: the annotation cannot reach it, so it goes on reading the state whatever

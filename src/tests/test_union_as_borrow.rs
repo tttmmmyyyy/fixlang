@@ -1,7 +1,7 @@
-// Memory-safety tests for `as_<variant>` reading a fully-unboxed payload out of a union.
-// Such a read borrows the union: the payload holds no reference, so the value read out takes nothing
-// from the union, and reference-count insertion releases the union at its last use rather than at the
-// read. The borrow matters most for a boxed union, whose container carries a reference count: an arm
+// Memory-safety tests for `as_<variant>` reading a payload out of a union it borrows.
+// A read borrows the union except where it moves a payload holding a reference out of an unboxed
+// union, and reference-count insertion releases a borrowed union at its last use. The borrow
+// matters most for a boxed union, whose container carries a reference count: an arm
 // below reads a fully-unboxed variant of a boxed union, keeps the union shared, and reads it again;
 // a reference dropped twice or too early is a use-after-free, checked under valgrind.
 
@@ -34,7 +34,7 @@ main : IO () = (
     assert_eq(|_|"boxed union, fully-unboxed payload read twice", s, 60);;
     assert_eq(|_|"boxed union still usable after the borrowed reads", u.as_pair.@0, 10);;
 
-    // The boxed variant's payload is not fully unboxed, so its read takes the owning path.
+    // The boxed variant's payload holds a reference, which its read retains.
     let v = BoxOpt::buf([1, 2, 3]);
     assert_eq(|_|"boxed variant read", v.as_buf.@size, 3);;
 

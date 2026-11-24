@@ -25,13 +25,13 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
   結果など）では 1 つの leaf が 1 参照なので、数は 2 になる。
 - `origin` は leaf でない path も受ける。unit path は leaf とは限らない（unbox union の unit は union 自身の
   path、その leaf は各 variant の中。punched array の unit は `[i]`、その leaf は `[i, 0]`）。`result_prov` に該当する leaf が
-  無いときは、**その下の leaf 群がどのオペランドの unit から射影されたか**で答える（`origin_from_leaves_under`）。
+  無いときは、**その下の leaf 群がどのオペランドの unit から射影されたか**で答える（`gather_leaves_under` と `origin_of_gathered`）。
   下の leaf が 1 つのオペランド unit に揃えば `Exactly`、複数に分かれるか射影でない leaf を含むなら、その値が
   取りうるオブジェクトを全部並べた `Join`。⊥（不在 variant）の leaf は参照を持たないので読み飛ばす。
 
 ## 2. 消費する構文と読むだけの構文
 
-権威は `ownership.rs` の `collect_consumes_go` / `rhs_consumes` / `destructure_consumes`。
+権威は `ownership.rs` の `collect_consumes_go` / `rhs_consumes`。
 
 **消費する（leaf 粒度）**
 
@@ -41,24 +41,21 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 | `App(callee, args)` | callee の全 boxed leaf（closure の捕捉）＋ callee のその位置が `Own` である引数 leaf |
 | `Closure(f, caps)` | 各 capture の全 boxed leaf |
 | `Llvm(gen, args)` | `borrows_operand(i)` が偽のオペランドのうち、`result_prov` が `Arg(i, π)` として素通しを宣言していない leaf |
-| `Destructure`（boxed コンテナ） | コンテナの全 boxed leaf（明示 `Release` ノードは無く、codegen の `get_struct_fields` が release する） |
-| `Destructure`（unbox コンテナ） | **名前が付いていないフィールド**の leaf のみ（名前付きフィールドは move＝別名） |
-| `Match`（boxed union の variant アーム） | scrutinee コンテナ。ただし RC 挿入が**明示 `Release` ノード**を各アーム先頭に置く |
 | `Release(v, π)` | その unit 1 個 |
 
 **読むだけ（消費しない）**
 
 - `Var(y)`（move-bind）= 別名。codegen でも同一 LLVM 値。
-- `Match` ノード自体（消費は各アームの中）。
+- `Match`。boxed の scrutinee はタグを読むだけで、アームは payload を `UnionAsOp` で読む。unbox の scrutinee はアームが束縛する変数へ move される（別名）。
+- `DestructureUnboxed`。unbox コンテナの leaf はフィールド変数へ move される（別名）。boxed struct のパターン分解は getter（`StructGetOp`）の列に下ろされる。
 - `Retain`/`Release` ノードに現れる変数。
 - `borrows_operand(i)` が真のオペランド（read getter 群）。
 - `result_prov` が `Arg(i, π)` の leaf（素通し）。
 
 **ノードに現れない暗黙の RC**（検査を書くときに必ず要る）
 
-- boxed コンテナの `Destructure`: コンテナを release し、各名前付きフィールドを retain する。
-- boxed union の variant アーム: payload を retain する。
-- unbox コンテナの `Destructure` / unbox union・catch-all の payload: **別名**であって新しい参照ではない。
+- boxed コンテナから読む op（`StructGetOp`、`UnionAsOp`、配列の要素読み出し）: 読んだ値を retain する。貸し出し形は retain しない。
+- `DestructureUnboxed` / unbox union・catch-all の payload: **別名**であって新しい参照ではない。
 
 ## 3. 別名関係（`origin`）
 
@@ -66,11 +63,11 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 辺は次のとおり:
 
 - `Binding::Move(y)` -> `y`。
-- `Binding::Field(container, idx)`: **unbox コンテナのときだけ**別名（boxed は retain するので producer）。
-- `Binding::Payload(scrut, variant)`: catch-all は scrutinee そのもの、**unbox union の variant** は別名、
-  **boxed union の variant** は producer。
+- `Binding::Field(container, idx)`: 別名。`DestructureUnboxed` は unbox コンテナだけを分解する。
+- `Binding::ArmBinder(scrut, variant)`: 別名。catch-all は scrutinee そのもの、variant は unbox union の
+  その variant の位置。アームが変数を束縛するのは unbox の scrutinee のときだけである。
 - `Binding::Llvm`: `result_prov` の leaf が単一の `Arg(j, p)` なら引数 `j` の別名。leaf でない path は
-  その下の leaf 群から決める（`origin_from_leaves_under`）。unbox union の構築
+  その下の leaf 群から決める（`gather_leaves_under` と `origin_of_gathered`）。unbox union の構築
   （`InlineLLVMMakeUnionBody`）もこの規則で解ける。whole-union path の下の leaf は、構築された variant
   では payload の leaf、他の variant では ⊥ なので、答えは payload の unit 群になる。
 - `Binding::Param` / `Binding::Producer` はそこで止まる。
@@ -84,11 +81,12 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 | `borrow_ify` 直後 | `borrowed_units` に載る unit の参照、およびそれに根を持つ値の参照は、**呼び出し元から借りたままである**（`owns_unit` が判定）。処分するのは呼び出し元であり、関数の側にはその `Release` も消費も無い。借りた値を所有側の引数位置へ渡すときだけ、その呼び出しの直前に `Retain` が置かれて参照がもう 1 つ作られ、消費されるのはその新しい参照である（`call_rc`）。それ以外は各パスちょうど 1 回消費 |
 | `cancel` / `specialize` 直後 | **binding 単位の線形性は失われる**。`cancel` は `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）のキーで別 binding をまたいで retain/release を対消滅させる。消えるのは retain 1 個と、その retain が上げた参照をちょうど覆う release 群（`acted_references`）である。成立するのは **(root オブジェクト, unit) 単位の参照数保存**: 所有パラメータ/capture unit を 1、borrowed を 0 で初期化し、producer と `Retain` で +1、消費と `Release` で -1 したカウンタが、どのパスでも負にならず関数出口で 0 |
 
-借用版が借りた値を所有側の引数位置へ渡す状況は、次のときに生じる。所有権の推論は、呼び出し先の**元の関数**
-について推論中の所有権を読んで「この位置は消費しない」と判定し、引数を借用可能なままにする。一方、版の振り分けは
-呼び出しごとに行われ、末尾位置の呼び出しが所有引数を持つ場合は借用版へ回されない（後置の `Release` が末尾呼び出しを
-末尾でなくするため）。回されなかった呼び出し先は全パラメータを所有する元の版なので、借りた値がそこでは消費される。
-`call_rc` の `Retain` はその差を埋める。
+借用版が借りた値を所有側の引数位置へ渡す状況は、次のときに生じる。所有権の推論は、呼び出し先について推論中の
+所有権を読んで「この位置は消費しない」と判定し、引数を借用可能なままにする。一方、呼び出しが届く版は呼び出しごとに
+決まり（`Versions::request`）、推論が借用可能とした位置をその版が所有することがある。呼び出し先の本体で、その位置の
+値が所有する値と同じ unit に入り、`level_ownership` が両方を所有に寄せたとき。呼び出し先が借用版を持たない関数
+（`Versions::borrowers` に入らない関数）のとき。版の数が `MAX_CLONES_PER_FUNCTION` に達し、呼び出しが元の版へ
+回ったとき。`call_rc` の `Retain` はその差を埋める。
 
 `specialize` は RC ノードを素通しコピーし、`assuming_unique` は `LLVMGen` を差し替えるだけなので、消費モデルは
 特殊化の前後で不変（`result_prov` を force-unique 有無で変える op は存在しない）。

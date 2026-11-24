@@ -62,7 +62,7 @@ and the cost for retaining and releasing an array is saved.
 
 use crate::{
     ast::{
-        expr::{collect_app, AppSourceCodeOrderType, Expr, ExprNode},
+        expr::{AppSourceCodeOrderType, Expr, ExprNode},
         name::FullName,
         pattern::PatternNode,
         program::Symbol,
@@ -386,11 +386,11 @@ impl ExprVisitor for FreeOccurrenceProbe {
     /// earlier argument reads a local name, leaves `used_before_any_other_local_names` false. Code
     /// generation evaluates the function first, and then the arguments from left to right.
     ///
-    /// An application of one argument that is not a variable may be evaluated in another order.
-    /// `application_inlining` and `pull_let` move the argument into a `let` ahead of part of the
-    /// function, so a target name read in the function while the argument reads a local name also
-    /// leaves `used_before_any_other_local_names` false, unless the application is written `f(x)`
-    /// and `target_is_evaluated_ahead_of_an_argument` holds of the function.
+    /// An argument that is not a variable may be evaluated in another order. `application_inlining`
+    /// and `pull_let` move the argument into a `let` ahead of part of the function, so a target
+    /// name read in the function while the argument reads a local name also leaves
+    /// `used_before_any_other_local_names` false, unless the application is written `f(x)` and
+    /// `target_is_evaluated_ahead_of_an_argument` holds of the function.
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -403,14 +403,12 @@ impl ExprVisitor for FreeOccurrenceProbe {
                 .iter()
                 .enumerate()
                 .any(|(i, arg)| self.target_is_read_after_a_local_name(arg, args[i + 1..].iter()));
-        let read_after_a_moved_argument = match args.as_slice() {
-            [arg] if !arg.is_var() => {
-                self.target_is_read_after_a_local_name(arg, [&func])
-                    && !(expr.app_order == AppSourceCodeOrderType::FX
-                        && self.target_is_evaluated_ahead_of_an_argument(&func))
-            }
-            _ => false,
-        };
+        let read_after_a_moved_argument = args.iter().any(|arg| {
+            !arg.is_var()
+                && self.target_is_read_after_a_local_name(arg, [&func])
+                && !(expr.app_order == AppSourceCodeOrderType::FX
+                    && self.target_is_evaluated_ahead_of_an_argument(&func))
+        });
         if read_after_a_local_name || read_after_a_moved_argument {
             self.used_before_any_other_local_names = false;
         }
@@ -591,7 +589,7 @@ fn is_global_lambda_strictly_partially_applied_to_names(
 ) -> bool {
     // One application may hand over one argument or several, as uncurrying writes it, so the
     // arguments are counted over the whole chain of applications.
-    let (func, args) = collect_app(expr);
+    let (func, args) = expr.destructure_app();
     if !func.is_var() {
         return false;
     }

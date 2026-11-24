@@ -1,8 +1,8 @@
 //! Dead-code elimination over the RC IR: drop every function and global the program cannot reach.
 //!
 //! Lowering and the passes over the RC IR mint functions of their own — a lifted lambda body, a
-//! borrow version, a version specialized on the uniqueness or locality of its inputs — and each one
-//! that supersedes another leaves that other behind with no caller. Code generation writes out
+//! borrowing version, a version specialized on the uniqueness or locality of its inputs — and each
+//! one that supersedes another leaves that other behind with no caller. Code generation writes out
 //! whatever the program holds, so a function left behind is LLVM IR built and verified for code no
 //! execution reaches. The back end drops it in turn, but only once its own dead-code elimination
 //! runs, which is after that IR has been built, verified and read.
@@ -70,7 +70,6 @@ mod tests {
     use crate::fixstd::builtin::MakeStructOp;
     use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState};
     use crate::rc_ir::test_program::{func, global, global_name, prog, var};
-    use std::sync::Arc;
 
     /// The names of `prog`'s functions, sorted, so that a comparison does not read the order the
     /// function table happens to hold them in.
@@ -218,16 +217,13 @@ mod tests {
 
     /// Every place a body can name a definition is followed: the `Var`, `App`, `Builtin` and
     /// `Match` right-hand sides, the body of a match arm, the `Retain`, `Release`, `Eval` and
-    /// `Destructure` nodes, and the `Ret`. A global is lowered to an atom carrying its own name
+    /// `DestructureUnboxed` nodes, and the `Ret`. A global is lowered to an atom carrying its own name
     /// (`Lowerer::lower_var`), so any of these can be the one place a definition is named from.
     #[test]
     fn test_every_mention_site_is_followed() {
         /// A node standing for `expr`, which no source spells out.
         fn node(expr: RcExpr) -> RcExprNode {
-            RcExprNode {
-                expr: Arc::new(expr),
-                source: None,
-            }
+            RcExprNode::new(expr, None)
         }
 
         let names: Vec<FullName> = [
@@ -251,10 +247,9 @@ mod tests {
         let at = |i: usize| var(names[i].clone());
 
         let mut body = node(RcExpr::Ret(at(10)));
-        body = node(RcExpr::Destructure(
+        body = node(RcExpr::DestructureUnboxed(
             at(9),
             vec![(0, local("field"))],
-            RcState::Unknown,
             body,
         ));
         body = node(RcExpr::Eval(at(8), body));
@@ -266,8 +261,7 @@ mod tests {
                 at(4),
                 vec![MatchArm {
                     tag: Some(0),
-                    payload: local("payload"),
-                    payload_state: RcState::Unknown,
+                    binder: Some(local("payload")),
                     body: node(RcExpr::Ret(at(5))),
                 }],
             ),

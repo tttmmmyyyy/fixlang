@@ -7,28 +7,15 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use tempfile::TempDir;
+    use crate::constants::LS_CAP_PREFIX;
+    use crate::tests::test_util::{
+        build_project_and_read_rc_ir, build_project_run_and_read_rc_ir, rc_ir_callee_of,
+        rc_ir_function_bodies, setup_case_projects,
+    };
+    use std::path::Path;
 
-    /// The directory in the source tree holding the case projects these tests build.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_provenance/cases");
-        path
-    }
-
-    /// Copy the test cases into a temporary directory of this test's own, so that parallel test
-    /// runs stay out of each other's way, and return that directory together with the directory of
-    /// the case project named by `case`.
-    fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let dst = temp_dir.path().to_path_buf();
-        copy_dir_recursive(&get_test_cases_dir(), &dst).expect("Failed to copy test cases");
-        let project_dir = dst.join(case);
-        (temp_dir, project_dir)
-    }
+    /// The directory holding this module's case projects.
+    const CASES: &str = "src/tests/test_provenance/cases";
 
     /// Build the case project with `--emit-rc-ir Main` and return the dumped RC IR of the `Main`
     /// module. The build works at the `max` optimization level: the borrow versions and the routing
@@ -36,7 +23,7 @@ mod integration_tests {
     /// levels produce — at `none` the same code stays as closures with no uncurried function to
     /// borrow.
     fn emit_main_rc_ir(project_dir: &Path) -> String {
-        emit_rc_ir(project_dir, "Main", "rc_ir.Main.post.txt")
+        build_project_and_read_rc_ir(project_dir, "Main", "rc_ir.Main.post.txt")
     }
 
     /// Build the case project at the `max` optimization level and return the dumped RC IR of every
@@ -45,28 +32,7 @@ mod integration_tests {
     /// The body of a loop written in `Main` is put into the copy of `Std::loop` made for it, so a
     /// case asserting on what such a body does reads the whole program rather than one module.
     fn emit_all_rc_ir(project_dir: &Path) -> String {
-        emit_rc_ir(project_dir, "all", "rc_ir.post.txt")
-    }
-
-    /// Build the case project with `--emit-rc-ir <filter>` and return what it wrote to `dump_file`
-    /// under `.fixlang/`.
-    fn emit_rc_ir(project_dir: &Path, filter: &str, dump_file: &str) -> String {
-        let output = fix_command_at_opt_level("build", "max")
-            .arg("--emit-rc-ir")
-            .arg(filter)
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute fix build --emit-rc-ir");
-
-        if !output.status.success() {
-            eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-            panic!("fix build --emit-rc-ir failed");
-        }
-
-        let dump_path = project_dir.join(".fixlang").join(dump_file);
-        fs::read_to_string(&dump_path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
+        build_project_and_read_rc_ir(project_dir, "all", "rc_ir.post.txt")
     }
 
     /// The lines of the program's root, without its signature line. An operation performed in
@@ -180,8 +146,19 @@ mod integration_tests {
     /// `is_retain_of("  retain v1.0 @local", "v1")` is `true`, and
     /// `is_retain_of("  retain v12 @local", "v1")` is `false`.
     fn is_retain_of(line: &str, var: &str) -> bool {
+        is_rc_of(line, "retain ", var)
+    }
+
+    /// Whether an RC IR line releases the variable `var` or one of its fields.
+    fn is_release_of(line: &str, var: &str) -> bool {
+        is_rc_of(line, "release ", var)
+    }
+
+    /// Whether an RC IR line is the reference-count node `keyword` opens, `"retain "` or
+    /// `"release "`, on the variable `var` or one of its fields.
+    fn is_rc_of(line: &str, keyword: &str, var: &str) -> bool {
         line.trim_start()
-            .strip_prefix("retain ")
+            .strip_prefix(keyword)
             .and_then(|rest| rest.split_whitespace().next())
             .is_some_and(|target| target.split('.').next() == Some(var))
     }
@@ -208,7 +185,7 @@ mod integration_tests {
     /// field carrying the container's leaf through would make the read's borrow unsound.
     #[test]
     fn test_provenance_dump_field_of_boxed_struct() {
-        let (_temp_dir, project_dir) = setup_test_env("boxed_struct_field");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "boxed_struct_field");
         let dump = emit_main_rc_ir(&project_dir);
 
         assert_binding_prov(&dump, "field", "[unknown]");
@@ -219,7 +196,7 @@ mod integration_tests {
     /// nowhere and released once, at its last use.
     #[test]
     fn test_provenance_dump_field_read_borrows_the_container() {
-        let (_temp_dir, project_dir) = setup_test_env("boxed_struct_field");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "boxed_struct_field");
         let dump = emit_main_rc_ir(&project_dir);
 
         let container = var_bound_as(&dump, "h");
@@ -237,7 +214,7 @@ mod integration_tests {
     /// carries each component's own judgement.
     #[test]
     fn test_provenance_dump_basic() {
-        let (_temp_dir, project_dir) = setup_test_env("basic");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "basic");
         let dump = emit_main_rc_ir(&project_dir);
 
         // `Array::fill` and an array literal produce a fresh array.
@@ -268,7 +245,7 @@ mod integration_tests {
     /// call.
     #[test]
     fn test_provenance_interprocedural_composition() {
-        let (_temp_dir, project_dir) = setup_test_env("interproc");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "interproc");
         let dump = emit_main_rc_ir(&project_dir);
 
         // `echo_arr` returns its array argument unchanged, so its effect — computed to a fixed point
@@ -327,12 +304,35 @@ mod integration_tests {
         block
     }
 
-    /// The body block of `main` itself. The main entry is `Main::main#<hash>#func1`, of three
-    /// `#`-segments; the lambdas lifted out of it carry a segment more.
-    fn main_block(dump: &str) -> Vec<&str> {
-        func_block(dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#func1")
-        })
+    /// The body block of the function holding the code `main` is written with, found by the call of
+    /// `callee` that code makes. That function is `main` itself, or one lifted out of it where `main`
+    /// opens with an `IO` bind such as `pure();;`.
+    fn main_block<'a>(dump: &'a str, callee: &str) -> Vec<&'a str> {
+        let mut blocks: Vec<Vec<&str>> = vec![];
+        let mut in_main = false;
+        for l in dump.lines() {
+            if l.starts_with("fn ") {
+                in_main = l.starts_with("fn Main::main#");
+                if in_main {
+                    blocks.push(vec![]);
+                }
+            } else if l.is_empty() {
+                in_main = false;
+            }
+            if in_main {
+                blocks.last_mut().unwrap().push(l);
+            }
+        }
+        let call = format!("= {}", callee);
+        blocks
+            .into_iter()
+            .find(|block| block.iter().any(|l| l.contains(&call)))
+            .unwrap_or_else(|| {
+                panic!(
+                    "neither `main` nor a function lifted out of it calls `{}`:\n{}",
+                    callee, dump
+                )
+            })
     }
 
     /// Assert that `block` performs no reference counting: no line of it is a `Retain` or a
@@ -347,15 +347,46 @@ mod integration_tests {
         );
     }
 
-    /// How many of the `tally` calls in `main` route to the borrow version, and how many stay on the
-    /// owning one.
+    /// The version of `Main::tally` a dump line calls, if it calls one.
+    fn tally_version_called(line: &str) -> Option<&str> {
+        rc_ir_callee_of(line).filter(|c| c.starts_with("Main::tally"))
+    }
+
+    /// Whether a dump line calls a borrowing version of `Main::tally`, whose name carries the
+    /// `#borrow` tag.
+    fn calls_tally_borrow_version(line: &str) -> bool {
+        tally_version_called(line).is_some_and(|c| c.contains("#borrow"))
+    }
+
+    /// How many of the `tally` calls in `main` route to a borrowing version, and how many stay on
+    /// the owning one.
     fn tally_call_routing(main: &[&str]) -> (usize, usize) {
         let calls = main
             .iter()
-            .filter(|l| l.contains("= Main::tally"))
+            .filter(|l| tally_version_called(l).is_some())
             .collect::<Vec<_>>();
-        let borrow_calls = calls.iter().filter(|l| l.contains("#borrow(")).count();
+        let borrow_calls = calls
+            .iter()
+            .filter(|l| calls_tally_borrow_version(l))
+            .count();
         (borrow_calls, calls.len() - borrow_calls)
+    }
+
+    /// Assert how the `tally` calls in `main` of the test project `case` route, and return the dump
+    /// of `Main`: `expected` is the number routed to a borrowing version and the number left on the
+    /// owning one, and `what` states the expectation in the message.
+    fn assert_tally_routing(case: &str, expected: (usize, usize), what: &str) -> String {
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, case);
+        let dump = emit_main_rc_ir(&project_dir);
+        let main = main_block(&dump, "Main::tally");
+        assert_eq!(
+            tally_call_routing(&main),
+            expected,
+            "{}:\n{}",
+            what,
+            main.join("\n")
+        );
+        dump
     }
 
     /// Verifies which functions get a borrow version and what it buys: a function that only reads
@@ -365,7 +396,7 @@ mod integration_tests {
     /// absent from the dump, which is taken after dead-code elimination.
     #[test]
     fn test_borrow_rewrite() {
-        let (_temp_dir, project_dir) = setup_test_env("ownership");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "ownership");
         let dump = emit_main_rc_ir(&project_dir);
 
         // `tally` only reads its array, so it gets a borrowing clone (`#borrow`) whose array
@@ -398,10 +429,9 @@ mod integration_tests {
         );
 
         // `main` routes its non-tail, owned `tally(arr, ..)` call to the borrow version.
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::tally");
         assert!(
-            main.iter()
-                .any(|l| l.contains("= Main::tally") && l.contains("#borrow(")),
+            main.iter().any(|l| calls_tally_borrow_version(l)),
             "main should call the tally borrow version:\n{}",
             main.join("\n")
         );
@@ -412,33 +442,328 @@ mod integration_tests {
         assert_counts_nothing(&tally_borrow, "the tally borrow version");
     }
 
-    /// Verifies that routing to a borrow version is decided by benefit as well as safety: the call
-    /// whose array is read again afterwards is routed, and the call at the array's last use keeps
-    /// the owning version, since borrowing there would only delay a release.
+    /// Verifies that a call lends an owned argument only where the caller reads it afterwards: the
+    /// call whose array is read again afterwards is routed to the borrow version, and the call at
+    /// the array's last use keeps the owning version, since borrowing there would only delay a
+    /// release.
     #[test]
-    fn test_benefit_routing_by_last_use() {
-        let (_temp_dir, project_dir) = setup_test_env("benefit");
-        let dump = emit_main_rc_ir(&project_dir);
-
-        let main = main_block(&dump);
-        let (borrow_calls, own_calls) = tally_call_routing(&main);
-
+    fn test_routing_by_last_use() {
         // The array read again after its call is owned but not at its last use, so routing to the
         // borrow version removes a retain — that call goes to the borrow version. The array not used
         // after its call is at its last use, so borrowing it would remove no retain and only delay
-        // its release — that call stays on the own version. Safe-only routing would send both to the
-        // borrow version.
+        // its release — that call stays on the own version.
+        assert_tally_routing(
+            "routing_last_use",
+            (1, 1),
+            "the non-last-use call should route to the borrow version, and the last-use call \
+             should stay on the own version",
+        );
+    }
+
+    /// Verifies that the routing reads the code after the match whose branch a call ends: an
+    /// array read again after an `if` is not at its last use at a call that ends a branch of that
+    /// `if`, so the call is routed to the borrow version.
+    #[test]
+    fn test_routing_reads_past_the_match() {
+        assert_tally_routing(
+            "routing_after_match",
+            (1, 0),
+            "the call whose array is read after the `if` should route to the borrow version",
+        );
+    }
+
+    /// Verifies that the routing reads past every match whose branch a call ends, out to the
+    /// outermost: an array read again only after the outer of two nested `if`s is not at its last
+    /// use at a call that ends a branch of the inner one, so the call is routed to the borrow
+    /// version.
+    #[test]
+    fn test_routing_reads_past_nested_matches() {
+        assert_tally_routing(
+            "routing_after_nested_match",
+            (1, 0),
+            "the call whose array is read after the outer `if` should route to the borrow version",
+        );
+    }
+
+    /// Verifies that the routing follows the lifetime of an argument's object past the match
+    /// whose branch the call ends: a leaf read out of an aggregate the caller uses again after the
+    /// `if` is a reference this function made for the call, so the call is routed to the borrow
+    /// version.
+    #[test]
+    fn test_routing_by_the_objects_lifetime_past_the_match() {
+        assert_tally_routing(
+            "routing_aggregate_after_match",
+            (1, 0),
+            "the call handed a leaf of an aggregate read after the `if` should route to the borrow \
+             version",
+        );
+    }
+
+    /// Verifies that the routing finds an argument's object held after the call through the variable
+    /// a pattern took it out of: `env` comes out of a pair nothing names afterwards, and `env` is read
+    /// after the call, so the array read out of it outlives the call and the call is routed to the
+    /// borrow version.
+    #[test]
+    fn test_routing_reads_the_variable_a_pattern_binds() {
+        assert_tally_routing(
+            "routing_field_of_a_pattern",
+            (1, 0),
+            "the call handed a field of a value read after it should route to the borrow version",
+        );
+    }
+
+    /// Verifies that the routing finds an argument's object held after the call through the boxed
+    /// container it was read out of: the element read out of `rows` and the field read out of
+    /// `table` are named nowhere after their calls, but `rows` and `table` are, and each goes on
+    /// holding what was read out of it, so both calls are routed to the borrow version. The element
+    /// read out of `last`, which nothing reads afterwards, ends at its call, which keeps the own
+    /// version.
+    #[test]
+    fn test_routing_reads_the_container_a_value_was_read_out_of() {
+        assert_tally_routing(
+            "routing_read_out_of_a_held_container",
+            (2, 1),
+            "the calls handed a value read out of a container read after them should route to the \
+             borrow version, and the call whose container ends there should stay on the own version",
+        );
+    }
+
+    /// Verifies that a value read out of a parameter the function borrows is held past a call it is
+    /// handed to, and is lent: the caller holds the parameter's object for the whole body, though
+    /// the body names the parameter nowhere after the call. `count` walks a tree of boxed nodes
+    /// and hands each child of the node it borrows to a call of itself, so both calls route to the
+    /// borrowing version, the arm reads the children by the lending form, and the borrowing
+    /// version counts no reference at all.
+    #[test]
+    fn test_a_value_read_out_of_a_borrowed_parameter_is_lent_to_a_borrowing_call() {
+        let (_temp_dir, project_dir) =
+            setup_case_projects(CASES, "routing_read_out_of_a_borrowed_parameter");
+        let dump = emit_main_rc_ir(&project_dir);
+        let count = func_block(&dump, "fn Main::count", |n| n.contains("#borrow"));
+        let body = count.join("\n");
+
+        let calls: Vec<&str> = count
+            .iter()
+            .copied()
+            .filter(|l| l.contains("= Main::count#"))
+            .collect();
+        assert_eq!(calls.len(), 2, "`count` calls itself twice:\n{}", body);
+        for call in &calls {
+            assert!(
+                call.contains("#borrow"),
+                "a call handed a child of the borrowed node should route to the borrowing \
+                 version:\n{}",
+                body
+            );
+        }
+        let read = count
+            .iter()
+            .find(|l| l.contains("= union_as_known_1("))
+            .unwrap_or_else(|| panic!("`count` reads no payload of a node:\n{}", body));
+        assert!(
+            read.contains(" @lent"),
+            "the children read out of the borrowed node should be lent:\n{}",
+            read
+        );
+        assert_counts_nothing(&count, "the borrowing version of `count`");
+    }
+
+    /// Verifies that a value read out of a global is held past a call it is handed to, and is
+    /// lent: a global's object is never freed, though the body names the global nowhere after the
+    /// call. `from_global` reads an array out of a global struct and hands it to `total`, which
+    /// only reads it, so the call routes to the borrowing version, the getter reads the array by
+    /// the lending form, and `from_global` counts no reference at all.
+    #[test]
+    fn test_a_value_read_out_of_a_global_is_lent_to_a_borrowing_call() {
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "routing_read_out_of_a_global");
+        let dump = emit_main_rc_ir(&project_dir);
+        let from_global = func_block(&dump, "fn Main::from_global", |_| true);
+        let body = from_global.join("\n");
+
+        let call = from_global
+            .iter()
+            .find(|l| l.contains("= Main::total#"))
+            .unwrap_or_else(|| panic!("`from_global` calls no `total`:\n{}", body));
+        assert!(
+            call.contains("#borrow"),
+            "a call handed a value read out of a global should route to the borrowing version:\n{}",
+            body
+        );
+        let read = from_global
+            .iter()
+            .find(|l| l.contains("= struct_get_0(Main::holder#"))
+            .unwrap_or_else(|| panic!("`from_global` reads no field of the global:\n{}", body));
+        assert!(
+            read.contains(" @lent"),
+            "the array read out of the global should be lent:\n{}",
+            read
+        );
+        assert_counts_nothing(&from_global, "`from_global`");
+    }
+
+    /// Verifies that a read lends its value where the container goes on holding it: the element read
+    /// out of `rows` and the field read out of `table`, each handed to a call that borrows it while
+    /// its container is read afterwards, are read by the lending form of the read, and `main` counts
+    /// no reference of either. The element read out of `last`, whose container ends at the read,
+    /// keeps a reference of its own, which the call it is handed to owns.
+    #[test]
+    fn test_a_read_lends_its_value_while_the_container_holds_it() {
+        let (_temp_dir, project_dir) =
+            setup_case_projects(CASES, "routing_read_out_of_a_held_container");
+        let dump = emit_main_rc_ir(&project_dir);
+        let main = main_block(&dump, "Main::tally");
+        let calls: Vec<&str> = main
+            .iter()
+            .copied()
+            .filter(|l| tally_version_called(l).is_some())
+            .collect();
         assert_eq!(
-            borrow_calls,
-            1,
-            "the non-last-use call should route to the borrow version:\n{}",
+            calls.len(),
+            3,
+            "`main` calls `tally` three times:\n{}",
             main.join("\n")
         );
-        assert_eq!(
-            own_calls,
-            1,
-            "the last-use call should stay on the own version:\n{}",
+        for call in calls {
+            let array = call_first_arg(call);
+            let binding = format!("let {} : ", array);
+            let read = main
+                .iter()
+                .find(|l| l.trim_start().starts_with(&binding))
+                .unwrap_or_else(|| {
+                    panic!("`main` does not bind `{}`:\n{}", array, main.join("\n"))
+                });
+            let lent = read.contains(" @lent");
+            if calls_tally_borrow_version(call) {
+                assert!(
+                    lent,
+                    "the value handed to a borrowing call while its container is held should be \
+                     lent:\n{}",
+                    read
+                );
+                let counted = main
+                    .iter()
+                    .any(|l| is_retain_of(l, array) || is_release_of(l, array));
+                assert!(
+                    !counted,
+                    "`main` should count no reference of the lent `{}`:\n{}",
+                    array,
+                    main.join("\n")
+                );
+            } else {
+                assert!(
+                    !lent,
+                    "the value read at its container's last use should keep its own reference:\n{}",
+                    read
+                );
+            }
+        }
+    }
+
+    /// Verifies that the routing finds an argument's object held after the call through the match
+    /// binding it flows out of: `env` is whichever value the `if` takes, and `env` is read after the
+    /// call, so the array read out of it outlives the call on either branch and the call is routed
+    /// to the borrow version.
+    #[test]
+    fn test_routing_reads_the_match_binding() {
+        assert_tally_routing(
+            "routing_field_of_a_join",
+            (1, 0),
+            "the call handed a field of an `if` result read after it should route to the borrow \
+             version",
+        );
+    }
+
+    /// Verifies that a call owns an argument at its last use and borrows the one beside it the
+    /// caller reads afterwards: the version it reaches takes `rows` owned, so the callee frees `rows`
+    /// once it has read a value out of it and that value stays unique for an update, and takes `key`
+    /// borrowed, so the caller makes no retain for it.
+    #[test]
+    fn test_routing_owns_a_last_use_beside_a_borrow() {
+        let dump = assert_tally_routing(
+            "routing_last_use_beside_a_borrow",
+            (1, 0),
+            "the call should route to a borrowing version",
+        );
+        let tally_sig = sig_line(&dump, "fn Main::tally", |n| n.contains("#borrow"));
+        assert!(
+            tally_sig.contains("Std::Array (Std::Array Std::I64) [arg1] {own}")
+                && tally_sig.contains("Std::Array Std::I64 [arg2] {borrow}"),
+            "the version the call reaches should own `rows` and borrow `key`:\n{}",
+            tally_sig
+        );
+    }
+
+    /// Verifies that two calls of one function lending different arguments reach two versions:
+    /// the call at `rows`'s last use reaches a version owning `rows` and borrowing `key`, and the
+    /// call at `key`'s last use reaches one borrowing `rows` and owning `key`.
+    #[test]
+    fn test_routing_gives_each_lent_set_its_own_version() {
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "routing_two_calls_two_versions");
+        let dump = emit_main_rc_ir(&project_dir);
+        let main = main_block(&dump, "Main::tally");
+        let callees: Vec<&str> = main
+            .iter()
+            .filter(|l| calls_tally_borrow_version(l))
+            .filter_map(|l| rc_ir_callee_of(l))
+            .collect();
+        assert!(
+            callees.len() == 2 && callees[0] != callees[1],
+            "the two calls should reach two different borrowing versions:\n{}",
             main.join("\n")
+        );
+        for (rows, key) in [("own", "borrow"), ("borrow", "own")] {
+            let rows_param = format!("Std::Array (Std::Array Std::I64) [arg1] {{{}}}", rows);
+            let key_param = format!("Std::Array Std::I64 [arg2] {{{}}}", key);
+            assert!(
+                dump.lines().any(|l| {
+                    is_sig(l, "fn Main::tally", &|n: &str| n.contains("#borrow"))
+                        && l.contains(&rows_param)
+                        && l.contains(&key_param)
+                }),
+                "a borrowing version should take `rows` {} and `key` {}:\n{}",
+                rows,
+                key,
+                dump
+            );
+        }
+    }
+
+    /// Verifies that the routing lends a field of a match binding only when the object is held
+    /// after the call whichever arm the match takes: the call whose `env` may be `e1` or `e2`, both
+    /// read afterwards, routes to the borrow version, and the call whose `env2` may be `f2`, which
+    /// nothing reads afterwards, keeps the owning version.
+    #[test]
+    fn test_routing_holds_every_arm_of_a_match_binding() {
+        assert_tally_routing(
+            "routing_field_of_a_join_held_on_one_arm",
+            (1, 1),
+            "the call whose array is held after it on both arms should route to the borrow version, \
+             and the call whose array ends there on one arm should stay on the own version",
+        );
+    }
+
+    /// Verifies that the routing finds an argument's object held after the call through an unboxed
+    /// union built around it: the union `Slot::full(arr)` is named nowhere after the call, but `arr`
+    /// is, so the call is routed to the borrow version.
+    #[test]
+    fn test_routing_reads_through_a_union_built_for_the_call() {
+        assert_tally_routing(
+            "routing_union_built_for_the_call",
+            (1, 0),
+            "the call handed a union holding an array read after it should route to the borrow \
+             version",
+        );
+    }
+
+    /// Verifies that a call ending a branch of a match keeps the owning version when nothing after
+    /// the match names its argument: the call is the array's last use, and borrowing there would
+    /// only delay the release.
+    #[test]
+    fn test_routing_last_use_in_a_branch() {
+        assert_tally_routing(
+            "routing_last_use_in_branch",
+            (0, 1),
+            "the call at the array's last use should stay on the own version",
         );
     }
 
@@ -448,11 +773,11 @@ mod integration_tests {
     /// the retain that made it. The call whose aggregate is named nowhere afterwards keeps the
     /// owning version, since the object that leaf refers to ends there either way.
     #[test]
-    fn test_benefit_routing_by_the_objects_lifetime() {
-        let (_temp_dir, project_dir) = setup_test_env("benefit_aggregate");
+    fn test_routing_by_the_objects_lifetime() {
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "routing_aggregate");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::tally");
         let (borrow_calls, own_calls) = tally_call_routing(&main);
         assert_eq!(
             borrow_calls,
@@ -480,10 +805,10 @@ mod integration_tests {
     /// reference-counting unit, both naming the same variable at its own field path.
     #[test]
     fn test_split_rc_into_units() {
-        let (_temp_dir, project_dir) = setup_test_env("multiunit");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "multiunit");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::hand_back");
         // The whole-value retain of the pair `t` is normalized to one retain per field: `.0` and `.1`.
         // The tuple binding has no source name, so match the retains by their field paths. A retain
         // may carry a trailing reference-counting state tag, which is not part of the target.
@@ -516,12 +841,12 @@ mod integration_tests {
         );
     }
 
-    /// The first argument variable of a `...#borrow(a, b, ...)` call on a dump line.
-    fn borrow_call_first_arg(line: &str) -> &str {
-        let args = line
-            .split("#borrow(")
-            .nth(1)
-            .unwrap_or_else(|| panic!("the line carries no `#borrow(` call:\n{}", line));
+    /// The first argument variable of a call on a dump line.
+    fn call_first_arg(line: &str) -> &str {
+        let (_, args) = line
+            .split_once(" = ")
+            .and_then(|(_, rhs)| rhs.split_once('('))
+            .unwrap_or_else(|| panic!("the line carries no call:\n{}", line));
         args.split([',', ')']).next().unwrap().trim()
     }
 
@@ -530,15 +855,15 @@ mod integration_tests {
     /// stays `fresh` for the operation following the call.
     #[test]
     fn test_cancel_removes_net_zero_bracket() {
-        let (_temp_dir, project_dir) = setup_test_env("ownership");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "ownership");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::tally");
         let call = main
             .iter()
-            .find(|l| l.contains("= Main::tally") && l.contains("#borrow("))
+            .find(|l| calls_tally_borrow_version(l))
             .expect("main should call the tally borrow version");
-        let arr = borrow_call_first_arg(call);
+        let arr = call_first_arg(call);
 
         // Borrow-ification brackets the borrow call with a retain before it and a release after it;
         // because nothing between them consumes the array, cancellation removes both, leaving no
@@ -566,7 +891,7 @@ mod integration_tests {
     /// releasing the union would free an array its caller still holds.
     #[test]
     fn test_borrow_union_no_double_release() {
-        let (_temp_dir, project_dir) = setup_test_env("union");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "union");
         let dump = emit_main_rc_ir(&project_dir);
 
         // `via_union` reads its array `p` (directly and through `some(p)`), so it has a borrow version
@@ -598,7 +923,7 @@ mod integration_tests {
     /// while an operation on a value read out of a boxed container keeps one.
     #[test]
     fn test_unique_check_elim_local_fresh() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim");
         let dump = emit_main_rc_ir(&project_dir);
 
         // A guard that aborts rather than producing a value says nothing about the value it guards,
@@ -679,7 +1004,7 @@ mod integration_tests {
     /// re-check a value nothing had shared.
     #[test]
     fn test_unique_check_elim_after_copy() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_after_copy");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim_after_copy");
         let dump = emit_main_rc_ir(&project_dir);
 
         // The copy writes into the array it just allocated for the result, so its own check goes.
@@ -708,7 +1033,7 @@ mod integration_tests {
     /// elimination is sound for values other threads can reach only as long as this holds.
     #[test]
     fn test_published_value_keeps_its_check() {
-        let (_temp_dir, project_dir) = setup_test_env("mark_threaded");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "mark_threaded");
         let dump = emit_main_rc_ir(&project_dir);
 
         assert_prov_of(&dump, "mark_threaded(", "[unknown]");
@@ -731,7 +1056,7 @@ mod integration_tests {
     /// that each drops its own check on a value proven unique, and that the value each returns,
     /// bound as `mutated` and `mutated_io`, is `fresh`.
     fn assert_writes_through_lent_pointer_are_unique(case: &str) {
-        let (_temp_dir, project_dir) = setup_test_env(case);
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, case);
         let dump = emit_main_rc_ir(&project_dir);
 
         // The value each write hands back is uniquely owned, which is what lets the write that
@@ -773,7 +1098,7 @@ mod integration_tests {
     /// value to pay for the borrow, so a value still read afterwards is retained nowhere.
     #[test]
     fn test_borrow_boxed_retains_nothing() {
-        let (_temp_dir, project_dir) = setup_test_env("borrow_boxed");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "borrow_boxed");
         let dump = emit_main_rc_ir(&project_dir);
 
         let rec = var_bound_as(&dump, "rec");
@@ -799,7 +1124,7 @@ mod integration_tests {
     /// see. The elimination is sound for globals only as long as this holds.
     #[test]
     fn test_global_value_keeps_its_check() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_global");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim_global");
         let dump = emit_main_rc_ir(&project_dir);
 
         assert!(
@@ -818,7 +1143,7 @@ mod integration_tests {
     /// lets its check be dropped, so a loop over such a struct re-checks nothing.
     #[test]
     fn test_unique_check_elim_through_struct_field() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_struct_field");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim_struct_field");
         let dump = emit_all_rc_ir(&project_dir);
 
         // The loop updates the array through a field of an unboxed struct. Taking that struct apart
@@ -843,7 +1168,7 @@ mod integration_tests {
     /// sharing, so its update would keep its check.
     #[test]
     fn test_unique_check_elim_after_field_read() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_read_field");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim_read_field");
         let dump = emit_main_rc_ir(&project_dir);
 
         for function in ["add_edges_by_getter", "add_edges_by_pattern"] {
@@ -884,7 +1209,7 @@ mod integration_tests {
     /// that fresh clone, which writes in place.
     #[test]
     fn test_unique_check_elim_shared_loop_entry() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_shared_loop");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim_shared_loop");
         let dump = emit_all_rc_ir(&project_dir);
 
         // Specialization clones the loop body per input uniqueness, so a loop entered with a shared
@@ -923,6 +1248,37 @@ mod integration_tests {
             "the checked and the elided set should live in different clones of the loop body, but \
              a function holds both:\n{}",
             dump
+        );
+    }
+
+    /// Verifies that a retain only one path of a loop body needs is moved onto that path. The body
+    /// takes its captures apart at the top, so the tree it captured is retained there for the
+    /// capture handed on to the next iteration; the path that starts again from the root hands that
+    /// reference on, and the paths that stop or go on down release it. On those paths nothing stands
+    /// between the retain and the release, so the two cancel.
+    #[test]
+    fn test_retain_sinks_to_the_path_consuming_it() {
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "sink_retain");
+        let dump = build_project_run_and_read_rc_ir(&project_dir, "max", "7");
+
+        let function = rc_ir_function_bodies(&dump, &format!("{}@walk", LS_CAP_PREFIX))
+            .into_iter()
+            .find(|function| function.starts_with("fn Std::loop#"))
+            .unwrap_or_else(|| panic!("no copy of `loop` runs the body of `walk`:\n{}", dump));
+        let body: Vec<&str> = function.lines().skip(1).collect();
+        let retains: Vec<usize> = (0..body.len())
+            .filter(|&i| body[i].trim_start().starts_with("retain "))
+            .collect();
+        assert_eq!(
+            retains.len(),
+            1,
+            "the loop body should retain the tree once, on the path starting again from the root:\n{}",
+            body.join("\n")
+        );
+        assert!(
+            body[retains[0] + 1].contains("= Std::loop#"),
+            "the retain should stand right before the call starting the next iteration:\n{}",
+            body.join("\n")
         );
     }
 }

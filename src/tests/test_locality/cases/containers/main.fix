@@ -16,27 +16,42 @@ gholder = Holder::some([5, 6]);
 built_here : Array I64 -> Array I64;
 built_here = |elements| elements.to_iter.to_array;
 
-// Both fields are read, so the destructure hands out each one rather than dropping it.
-sum_pair : Pair -> I64;
-sum_pair = |pair| pair.@head.@(0) + pair.@tail.@(0);
+// Both fields are read, and a field longer than `fallback` is returned in its place. The result is
+// a field on one path and `fallback` on another, so each read in an arm retains its
+// field.
+longer_of_pair : Array I64 -> Pair -> Array I64;
+longer_of_pair = |fallback, pair| (
+    if pair.@head.@size > fallback.@size { pair.@head }
+    else if pair.@tail.@size > fallback.@size { pair.@tail }
+    else { fallback }
+);
 
-// A `match` on a boxed union retains the payload out of the container, which is the take-out rule.
+// The variant arm of a `match` on a boxed union reads the payload out of the container.
 sum_holder : Holder -> I64;
 sum_holder = |holder| match holder {
     some(arr) => arr.@(0),
     none(_) => 0
 };
 
-// `as_some` reads the payload through an operation instead, which counts the reference inside
-// itself rather than at a node of its own.
+// The payload is returned on one path and `fallback` on the other, so the read in the arm retains
+// the payload.
+payload_or : Array I64 -> Holder -> Array I64;
+payload_or = |fallback, holder| match holder {
+    some(arr) => if arr.@size > fallback.@size { arr } else { fallback },
+    none(_) => fallback
+};
+
+// `as_some` reads the payload as the arm does, after checking the variant.
 head_of_holder : Holder -> I64;
 head_of_holder = |holder| if holder.is_some { holder.as_some.@(0) } else { 0 };
 
-// A struct pattern hands out both fields of a boxed container at once.
-head_and_tail : Pair -> I64;
-head_and_tail = |pair| (
+// A struct pattern reads both fields out of a boxed container, each with the getter `@head` and
+// `@tail` use. The result is a field on one path and `fallback` on another, so the reads retain
+// both fields and the ones not returned are released.
+longer_by_pattern : Array I64 -> Pair -> Array I64;
+longer_by_pattern = |fallback, pair| (
     let Pair { head : h, tail : t } = pair;
-    h.@(0) + t.@(0)
+    if h.@size > fallback.@size { h } else if t.@size > fallback.@size { t } else { fallback }
 );
 
 // The callback writes through a raw pointer into the array's payload, so an array of boxed elements
@@ -55,14 +70,20 @@ main = (
     let local_pair = Pair { head : built_here([10, 20]), tail : built_here([30, 40]) };
     let local_holder = Holder::some(built_here([50, 60]));
 
-    let from_local = local_pair.sum_pair + local_holder.sum_holder
-                   + local_pair.head_and_tail + local_holder.head_of_holder;
-    let from_global = gpair.sum_pair + gholder.sum_holder
-                    + gpair.head_and_tail + gholder.head_of_holder;
+    let fallback = built_here([0]);
+    let from_local = local_pair.longer_of_pair(fallback).@(0) + local_holder.sum_holder
+                   + local_pair.longer_by_pattern(fallback).@(0)
+                   + local_holder.payload_or(fallback).@(0) + local_holder.head_of_holder;
+    let from_global = gpair.longer_of_pair(fallback).@(0) + gholder.sum_holder
+                    + gpair.longer_by_pattern(fallback).@(0) + gholder.head_of_holder
+                    + gholder.payload_or(fallback).@(0);
 
     // Every element is built here, so what the array holds turns on the write alone.
     let (planted, _) = [built_here([70]), built_here([80])].plant_global;
-    let from_planted = planted.@(0).@(0) + planted.@(1).@(0);
+    // The elements are put into a new array once `planted` has been released, so each read retains
+    // its element.
+    let elements = [planted.@(0), planted.@(1)];
+    let from_planted = elements.@(0).@(0) + elements.@(1).@(0);
 
     // The same write over a payload of scalars, which holds no reference for the callback to
     // overwrite and so keeps both facts.

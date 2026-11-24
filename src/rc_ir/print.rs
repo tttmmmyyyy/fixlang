@@ -202,18 +202,17 @@ fn expr_to_string(node: &RcExprNode, level: usize, ann: Annotations) -> String {
             out.push_str(&expr_to_string(cont, level, ann));
             out
         }
-        RcExpr::Destructure(container, fields, state, cont) => {
+        RcExpr::DestructureUnboxed(container, fields, cont) => {
             let binds = fields
                 .iter()
                 .map(|(idx, var)| format!(".{} -> {}", idx, var_to_string(var, ann)))
                 .collect::<Vec<_>>()
                 .join(", ");
             let mut out = format!(
-                "{}destructure {} {{ {} }}{}\n",
+                "{}destructure {} {{ {} }}\n",
                 ind,
                 var_name(container),
-                binds,
-                state_to_string(state)
+                binds
             );
             out.push_str(&expr_to_string(cont, level, ann));
             out
@@ -239,10 +238,16 @@ fn rhs_to_string(rhs: &RcRhs, level: usize, ann: Annotations) -> String {
         }
         RcRhs::Builtin(op, _args) => {
             // The op's name spells out its operands, so it is the whole right-hand side here. A
-            // trailing `@local` says locality inference proved the objects the op's own checks and
-            // reference counting touch to be local.
-            let mark = if op.assumes_local() { " @local" } else { "" };
-            format!("{}{}", op.name(), mark)
+            // trailing `@lent` says the op lends its result (`BuiltinOp::lending`), and a trailing
+            // state tag names the state locality inference proved of the objects the op's own
+            // checks and reference counting touch.
+            let lent = if op.lends() { " @lent" } else { "" };
+            format!(
+                "{}{}{}",
+                op.name(),
+                lent,
+                state_to_string(&op.assumed_state())
+            )
         }
         RcRhs::Match(scrutinee, arms) => {
             let mut out = format!("match {} {{\n", var_name(scrutinee));
@@ -251,12 +256,15 @@ fn rhs_to_string(rhs: &RcRhs, level: usize, ann: Annotations) -> String {
                     Some(tag) => tag.to_string(),
                     None => "_".to_string(),
                 };
+                let binder = match &arm.binder {
+                    Some(binder) => var_to_string(binder, ann),
+                    None => String::new(),
+                };
                 out.push_str(&format!(
-                    "{}case {}({}):{}\n",
+                    "{}case {}({}):\n",
                     indent(level + 1),
                     variant,
-                    var_to_string(&arm.payload, ann),
-                    state_to_string(&arm.payload_state)
+                    binder
                 ));
                 out.push_str(&expr_to_string(&arm.body, level + 2, ann));
             }

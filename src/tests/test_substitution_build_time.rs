@@ -7,7 +7,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::build_counting_instructions_and_run;
+    use crate::tests::test_util::build_within_instructions_and_run;
 
     /// How many times the function calls `borrow_c_str`. Long enough that walking the whole function
     /// for each call's body executes more than `MAX_INSTRUCTIONS`.
@@ -48,22 +48,8 @@ mod tests {
         let expected = (1..=CALLS).map(|i| i + 1).sum::<usize>().to_string();
 
         let description = format!("a function calling `borrow_c_str` {} times", CALLS);
-        let (output, instructions) =
-            build_counting_instructions_and_run(&source, "max", &description);
+        let output =
+            build_within_instructions_and_run(&source, "max", MAX_INSTRUCTIONS, &description);
         assert_eq!(output, expected);
-        match instructions {
-            Some(instructions) => assert!(
-                instructions < MAX_INSTRUCTIONS,
-                "compiling {} executed {} instructions, beyond the bound of {}",
-                description,
-                instructions,
-                MAX_INSTRUCTIONS
-            ),
-            None => eprintln!(
-                "compiling {}: this machine does not let the test count instructions, so the bound \
-                 went unchecked",
-                description
-            ),
-        }
     }
 }
