@@ -569,8 +569,8 @@ impl<'a, 'b> Validator<'a, 'b> {
                         }
                     }
                 }
-                // Each arm's payload is in scope only within that arm's body, so bind it, check the
-                // body, and unbind it before the next sibling arm.
+                // The variable an arm binds is in scope only within that arm's body, so bind it,
+                // check the body, and unbind it before the next sibling arm.
                 for arm in arms {
                     // A match consumes an unboxed scrutinee into the variable each arm binds,
                     // and borrows a boxed one, which its arms read with ops.

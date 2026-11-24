@@ -8002,7 +8002,7 @@ impl BuiltinOp for UnionAsOp {
     }
 }
 
-/// The body of `as_{variant}`, which reads the payload of the variant at `variant_idx`, of type
+/// The body of `as_{variant}`, which reads the payload of the variant at `field_idx`, of type
 /// `field_ty`, out of the union bound to `union_arg_name`.
 pub fn union_as_body(
     union_arg_name: &Name,

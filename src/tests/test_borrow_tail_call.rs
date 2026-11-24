@@ -71,8 +71,7 @@ mod borrow_tail_call_tests {
     /// the release of the reference the read took after the call. So the call reaches a version
     /// owning `a`, and the loop runs in constant stack.
     ///
-    /// The depth makes this a stack test, not a memcheck one, so Valgrind is switched off to keep
-    /// it fast.
+    /// The depth makes this a stack test, so Valgrind is switched off to keep it fast.
     #[test]
     pub fn test_tail_call_passing_a_value_read_out_of_a_borrowed_parameter() {
         let source = r#"

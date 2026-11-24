@@ -1,7 +1,7 @@
 // Memory-safety tests for `as_<variant>` reading a payload out of a union it borrows.
 // A read borrows the union except where it moves a payload holding a reference out of an unboxed
-// union, and reference-count insertion releases a borrowed union at its last use rather than at the
-// read. The borrow matters most for a boxed union, whose container carries a reference count: an arm
+// union, and reference-count insertion releases a borrowed union at its last use. The borrow
+// matters most for a boxed union, whose container carries a reference count: an arm
 // below reads a fully-unboxed variant of a boxed union, keeps the union shared, and reads it again;
 // a reference dropped twice or too early is a use-after-free, checked under valgrind.
 

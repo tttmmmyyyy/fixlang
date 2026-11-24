@@ -234,11 +234,10 @@ pub struct MatchArm {
     /// The variant number this arm matches, or `None` for a catch-all arm.
     pub tag: Option<usize>,
     /// The variable the arm binds, which the match moves an unboxed scrutinee into: the payload of
-    /// the variant for a variant arm, and the whole scrutinee for a catch-all arm. An arm over a
-    /// boxed scrutinee binds none: the match borrows the scrutinee, and the arm's body reads it
-    /// with ops, as every read out of a boxed container is.
+    /// the variant for a variant arm, and the whole scrutinee for a catch-all arm. `None` over a
+    /// boxed scrutinee, which the match borrows and the arm's body reads with ops.
     pub binder: Option<RcVar>,
-    /// The expression this arm evaluates to, in the scope extended with `payload`.
+    /// The expression this arm evaluates to, in the scope extended with `binder`.
     pub body: RcExprNode,
 }
 

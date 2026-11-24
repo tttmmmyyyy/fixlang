@@ -630,8 +630,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.builder().position_at_end(arm_bbs[i]);
 
             // Bind the variable the arm binds: a variant arm moves the variant's value out of the
-            // scrutinee, and a catch-all arm binds the whole scrutinee. The move counts nothing,
-            // which is right of an unboxed scrutinee alone.
+            // scrutinee, and a catch-all arm binds the whole scrutinee. The move counts no
+            // reference, which is correct for an unboxed scrutinee alone.
             assert_eq!(
                 arm.binder.is_some(),
                 !scrut.ty.is_box(self.type_env()),

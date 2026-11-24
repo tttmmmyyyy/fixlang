@@ -306,8 +306,8 @@ impl<'a> RcInserter<'a> {
 
         // The local variables live at an arm's head: those some arm uses from the enclosing scope,
         // plus those live after the match, plus a borrowed scrutinee, which reaches every arm. For
-        // a consumed scrutinee this, rather than the liveness after the match, is the liveness that
-        // follows the consumption. Both the dead-branch releases and the scrutinee retain read it.
+        // a consumed scrutinee this is the liveness that follows the consumption. Both the
+        // dead-branch releases and the scrutinee retain read it.
         let free_in_arms: Vec<Set<FullName>> =
             arms.iter().map(|arm| self.arm_free_locals(arm)).collect();
         let mut live_at_arm_head: Set<FullName> = live_after_match.clone();
@@ -489,7 +489,7 @@ fn free_locals(node: &RcExprNode) -> Set<FullName> {
 }
 
 /// The traversal behind `free_locals`: record into `refs` every local name `node` references and
-/// into `bound` every local name it binds — a `Let` variable, a `Match` arm's payload variable, or
+/// into `bound` every local name it binds — a `Let` variable, the variable a `Match` arm binds, or
 /// a `DestructureUnboxed` field — descending through the continuation and match arms.
 fn collect_referenced_and_bound(
     node: &RcExprNode,
