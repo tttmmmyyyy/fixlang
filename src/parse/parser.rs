@@ -36,7 +36,7 @@ use crate::constants::{
     INDEXABLE_TRAIT_NAME, IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
     PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
-use crate::error::Errors;
+use crate::error::{Error, Errors};
 use crate::ffi::unsupported_128_bit_integer_msg;
 use crate::fixstd::builtin::{
     expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, expr_unit,
@@ -51,7 +51,7 @@ use crate::fixstd::builtin::{
 use crate::misc::{make_map, save_temporary_source, to_absolute_path, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use either::Either;
-use pest::error::{Error, ErrorVariant, InputLocation};
+use pest::error::{Error as PestError, ErrorVariant, InputLocation};
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use std::ops::Range;
@@ -88,11 +88,17 @@ struct ParseContext {
     /// diagnostics and LSP queries can locate any component of the
     /// absolute path.
     abs_path_uses: Vec<(FullName, Vec<Span>)>,
-    // Counter for naming pattern-wildcard (`_`) binders; see
-    // `fresh_pattern_wildcard_name`.
+    /// Counter for naming pattern-wildcard (`_`) binders; see
+    /// `fresh_pattern_wildcard_name`.
     pattern_wildcard_counter: u32,
-    // Counter for naming `_` type wildcards; see `fresh_type_wildcard_name`.
+    /// Counter for naming `_` type wildcards; see `fresh_type_wildcard_name`.
     type_wildcard_counter: u32,
+    /// Whether the type being parsed is the type annotation of an expression or a pattern, the one
+    /// place a `_` type wildcard may stand.
+    in_type_annotation: bool,
+    /// The places where a `_` type wildcard is written outside a type annotation, each reported as
+    /// an error once the module is parsed.
+    misplaced_type_wildcards: Vec<Span>,
     /// The renaming the module of this source is compiled under, if any.
     renaming: Option<ModuleRenaming>,
 }
@@ -138,6 +144,8 @@ impl ParseContext {
             abs_path_uses: vec![],
             pattern_wildcard_counter: 0,
             type_wildcard_counter: 0,
+            in_type_annotation: false,
+            misplaced_type_wildcards: vec![],
             renaming,
         }
     }
@@ -167,6 +175,16 @@ impl ParseContext {
     // in `(_, _)`) do not collide. See `TYPE_WILDCARD_VAR_PREFIX`.
     fn fresh_type_wildcard_name(&mut self) -> String {
         next_prefixed_name(TYPE_WILDCARD_VAR_PREFIX, &mut self.type_wildcard_counter)
+    }
+
+    /// The `_` type wildcard of kind `kind` written at `span`: a type variable under a fresh name.
+    /// Unless the type being parsed is a type annotation, `span` is recorded as misplaced.
+    fn make_type_wildcard(&mut self, kind: &Arc<Kind>, span: Span) -> Arc<TypeNode> {
+        if !self.in_type_annotation {
+            self.misplaced_type_wildcards.push(span.clone());
+        }
+        let tv = make_tyvar(&self.fresh_type_wildcard_name(), kind);
+        type_from_tyvar(tv).set_source(Some(span))
     }
 }
 
@@ -489,7 +507,7 @@ pub fn probe_parse_for_completion_repair(source: &str) -> Result<(), RepairHint>
 
 /// Build a `RepairHint` from a pest parse error: pull out the failure
 /// location and classify the expected-rule set.
-fn repair_hint_from_pest_error(e: &Error<Rule>) -> RepairHint {
+fn repair_hint_from_pest_error(e: &PestError<Rule>) -> RepairHint {
     let insert_at = match e.location {
         InputLocation::Pos(p) => p,
         InputLocation::Span((s, _)) => s,
@@ -575,11 +593,193 @@ pub fn parse_renamed_source_file(
     let file = match FixParser::parse(Rule::file, &source_code) {
         Ok(res) => res,
         Err(e) => {
-            return Err(message_parse_error(e, &source));
+            let if_starts = ifs_that_may_be_missing_else(&e, &source_code);
+            let mut err = message_parse_error(e, &source, &source_code);
+            for start in if_starts {
+                err.add_src(
+                    "This `if` may be missing its `else`.".to_string(),
+                    Span {
+                        input: source.clone(),
+                        start,
+                        end: start + "if".len(),
+                    },
+                );
+            }
+            return Err(Errors::from_err(err));
         }
     };
     reject_underscore_capital_value_names(file.clone(), &source)?;
     parse_file(file, source_cloned, renaming, config)
+}
+
+/// The byte offsets in `source_code` of the `if`s that may be missing their `else` and so have caused
+/// the parse error `e`, in ascending order.
+///
+/// Such an `if` is in the bound expression of a `let`, or in the expression of an `eval`, in the form
+/// `if c { a }; b`:
+///
+/// ```text
+/// let x = if n > 0 { 1 };
+/// x + 2
+/// )
+/// ```
+///
+/// The `;` after `{ 1 }` makes `x + 2`, the rest of the block, the else branch of the `if`. The
+/// bound expression then runs up to the `)` that closes the block, and `e` says that the `;` of the
+/// `let` is missing there.
+///
+/// The same parse error arises when the `if` is written in that form on purpose and the `;` after `b`
+/// is missing, which only the layout tells apart, so the `if` is a guess to report beside `e`.
+///
+/// To find that `if`, this puts a `;` where `e` expected one and parses `source_code` again. It does
+/// this again at each such error that follows, until the whole text parses: one token can close
+/// several `let`s and `eval`s left without their `;`, and the text after `e` can hold more of them.
+/// When the text holds a parse error of another kind, no `if` is reported. Each `;` put in at the
+/// position of `e` ends a construct that reads a `;`, and leaves a hole after it. A `let` or an
+/// `eval` has an `if` to report: of the expressions on the right end of the
+/// expression the `;` ends, the first that reads a `;`. An `if` whose else branch follows `else`
+/// reads none. When that first expression is a `let` or an `eval`, either of the two `;` could be the
+/// one meant for the outer `let` or `eval`, and the outer one has no `if` to report.
+fn ifs_that_may_be_missing_else(e: &PestError<Rule>, source_code: &str) -> Vec<usize> {
+    // The text put in. The spaces keep its `;` from joining a `;` beside it into a `;;`.
+    const INSERTED: &str = " ; ";
+    let Some(error_at) = semicolon_expected_before_a_closing_token(e, source_code) else {
+        return vec![];
+    };
+    // Each `;` put in ends a construct that reads a `;`: a binding of a `let`, an `eval`, an `if` in
+    // the form `if c { a }; b`, a declaration of the module or a member of a trait or an impl. Each of
+    // them starts at a different byte of `source_code`, so there are no more of them than bytes.
+    let max_insertions = source_code.len();
+    let mut patched = source_code.to_string();
+    // The byte offsets in `patched` of the `;`s put in at `error_at`, in ascending order.
+    let mut semicolons_at_the_error = vec![];
+    let mut insertion_count = 0;
+    let mut last_inserted_at = None;
+    let mut error = e.clone();
+    let file = loop {
+        let Some(at) = semicolon_expected_before_a_closing_token(&error, &patched) else {
+            return vec![];
+        };
+        assert!(
+            insertion_count < max_insertions,
+            "{} `;`s are put in a text of {} bytes",
+            insertion_count + 1,
+            max_insertions
+        );
+        // The text before `at` is as it was in the parse that failed there, so the parse that fails
+        // next reaches past the text put in last.
+        assert!(
+            last_inserted_at.map_or(true, |last| last < at),
+            "a `;` is expected at {} before the text put in at {:?}",
+            at,
+            last_inserted_at
+        );
+        last_inserted_at = Some(at);
+        // Every `;` put in before is before `at`, and each moved the text after it by the length of
+        // the text put in.
+        let original_at = at - INSERTED.len() * insertion_count;
+        if original_at == error_at {
+            semicolons_at_the_error.push(at + INSERTED.find(';').unwrap());
+        }
+        patched.insert_str(at, INSERTED);
+        insertion_count += 1;
+        match FixParser::parse(Rule::file, &patched) {
+            Ok(file) => break file,
+            Err(e) => error = e,
+        }
+    };
+    let lets_and_evals: Vec<Pair<Rule>> = file
+        .flatten()
+        .filter(|pair| matches!(pair.as_rule(), Rule::expr_let | Rule::expr_eval))
+        .collect();
+    let mut if_starts: Vec<usize> = semicolons_at_the_error
+        .iter()
+        .filter_map(|&semicolon| {
+            let ended = lets_and_evals
+                .iter()
+                .find_map(|pair| expression_ended_at(pair.clone(), semicolon))?;
+            let expr_if = first_expression_reading_a_semicolon_at_the_end(ended)?;
+            (expr_if.as_rule() == Rule::expr_if).then(|| expr_if.as_span().start())
+        })
+        .collect();
+    // The `if`s are inside expressions that end at `error_at`, before every `;` put in, so
+    // their offsets in `patched` are those in `source_code`.
+    assert!(
+        if_starts.iter().all(|&start| start < error_at),
+        "an `if` at {:?} is past the parse error at {}",
+        if_starts,
+        error_at
+    );
+    if_starts.sort();
+    if_starts
+}
+
+/// The byte offset in `source_code` at which the parse error `e` expected a `;`, when the token
+/// there ends the block: a `)`, a `}`, a `]` or a `,`. `None` says `e` is some other error.
+fn semicolon_expected_before_a_closing_token(
+    e: &PestError<Rule>,
+    source_code: &str,
+) -> Option<usize> {
+    let RepairHint {
+        insert_at: at,
+        kind,
+    } = repair_hint_from_pest_error(e);
+    if kind != RepairHintKind::Semicolon {
+        return None;
+    }
+    // The rest of the block runs into the else branch only up to the token that closes the block.
+    matches!(
+        source_code[at..].chars().next(),
+        Some(')' | '}' | ']' | ',')
+    )
+    .then_some(at)
+}
+
+/// Whether the `expr_if` pair `expr_if` is written in the form `if c { a }; b`, with a `;` between
+/// its then branch and its else branch.
+fn reads_a_semicolon_before_its_else_branch(expr_if: &Pair<Rule>) -> bool {
+    expr_if.clone().into_inner().any(|pair| {
+        pair.as_rule() == Rule::else_of_if_with_space
+            && pair.into_inner().any(|p| p.as_rule() == Rule::semicolon)
+    })
+}
+
+/// The expression that the `in` or `;` at the byte offset `at` ends in `let_or_eval`, an `expr_let` or
+/// `expr_eval` pair: the bound expression of a binding of the `let`, or the expression of the `eval`.
+/// `None` says that `let_or_eval` has no `in` or `;` there.
+fn expression_ended_at(let_or_eval: Pair<Rule>, at: usize) -> Option<Pair<Rule>> {
+    let mut previous = None;
+    for pair in let_or_eval.into_inner() {
+        if matches!(pair.as_rule(), Rule::in_of_let | Rule::semicolon)
+            && pair.as_span().start() == at
+        {
+            return previous;
+        }
+        previous = Some(pair);
+    }
+    None
+}
+
+/// Of the expressions on the right end of `expr` — `expr` itself, its last part when `expr` ends with
+/// that part, and so on down — the first that reads a `;` followed by an expression open to its
+/// right: an `if` in the form `if c { a }; b`, a `let` or an `eval`. `None` says that none does.
+fn first_expression_reading_a_semicolon_at_the_end(mut expr: Pair<Rule>) -> Option<Pair<Rule>> {
+    loop {
+        match expr.as_rule() {
+            Rule::expr_let | Rule::expr_eval => return Some(expr),
+            Rule::expr_if => {
+                if reads_a_semicolon_before_its_else_branch(&expr) {
+                    return Some(expr);
+                }
+            }
+            _ => {}
+        }
+        let last = expr.clone().into_inner().last()?;
+        if last.as_span().end() != expr.as_span().end() {
+            return None;
+        }
+        expr = last;
+    }
 }
 
 /// Reports every value, field and variant of the parsed `file` named with `_` followed by a capital
@@ -786,6 +986,15 @@ fn parse_module(
     fix_mod.deprecation_statements = replace(&mut deprecation_statements, vec![]);
 
     fix_mod.inject_abs_path_implicit_imports(&ctx.module_name, take(&mut ctx.abs_path_uses));
+
+    for span in take(&mut ctx.misplaced_type_wildcards) {
+        errors.append(Errors::from_msg_srcs(
+            "A type wildcard `_` stands for a type to be inferred, and is written only in the type annotation of an expression or a pattern.\n\
+             HINT: To leave a type unnamed in a signature or an `impl`, write a type variable such as `a`; in a type definition, also declare it as a parameter, as in `type S a = ...`."
+                .to_string(),
+            &[&Some(span)],
+        ));
+    }
 
     errors.to_result().map(|_| fix_mod)
 }
@@ -1772,7 +1981,7 @@ fn parse_expr_type_annotation(
     match pairs.next() {
         None => {}
         Some(ty) => {
-            expr = expr_tyanno(expr, parse_type(ty, ctx), Some(span));
+            expr = expr_tyanno(expr, parse_annotation_type(ty, ctx), Some(span));
         }
     }
     Ok(expr)
@@ -3184,21 +3393,27 @@ fn parse_type_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     type_from_tyvar(tv).set_source(Some(span))
 }
 
-// Parse a `_` type wildcard as a fresh type variable of kind `*`.
+/// Parses the type annotation of an expression or a pattern, where a `_` type wildcard may stand.
+fn parse_annotation_type(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
+    let outer = replace(&mut ctx.in_type_annotation, true);
+    let ty = parse_type(pair, ctx);
+    ctx.in_type_annotation = outer;
+    ty
+}
+
+/// Parse a `_` type wildcard as a fresh type variable of kind `*`.
 fn parse_type_wildcard(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_wildcard);
     let span = Span::from_pair(&ctx.source, &pair);
-    let tv = make_tyvar(&ctx.fresh_type_wildcard_name(), &kind_star());
-    type_from_tyvar(tv).set_source(Some(span))
+    ctx.make_type_wildcard(&kind_star(), span)
 }
 
-// Parse a `(_ : k)` type wildcard as a fresh type variable of the given kind.
+/// Parse a `(_ : k)` type wildcard as a fresh type variable of the given kind.
 fn parse_type_wildcard_kinded(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_wildcard_kinded);
     let span = Span::from_pair(&ctx.source, &pair);
     let kind = parse_kind(pair.into_inner().next().unwrap(), ctx);
-    let tv = make_tyvar(&ctx.fresh_type_wildcard_name(), &kind);
-    type_from_tyvar(tv).set_source(Some(span))
+    ctx.make_type_wildcard(&kind, span)
 }
 
 fn parse_type_tycon(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
@@ -3277,7 +3492,7 @@ fn parse_pattern_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNod
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let var_name = pairs.next().unwrap().as_str();
-    let ty = pairs.next().map(|ty| parse_type(ty, ctx));
+    let ty = pairs.next().map(|ty| parse_annotation_type(ty, ctx));
     make_pattern_var(var_name, ty, span, ctx)
 }
 
@@ -3526,11 +3741,10 @@ fn rule_to_string(r: &Rule) -> String {
     }
 }
 
-fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
+/// The error reporting the parse error `e` of `source_code`, the text of `src`: the rules pest expected,
+/// at the position it failed at.
+fn message_parse_error(e: PestError<Rule>, src: &SourceFile, source_code: &str) -> Error {
     let mut msg: String = Default::default();
-
-    #[allow(unused)]
-    let mut suggestion: Option<String> = None;
 
     // Show error content.
     msg += "Expected ";
@@ -3561,23 +3775,13 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
         }
         ErrorVariant::CustomError { message: _ } => unreachable!(),
     };
-    if suggestion.is_some() {
-        msg += "\n";
-        msg += &suggestion.unwrap();
-    }
-
-    let src_string = src.string();
-    if let Err(e) = src_string {
-        return e;
-    }
-    let src_string = src_string.ok().unwrap();
 
     // Create span (source location).
     let span = match e.location {
         InputLocation::Pos(s) => Span {
             input: src.clone(),
             start: s,
-            end: min(s + 1, src_string.len()),
+            end: min(s + 1, source_code.len()),
         },
         InputLocation::Span((s, e)) => Span {
             input: src.clone(),
@@ -3586,5 +3790,5 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
         },
     };
 
-    Errors::from_msg_srcs(msg, &[&Some(span)])
+    Error::from_msg_srcs(msg, &[&Some(span)])
 }

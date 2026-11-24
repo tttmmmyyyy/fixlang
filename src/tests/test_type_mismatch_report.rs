@@ -434,3 +434,217 @@ main : IO () = (
         "`#1` is the type expected for `undefined(\"\")`.\n\n5:53-5:66 in ",
     );
 }
+
+/// A type variable that replaces a variable of a global value's type, where an expression uses the
+/// value, is described by the variable it replaces and the value, and points at the use. Here the
+/// lambda returns the state where `fold_m` expects it wrapped in its monad `m`.
+#[test]
+pub fn test_a_type_variable_from_the_type_of_a_global_value_names_the_variable_and_the_value() {
+    let source = r##"
+module Main;
+
+type H k v = box struct { ks : Array k, vs : Array v };
+
+new_h : I64 -> H k v;
+new_h = |_| H { ks : [], vs : [] };
+
+insert : k -> v -> H k v -> H k v;
+insert = |k, v, h| h.mod_ks(push_back(k)).mod_vs(push_back(v));
+
+main : IO ();
+main = (
+    let memo = new_h(10);
+    let memo = *range(2, 11).fold_m(memo, |n, memo|
+        range(n+1, 11).fold(memo, |m, memo|
+            let memo = memo.insert(n, m);
+            memo
+        )
+    );
+    println(memo.@ks.get_size.to_string)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`memo` of type `Main::H #2 #1` does not match the expected type `#3 (Main::H #2 #1)`.",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` is `v` in the type of `Main::new_h`.\n\n14:16-14:21 in ",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#2` is `k` in the type of `Main::new_h`.\n\n14:16-14:21 in ",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#3` is `m` in the type of `Std::Iterator::fold_m`.\n\n15:30-15:36 in ",
+    );
+}
+
+/// A type variable that replaces a variable the compiler named in a global value's type, such as
+/// the functor of a field's `act_` function, gets no sentence about that variable, since the
+/// sentence would quote a name the source never writes.
+#[test]
+pub fn test_a_type_variable_from_a_variable_the_compiler_named_is_not_explained() {
+    let source = r##"
+module Main;
+
+type H = box struct { n : I64 };
+
+main : IO () = (
+    let h = H { n : 1 };
+    let h = h.act_n(|n| n + 1);
+    println(h.@n.to_string)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`n` of type `Std::I64` does not match the expected type `#1 Std::I64`.",
+    );
+    test_source_fail_excludes(source, Configuration::develop_mode(), "` is `#");
+}
+
+/// Verifies that where the type of a global value an expression uses does not match the expected
+/// type, the error explains the type variables of the value's type.
+#[test]
+pub fn test_a_type_variable_from_the_type_of_a_global_value_that_does_not_match_is_explained() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let n = true.Std::Array::get_size;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` is `a` in the type of `Std::Array::get_size`.\n\n6:18-6:38 in ",
+    );
+}
+
+/// Verifies that where no value of an overloaded name matches, the error explains a type variable
+/// of a value's type with the number of that value's line, as in `in (1)`.
+#[test]
+pub fn test_a_type_variable_from_the_type_of_a_global_value_is_explained_in_its_line_of_the_overloads(
+) {
+    let source = r##"
+module Main;
+
+get_size : I64 -> I64;
+get_size = |x| x;
+
+main : IO ();
+main = (
+    let n = true.get_size;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "- (1) `Std::Array::get_size` of type `Std::Array a -> Std::I64`: `Std::Array #2` and `Std::Bool` do not match.",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#2` in (1) is `a` in the type of `Std::Array::get_size`.\n\n9:18-9:26 in ",
+    );
+}
+
+/// Verifies that two type variables of the expected type that the failed check of a value unified
+/// with each other still point at their own expressions, since the report prints them apart.
+#[test]
+pub fn test_type_variables_the_failed_check_unified_point_at_their_own_expressions() {
+    let source = r##"
+module Main;
+
+same2 : (Option a, Option a) -> I64;
+same2 = |_| 0;
+
+main : IO ();
+main = (
+    let s : String = (Option::none(), Option::none()).same2;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` is `a` in the type of `Std::Option::none`.\n\n9:23-9:35 in ",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#2` is `a` in the type of `Std::Option::none`.\n\n9:39-9:51 in ",
+    );
+}
+
+/// Verifies that the type variables of the expected type of a value whose check failed keep the
+/// sources the outer context records for them, where the check unified one with another.
+#[test]
+pub fn test_type_variables_the_failed_check_unified_keep_the_sources_of_the_outer_context() {
+    let source = r##"
+module Main;
+
+same3 : (a, a) -> I64;
+same3 = |_| 0;
+
+f : I64 -> String;
+f = |n| ( let g = |x, y| ( let s : String = (x, y).same3; s ); g(1, 2) );
+
+main : IO ();
+main = println(f(0));
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` is the type expected for `x`.\n\n8:20-8:21 in ",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#2` is the type expected for `y`.\n\n8:23-8:24 in ",
+    );
+}
+
+/// Verifies that where no value of an overloaded name matches and two of the values have type
+/// variables of their own, each line's variable is explained by the value of that line, even though
+/// the two checks name their variables alike.
+#[test]
+pub fn test_type_variables_of_two_overloaded_values_are_each_explained_in_their_own_line() {
+    let source = r##"
+module Main;
+
+namespace A {
+    conv : Array a -> a;
+    conv = |xs| xs.@(0);
+}
+
+namespace B {
+    conv : Option b -> b;
+    conv = |o| o.as_some;
+}
+
+main : IO () = (
+    let n : I64 = true.conv;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` in (1) is `a` in the type of `Main::A::conv`.\n\n15:24-15:28 in ",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` in (2) is `b` in the type of `Main::B::conv`.\n\n15:24-15:28 in ",
+    );
+}

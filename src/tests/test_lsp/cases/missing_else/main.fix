@@ -1,0 +1,8 @@
+module Main;
+
+f : I64 -> I64 = |n| (
+    let x = if n > 0 { 1 };
+    x + 2
+);
+
+main : IO () = println $ f(3).to_string;

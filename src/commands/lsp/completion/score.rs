@@ -18,9 +18,7 @@ use super::index::CompletionIndex;
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
 use crate::ast::types::{TyCon, TypeNode};
-use crate::elaboration::typecheck::{
-    ConstraintInstantiationMode, TypeCheckContext, UnifOrOtherErr,
-};
+use crate::elaboration::typecheck::{InstantiationMode, TypeCheckContext, UnifOrOtherErr};
 use crate::misc::Map;
 use std::sync::{Arc, Mutex};
 
@@ -239,7 +237,7 @@ fn try_unify_receiver(
     let gv = program.global_values.get(name).ok_or(())?;
     let mut tc = tc_template.clone();
     let inst_ty = tc
-        .instantiate_scheme(&gv.scm, ConstraintInstantiationMode::Require)
+        .instantiate_scheme(&gv.scm, InstantiationMode::Require { site: None })
         .map_err(|_| ())?;
     let (srcs, _) = inst_ty.collect_app_src(usize::MAX);
     let cand_recv_ty = srcs.last().ok_or(())?;

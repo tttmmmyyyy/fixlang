@@ -105,6 +105,9 @@ fn report_hole(node: &Arc<ExprNode>, tc: &TypeCheckContext) -> Errors {
     // (typically when the hole is in an unconstrained context), point
     // at the expression that originally produced that type variable so
     // the user can see where the indeterminacy started.
-    err.add_srcs(tc.create_tyvar_location_messages(names.vars(), &names, None));
+    err.add_srcs(
+        tc.tyvar_sources()
+            .create_location_messages(names.vars(), &names, None),
+    );
     Errors::from_err(err)
 }
