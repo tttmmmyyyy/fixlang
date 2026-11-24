@@ -330,12 +330,14 @@ fn without_bindings(node: &RcExprNode, dropped: &Set<FullName>) -> RcExprNode {
     })
 }
 
-/// case-of-case: `let s = match iScrut { iArms }; let m = match s { oArms }; k2`, where `s` is
-/// consumed only by the outer match, moves each outer arm into the inner arm whose result it
-/// matches. An inner arm ends in a union it builds and immediately returns — or in a `match` whose own
-/// arms do, which `replace_tail_union` follows into — so the outer arm for that constructor is the one
-/// that arm reaches; putting that arm in place of the construction cancels the two against each other,
-/// with the outer arm's payload binder becoming the construction's operand. The inner match then
+/// case-of-case: `let s = match iScrut { iArms }; let m = match s { oArms }; k2`, where nothing
+/// after the outer match reads `s` and each outer arm an inner arm reaches reads it only to bind
+/// its payload, moves each outer arm into the inner arm whose result it matches. An inner arm ends
+/// in a union it builds and immediately returns — or in a `match` whose own arms do, which
+/// `replace_tail_union` follows into — so the outer arm for that constructor is the one that arm
+/// reaches; putting that arm in place of the construction cancels the two against each other,
+/// with the outer arm's payload being the construction's operand (`with_payload_bound`). The inner
+/// match then
 /// produces what the outer match did, so it binds the outer match's variable, and `k2` follows it
 /// once, as it followed the outer match.
 ///

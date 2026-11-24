@@ -243,7 +243,7 @@ pub struct MatchArm {
 
 impl MatchArm {
     /// This arm with `body` in place of its own: it matches the same variant and binds the same
-    /// payload, and evaluates to what `body` gives.
+    /// variable, and evaluates to what `body` gives.
     pub fn with_body(&self, body: RcExprNode) -> MatchArm {
         MatchArm {
             body,
@@ -608,8 +608,8 @@ fn for_each_var_of_node(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
     }
 }
 
-/// Visit the variables of a right-hand side: the payload variable of each arm of a `Match` among
-/// them, and not the arm bodies.
+/// Visit the variables a right-hand side itself names: of a `Match`, the scrutinee and the
+/// variable each arm binds.
 fn for_each_var_of_rhs(rhs: &RcRhs, visit: &mut impl FnMut(&RcVar)) {
     match rhs {
         RcRhs::Var(var) => visit(var),

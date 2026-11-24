@@ -8002,19 +8002,19 @@ impl BuiltinOp for UnionAsOp {
     }
 }
 
-/// The body of `as_{variant}`, which reads the payload of the variant at `field_idx`, of type
-/// `field_ty`, out of the union bound to `union_arg_name`.
+/// The body of `as_{variant}`, which reads the payload of the variant at `variant_idx`, of type
+/// `payload_ty`, out of the union bound to `union_arg_name`.
 pub fn union_as_body(
     union_arg_name: &Name,
-    field_idx: usize,
-    field_ty: Arc<TypeNode>,
+    variant_idx: usize,
+    payload_ty: Arc<TypeNode>,
 ) -> Arc<ExprNode> {
     expr_builtin(
         Box::new(UnionAsOp::of_variant(
             &FullName::local(union_arg_name),
-            field_idx,
+            variant_idx,
         )),
-        field_ty,
+        payload_ty,
         None,
     )
 }
