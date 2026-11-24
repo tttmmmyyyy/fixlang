@@ -3035,8 +3035,8 @@ fn test_functions_of_two_types_built_into_one_type_by_global_functions_compute_t
 }
 
 /// An unboxed type that refers to itself at other type arguments than its own, whose functions of
-/// two types are captured by lambdas that an array holds together: `h` captures the function of
-/// the inner value, and `k` captures `h` and the outer value, which holds its function in place.
+/// two types are captured by lambdas a global function calls: `h` captures the function of the
+/// inner value, and `k` captures `h` and the outer value, which holds its function in place.
 #[test]
 fn test_lambdas_capturing_functions_of_a_type_referring_to_itself_at_other_arguments_compute_them()
 {
@@ -3045,6 +3045,9 @@ fn test_lambdas_capturing_functions_of_a_type_referring_to_itself_at_other_argum
 
     type L a = unbox struct { f : a -> I64, next : Option (Box (L I64)) };
 
+    apply_twice : (I64 -> I64) -> I64 -> I64;
+    apply_twice = |f, x| f(f(x));
+
     main : IO ();
     main = (
         let n = *get_args.map(|args| args.@size);
@@ -3052,10 +3055,8 @@ fn test_lambdas_capturing_functions_of_a_type_referring_to_itself_at_other_argum
         let outer : L Bool = L { f : |b| if b { n } else { 3 }, next : some(Box::make(inner)) };
         let g = inner.@f;
         let h = |x| g(x) * 2 + n;
-        let k = |b| h((outer.@f)(b)) + (outer.@next.as_some.@value.@f)(1);
-        let fs = [h, |x| k(x == 7)];
-        let t = fs.to_iter.fold(0, |f, acc| acc + f(7));
-        assert_eq(|_| "", [h(1), k(true), t], [3 * n + 2, 6 * n + 1, 9 * n + 15]);;
+        let k = |x| h((outer.@f)(x > 2)) + (outer.@next.as_some.@value.@f)(1);
+        assert_eq(|_| "", [apply_twice(h, 1), apply_twice(k, n)], [9 * n + 4, 6 * n + 1]);;
         pure()
     );
     "#;
