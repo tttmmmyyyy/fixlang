@@ -1048,12 +1048,13 @@ fn test_a_long_chain_of_functions_each_calling_the_next_with_two_lambdas_lists_i
 }
 
 /// What `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
-const RETURNING_BRANCHING_CHAIN_OUTPUT: &str = "2175390";
+const RETURNING_BRANCHING_CHAIN_OUTPUT: &str = "4361560";
 
 /// The chain of `branching_chain_source`, where each function returns the function it builds in
 /// place of calling it: `f0` returns the function it was given, so what `f{i}` returns holds the
 /// lambdas `f{i}` and every function after it in the chain build. `main` calls what `f{depth}`
-/// returns.
+/// returns twice, so that the functions of the chain return a function once their calls are
+/// uncurried.
 fn returning_branching_chain_source(depth: usize) -> String {
     chain_of_two_lambda_calls_source(
         depth,
@@ -1061,15 +1062,15 @@ fn returning_branching_chain_source(depth: usize) -> String {
         "(I64 -> I64)",
         "",
         "g",
-        "println(CHAIN_CALL(n).to_string)",
+        "let h = CHAIN_CALL;\n    println((h(n) + h(n + 1)).to_string)",
     )
 }
 
 /// The chain of `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
-/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions and computes its value. Past the copy budget
-/// (`LS_COPY_BUDGET_BASE`), the parameters of the functions far down the chain are given sets
-/// represented by closures, while each function returns the lambdas it and the later functions of
-/// the chain build.
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions (15.4 billion on x86-64) and computes its value.
+/// A function far down the chain goes past the copy budget (`LS_COPY_BUDGET_BASE`), so the
+/// function it is given is a closure. The chain hands that function back, so every function of the
+/// chain returns a closure.
 #[test]
 fn test_a_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_bounded_work() {
     let description = format!(
