@@ -228,7 +228,7 @@ mod tests {
         }
     }
 
-    /// `v` in ascending order, Dynamic (`None`) first.
+    /// `v`, what `Inferred::writing_symbols` gives of a set, in ascending order.
     fn sorted(mut v: Vec<Option<String>>) -> Vec<Option<String>> {
         v.sort();
         v

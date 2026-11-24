@@ -136,11 +136,12 @@ fn describe_members(
     texts.join(", ")
 }
 
-/// The elements of the set `id`, each lambda with the sets its owner is given.
+/// The elements of the set `id`: each lambda with the sets its owner is given, and `Elem::Dynamic`
+/// as `Dynamic`.
 ///
 /// # Examples
-/// A set holding a lambda of `Main::f` whose owner is given the set `#2`, and Dynamic, reads as
-/// `Main::f@lam1[#2], Dynamic`.
+/// A set holding two lambdas of `Main::f`, the owner of the second given the set `#2`, reads as
+/// `Main::f@lam0[], Main::f@lam1[#2]`. The set holding `Elem::Dynamic` reads as `Dynamic`.
 fn describe_set(store: &SetStore, id: SetId, lambda_names: &[String]) -> String {
     store
         .elems(id)

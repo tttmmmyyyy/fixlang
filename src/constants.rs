@@ -240,17 +240,19 @@ const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
 /// component. The bodies of a component are the distinct lists of sets its copies give
 /// `Component::body_params`.
 ///
-/// A component is copied once per distinct way it is called:
+/// A component is asked for one body per distinct way the functions its bodies depend on are given:
 /// - A chain of functions, each handing the function it was given to the next, called from many
-///   places with a lambda of its own each, copies every function of the chain once per place. Each
-///   place is a reference on the way to the chain, so the copies stay within the budget.
-/// - A function called from `n` places that calls another from `m` places, each with a lambda of
-///   its own, makes `n * m` copies of the other. These go past the budget once they outnumber the
-///   `n + m` references by more than `LS_COPY_BUDGET_BASE`.
+///   places with a lambda of its own each, asks every function of the chain for one body per place.
+///   Each place is a reference on the way to the chain, so the bodies stay within the budget.
+/// - A function called from `n` places with a lambda of its own each, that calls another from `m`
+///   places, each with a lambda of its own wrapping the function it was given, asks the other for
+///   `n * m` bodies. These go past the budget once they outnumber the `n + m` references by more
+///   than `LS_COPY_BUDGET_BASE`.
 /// - A function that calls the next function of a chain from two places, each with a lambda of its
-///   own wrapping the function it was given, repeats that product at each step. The copies of a
-///   function far down the chain grow exponentially with the length of the chain above it, while
-///   the references on the way grow linearly, so the copies pass the budget within a few steps.
+///   own wrapping the function it was given, repeats that product at each step. The bodies a
+///   function far down the chain is asked for grow exponentially with the length of the chain above
+///   it, while the references on the way grow linearly, so the bodies pass the budget within a few
+///   steps.
 ///
 /// A component asked for more bodies than its budget is inferred again with closures for the
 /// functions its bodies depend on (`infer`), so that it has one body and asks for no further

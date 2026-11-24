@@ -1248,8 +1248,8 @@ mod dump_tests {
 
     /// A program whose `main` calls `a` from `FAN_OUT_CALLS` places and `u` from `HUB_CALLS`
     /// places, each with a lambda of its own, where `a` calls `b` from `FAN_OUT_CALLS` places, each
-    /// with a lambda of its own wrapping the function it was given. `b` is copied
-    /// `FAN_OUT_CALLS * FAN_OUT_CALLS` times, and `u` once per place.
+    /// with a lambda of its own wrapping the function it was given. `b` is asked for
+    /// `FAN_OUT_CALLS * FAN_OUT_CALLS` bodies, and `u` for one per place.
     fn fan_out_under_a_hub_source() -> String {
         let b_calls: Vec<String> = (1..=FAN_OUT_CALLS)
             .map(|k| format!("b(|y| g(y) + {}, x)", k))
@@ -1284,11 +1284,12 @@ mod dump_tests {
     }
 
     /// The budget of a component counts only the references on the way to it: in
-    /// `fan_out_under_a_hub_source`, the `FAN_OUT_CALLS * FAN_OUT_CALLS` copies of `b` go past
-    /// `LS_COPY_BUDGET_BASE` plus the `2 * FAN_OUT_CALLS` references from `main` to `a` and from
-    /// `a` to `b`, so `b` calls the function it was given through a closure, though the
-    /// `HUB_CALLS` references from `main` to `u` would cover them. `u`, copied once per reference
-    /// to it, calls each of its lambdas by name.
+    /// `fan_out_under_a_hub_source`, the `FAN_OUT_CALLS * FAN_OUT_CALLS` bodies `b` is asked for
+    /// go past `LS_COPY_BUDGET_BASE` plus the references on the way to `b`: the one from the entry
+    /// to `main` and the `2 * FAN_OUT_CALLS` from `main` to `a` and from `a` to `b`. So `b` has one
+    /// body, which calls the function it was given through a closure, though the `HUB_CALLS`
+    /// references from `main` to `u` would cover the bodies it was asked for. `u`, copied once per
+    /// reference to it, calls each of its lambdas by name.
     #[test]
     fn test_references_of_a_hub_to_other_parts_leave_a_fan_out_past_its_copy_budget() {
         let dump = build_run_and_read_rc_ir(
@@ -1299,8 +1300,8 @@ mod dump_tests {
         );
         assert!(
             calls_through_a_closure(&dump, "Main::b"),
-            "`b` is copied past its budget, and should call the function it was given through a \
-             closure"
+            "`b` is asked for more bodies than its budget, and should call the function it was \
+             given through a closure"
         );
         assert_calls_by_name(&dump, "Main::u");
     }
