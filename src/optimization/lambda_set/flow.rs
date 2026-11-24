@@ -2,16 +2,22 @@
 
 use super::{
     slots::{AType, SlotLayout},
-    solver::{DynamicKind, Member, Solver},
+    solver::{DynamicKind, Member, SetVar, Solver},
 };
+use crate::misc::Set;
 
 /// The operands and the result of one builtin operation, for its `BuiltinOp::lambda_set_flow` to
 /// say how the functions they hold flow between them.
 ///
 /// A rule declares a flow by making two places the same (`same`), and declares a place whose
 /// values are closures the operation builds or calls at run time by making it Dynamic
-/// (`make_own_dynamic`, `make_all_dynamic`). A place the rule says nothing about holds nothing the
-/// operation put there, which is right for an operation that moves no function into it.
+/// (`make_own_dynamic`, `make_all_dynamic`). With `no_other_flow` it declares the places no
+/// function flows through: where the operation leaves or drops the functions of an operand, and
+/// where it puts no function in the result.
+///
+/// A rule accounts for every slot of every operand and of the result in one of these ways, and
+/// `describe_unaccounted_slot` names a slot it left out. A function that flows through such a slot
+/// at run time is missing from the lambda set of the place it reaches.
 pub struct BuiltinFlow<'a, 'e> {
     /// The slots of the program's types.
     layout: &'a SlotLayout<'e>,
@@ -23,6 +29,8 @@ pub struct BuiltinFlow<'a, 'e> {
     result: AType,
     /// The name of the operation, recorded in the places it makes Dynamic.
     op_name: String,
+    /// The slots the rule has accounted for so far.
+    accounted: Set<SetVar>,
 }
 
 impl<'a, 'e> BuiltinFlow<'a, 'e> {
@@ -41,6 +49,7 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
             operands,
             result,
             op_name,
+            accounted: Set::default(),
         }
     }
 
@@ -69,6 +78,15 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
     /// out of the other.
     pub fn same(&mut self, a: &AType, b: &AType) {
         self.solver.unify(a, b);
+        self.account(a);
+        self.account(b);
+    }
+
+    /// Declares that no function flows through the slots of `ty` beyond the flows `same` declares
+    /// there: the operation leaves the functions an operand holds there where they are or drops
+    /// them, or puts no function in the result there.
+    pub fn no_other_flow(&mut self, ty: &AType) {
+        self.account(ty);
     }
 
     /// Declares the own slots of `ty` (for a function, the closure itself, leaving what it takes
@@ -77,6 +95,7 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
         let kind = DynamicKind::Builtin(self.op_name.clone());
         for v in self.layout.own_slots(ty) {
             self.solver.make_dynamic(*v, kind.clone());
+            self.accounted.insert(*v);
         }
     }
 
@@ -97,9 +116,46 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
     /// This is the rule of an operation that declares none.
     pub fn make_all_dynamic(&mut self) {
         let kind = DynamicKind::Builtin(self.op_name.clone());
-        for operand in &self.operands {
-            self.solver.make_all_dynamic(operand, &kind);
+        for ty in self.operands.iter().chain([&self.result]) {
+            self.solver.make_all_dynamic(ty, &kind);
+            self.accounted.extend(ty.slots.iter().copied());
         }
-        self.solver.make_all_dynamic(&self.result, &kind);
+    }
+
+    /// Records that the rule has accounted for every slot of `ty`.
+    fn account(&mut self, ty: &AType) {
+        self.accounted.extend(ty.slots.iter().copied());
+    }
+
+    /// A slot of an operand or of the result that the rule has not accounted for, named by its
+    /// index, the operand or result it belongs to, and the type there.
+    ///
+    /// # Returns
+    /// `None` where the rule accounted for every slot.
+    ///
+    /// # Examples
+    /// A rule that leaves out the second slot of its first operand, of type `Main::P`, gives
+    /// ``slot 1 of operand 0, of type `Main::P` ``.
+    pub fn describe_unaccounted_slot(&self) -> Option<String> {
+        let (place_idx, ty, slot_idx) = self
+            .operands
+            .iter()
+            .chain([&self.result])
+            .enumerate()
+            .find_map(|(place_idx, ty)| {
+                let slot_idx = ty.slots.iter().position(|v| !self.accounted.contains(v))?;
+                Some((place_idx, ty, slot_idx))
+            })?;
+        let place = if place_idx < self.operands.len() {
+            format!("operand {}", place_idx)
+        } else {
+            "the result".to_string()
+        };
+        Some(format!(
+            "slot {} of {}, of type `{}`",
+            slot_idx,
+            place,
+            ty.ty.to_string()
+        ))
     }
 }

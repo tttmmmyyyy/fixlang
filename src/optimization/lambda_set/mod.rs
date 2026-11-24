@@ -109,6 +109,7 @@ mod tests {
         infer_within_copy_budgets,
         slots::{AType, SlotLayout},
         specialize::Specialization,
+        BuiltinFlow,
     };
     use crate::{
         ast::program::Program,
@@ -836,5 +837,90 @@ main = (
         let past_budget =
             sets_given_to_a_function_called_twice_by_each_copy_of_its_caller(calls_at_budget + 1);
         assert_eq!(past_budget, vec![vec![None]]);
+    }
+
+    /// A flow rule accounts for a slot by `same`, by `no_other_flow`, by `make_own_dynamic` or by
+    /// `make_all_dynamic`, and `BuiltinFlow::describe_unaccounted_slot` reports the rule until every
+    /// slot of every operand and of the result is accounted for. The operation here takes a struct
+    /// of two function fields and a function taking a function, and gives a function.
+    #[test]
+    fn test_a_flow_rule_is_reported_until_it_accounts_for_every_slot() {
+        let prg = program_of(
+            r#"
+module Main;
+
+type P = box struct { f : I64 -> I64, g : I64 -> I64 };
+
+p : P;
+p = P { f : |x| x + 1, g : |x| x * 2 };
+
+h : (I64 -> I64) -> I64;
+h = |f| f(3);
+
+main : IO ();
+main = println(((p.@f)(1) + h(p.@g)).to_string);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let p_ty = inf.type_of("p").ty;
+        let h_ty = inf.type_of("h").ty;
+        let f_ty = inf.layout.type_arg(&inf.type_of("h"), 0).ty;
+        // Whether a rule declaring what `declare` does leaves a slot unaccounted for.
+        let mut reported = |declare: &dyn Fn(&mut BuiltinFlow)| {
+            let solver = &mut inf.analysis.solver;
+            let operands = vec![
+                inf.layout.fresh(&p_ty, solver),
+                inf.layout.fresh(&h_ty, solver),
+            ];
+            let result = inf.layout.fresh(&f_ty, solver);
+            assert_eq!(operands[0].slots.len(), 2);
+            assert_eq!(operands[1].slots.len(), 2);
+            assert_eq!(result.slots.len(), 1);
+            let mut flow =
+                BuiltinFlow::new(&inf.layout, solver, operands, result, "op".to_string());
+            declare(&mut flow);
+            flow.describe_unaccounted_slot().is_some()
+        };
+        // A rule that accounts for every slot, using a different declaration for each place.
+        let complete_rule = |flow: &mut BuiltinFlow| {
+            flow.no_other_flow(&flow.operand(0));
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&taken, &flow.result());
+            flow.make_own_dynamic(&flow.operand(1));
+        };
+        assert!(!reported(&complete_rule));
+        assert!(!reported(&|flow| flow.make_all_dynamic()));
+        assert!(reported(&|_| {}));
+        // The first operand left out.
+        assert!(reported(&|flow| {
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&taken, &flow.result());
+            flow.make_own_dynamic(&flow.operand(1));
+        }));
+        // One field of the first operand left out.
+        assert!(reported(&|flow| {
+            let field = flow.field(&flow.operand(0), 0);
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&field, &taken);
+            flow.same(&taken, &flow.result());
+            flow.make_own_dynamic(&flow.operand(1));
+        }));
+        // The own slot of the second operand left out.
+        assert!(reported(&|flow| {
+            flow.no_other_flow(&flow.operand(0));
+            let taken = flow.type_arg(&flow.operand(1), 0);
+            flow.same(&taken, &flow.result());
+        }));
+        // The function the second operand takes left out, with the result accounted for.
+        assert!(reported(&|flow| {
+            flow.no_other_flow(&flow.operand(0));
+            flow.make_own_dynamic(&flow.operand(1));
+            flow.no_other_flow(&flow.result());
+        }));
+        // The result left out.
+        assert!(reported(&|flow| {
+            flow.no_other_flow(&flow.operand(0));
+            flow.no_other_flow(&flow.operand(1));
+        }));
     }
 }

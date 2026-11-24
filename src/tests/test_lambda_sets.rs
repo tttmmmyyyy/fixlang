@@ -1125,6 +1125,73 @@ fn test_a_lambda_built_under_a_function_past_its_copy_budget_and_returned_up_a_c
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with
 /// function values left as closures — so these assert against the dump.
+/// A program whose `main` runs `body` with `k` bound to 1, read from the arguments so that the
+/// compiler cannot fold a choice `body` makes by it. `body` moves functions through one builtin
+/// operation and prints what calling them gives; the operation is the only path from the lambdas
+/// it is given to the calls, so the calls reach the right lambdas only when the lambda set flow of
+/// the operation declares that path.
+fn builtin_flow_source(body: &str) -> String {
+    format!(
+        r#"
+    module Main;
+
+    type B = box struct {{ n : I64, g : I64 -> I64, h : I64 -> I64 }};
+    type S = unbox struct {{ n : I64, g : I64 -> I64, h : I64 -> I64 }};
+    type U = union {{ num : I64, fa : I64 -> I64, fb : I64 -> I64 }};
+    type BU = box union {{ bnum : I64, bfa : I64 -> I64, bfb : I64 -> I64 }};
+
+    main : IO ();
+    main = (
+        let k = *get_args.map(|args| args.@size);
+        {}
+        pure()
+    );
+    "#,
+        body
+    )
+}
+
+/// `mod` on an array of lambdas, which punches one element out, hands it to the modifier and
+/// plugs what the modifier returns back: the lambda plugged in calls the one punched out, and
+/// the other element is the lambda the array held.
+#[test]
+fn test_a_function_punched_out_of_an_array_and_plugged_back_wrapped_calls_the_one_it_wraps() {
+    let source = builtin_flow_source(
+        r#"let fs = [|x| x + k, |x| x * (k + 2)].mod(0, |f| |x| f(x) + 30);
+        println(((fs.@(0))(5) * 100 + (fs.@(1))(5)).to_string);;"#,
+    );
+    assert_source_prints(&source, Configuration::develop_mode(), "3615");
+}
+
+/// `mod_fb` on unions holding each variant, with a modifier wrapping the payload: the variant
+/// modified holds a lambda calling the one it held, and a union holding another variant comes
+/// back holding what it held.
+#[test]
+fn test_a_function_in_a_union_modified_calls_the_one_it_wraps_and_the_others_stay() {
+    let source = builtin_flow_source(
+        r#"let us = [fa(|x| x + k), fb(|x| x * (k + 2)), num(k)];
+        let us = us.map(|u| u.mod_fb(|f| |x| f(x) + 30));
+        println(us.to_iter.fold(0, |u, acc| acc * 100 + (if u.is_fa { (u.as_fa)(5) } else if u.is_fb { (u.as_fb)(5) } else { u.as_num })).to_string);;
+        let bu = (if k > 5 { bfa(|x| x + k) } else { bfb(|x| x * (k + 3)) }).mod_bfb(|f| |x| f(x) + 40);
+        println((if bu.is_bfa { (bu.as_bfa)(5) } else { (bu.as_bfb)(5) }).to_string);;"#,
+    );
+    assert_source_prints(&source, Configuration::develop_mode(), "64501\n60");
+}
+
+/// A boxed struct built at either arm of an `if`, each arm with lambdas of its own, handed
+/// back by `mark_threaded`: its fields are the lambdas of the arm taken.
+#[test]
+fn test_a_struct_of_functions_marked_threaded_keeps_its_lambdas() {
+    let source = builtin_flow_source(
+        r#"let b = if k > 5 { B { n : 1, g : |x| x + k, h : |x| x - k } } else { B { n : 2, g : |x| x * (k + 2), h : |x| x + 9 } };
+        let b2 = b.mark_threaded;
+        println((b2.@g)(5).to_string + " " + (b2.@h)(5).to_string);;"#,
+    );
+    let mut config = Configuration::develop_mode();
+    config.set_threaded();
+    assert_source_prints(&source, config, "15 14");
+}
+
 #[cfg(test)]
 mod dump_tests {
     use super::{
