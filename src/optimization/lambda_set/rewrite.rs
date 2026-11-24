@@ -247,7 +247,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         for (k, instance) in spec.instances.iter().enumerate() {
             let component = &analysis.components[instance.component];
             let body_reprs: Vec<Repr> = component
-                .body_of(&instance.args)
+                .body_args(&instance.args)
                 .into_iter()
                 .map(|set| repr.of(set))
                 .collect();

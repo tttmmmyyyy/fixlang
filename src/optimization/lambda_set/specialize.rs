@@ -121,7 +121,7 @@ pub fn specialize(analysis: &mut Analysis) -> Result<Specialization, usize> {
             .iter()
             .map(|(callee, refs)| (*callee, refs.iter().map(resolve).collect()))
             .collect();
-        let body = analysis.components[component].body_of(&args);
+        let body = analysis.components[component].body_args(&args);
         match requests_of_body.get(&(component, body.clone())) {
             Some(known) => assert_eq!(
                 *known, requests,
@@ -135,7 +135,7 @@ pub fn specialize(analysis: &mut Analysis) -> Result<Specialization, usize> {
         for (callee, callee_args) in requests {
             let callee_component = &analysis.components[callee];
             if callee_component.past_copy_budget {
-                for set in callee_component.body_of(&callee_args) {
+                for set in callee_component.body_args(&callee_args) {
                     assert!(
                         store.elems(set) == [Elem::Dynamic],
                         "a reference gives the component {}, past its copy budget, a set of lambdas",
@@ -143,8 +143,8 @@ pub fn specialize(analysis: &mut Analysis) -> Result<Specialization, usize> {
                     );
                 }
             }
-            let body_count = copies.request(analysis, callee, callee_args);
-            if body_count > budgets[callee] {
+            copies.request(analysis, callee, callee_args);
+            if copies.body_count(callee) > budgets[callee] {
                 return Err(callee);
             }
         }
@@ -180,13 +180,12 @@ struct Copies {
 
 impl Copies {
     /// Asks for the copy of `component` given by `args`, adding it the first time it is asked for.
-    /// Returns how many bodies `component` has been asked for.
-    fn request(&mut self, analysis: &Analysis, component: usize, args: Vec<SetId>) -> usize {
+    fn request(&mut self, analysis: &Analysis, component: usize, args: Vec<SetId>) {
         let key = (component, args);
         if self.instance_of.contains_key(&key) {
-            return self.bodies[component].len();
+            return;
         }
-        self.bodies[component].insert(analysis.components[component].body_of(&key.1));
+        self.bodies[component].insert(analysis.components[component].body_args(&key.1));
         let id = self.instances.len();
         self.instance_of.insert(key.clone(), id);
         self.instances.push(Instance {
@@ -195,6 +194,10 @@ impl Copies {
             var_sets: vec![],
         });
         self.queue.push_back(id);
+    }
+
+    /// How many bodies `component` has been asked for.
+    fn body_count(&self, component: usize) -> usize {
         self.bodies[component].len()
     }
 }

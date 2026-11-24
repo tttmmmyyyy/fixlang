@@ -77,7 +77,7 @@ pub struct Representation {
     /// The position in `classes` of the class holding the values a lambda builds in a copy, by the
     /// lambda and the sets the copy gives the component parameters the lambda depends on
     /// (`Lambda::param_deps`).
-    class_of_elem: Map<(LamId, Vec<SetId>), u32>,
+    class_of_lam_args: Map<(LamId, Vec<SetId>), u32>,
     /// The number of classes of each lambda that has any: how many of `classes` hold the lambda.
     class_counts: Map<LamId, usize>,
 }
@@ -92,7 +92,7 @@ impl Representation {
     /// on the sets `args`, in the order of `Lambda::param_deps`.
     pub fn class_of(&self, lam: LamId, args: &[SetId]) -> u32 {
         *self
-            .class_of_elem
+            .class_of_lam_args
             .get(&(lam, args.to_vec()))
             .unwrap_or_else(|| {
                 panic!(
@@ -478,7 +478,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     // copies lift add.
     let mut classes: Vec<LamClass> = vec![];
     let mut class_of_reprs: Map<(LamId, Vec<Repr>), u32> = Map::default();
-    let mut class_of_elem: Map<(LamId, Vec<SetId>), u32> = Map::default();
+    let mut class_of_lam_args: Map<(LamId, Vec<SetId>), u32> = Map::default();
     let mut add_class = |lam: LamId, args: &[SetId]| -> u32 {
         let builder = builders.of(lam, args);
         let reprs: Vec<Repr> = builder
@@ -497,7 +497,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
                 });
                 (classes.len() - 1) as u32
             });
-        class_of_elem.insert((lam, args.to_vec()), class);
+        class_of_lam_args.insert((lam, args.to_vec()), class);
         class
     };
     for (class, id) in first_struct_sets.iter().enumerate() {
@@ -580,7 +580,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
         of_set,
         classes,
         unions,
-        class_of_elem,
+        class_of_lam_args,
         class_counts,
     }
 }

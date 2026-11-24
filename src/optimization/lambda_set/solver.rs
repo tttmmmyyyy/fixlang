@@ -69,7 +69,7 @@ pub enum DynamicKind {
     ReadsOwnCapture,
     /// A parameter the bodies of a component depend on (`Component::body_params`), where the
     /// program asks the component for more bodies than its copy budget (`LS_COPY_BUDGET_BASE`).
-    CopyBudget,
+    PastCopyBudget,
 }
 
 impl DynamicReason {
@@ -86,7 +86,7 @@ impl DynamicReason {
                 format!("inside a type argument of {}", tc.to_string())
             }
             DynamicKind::ReadsOwnCapture => "a lambda reading its own capture".to_string(),
-            DynamicKind::CopyBudget => "given to a component past its copy budget".to_string(),
+            DynamicKind::PastCopyBudget => "given to a component past its copy budget".to_string(),
         };
         match &self.found_in {
             Some(at) => format!("{} (in {})", kind, at.to_string()),

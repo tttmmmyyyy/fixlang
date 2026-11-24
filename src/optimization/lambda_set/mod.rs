@@ -745,7 +745,7 @@ main = (
     /// The source of a program whose `main` calls `callee`, a function of `Main` taking a function
     /// and an `I64`, from `calls` places, each with a lambda of its own. `globals` defines `callee`
     /// and what it refers to.
-    fn calls_with_a_lambda_each(globals: &str, callee: &str, calls: usize) -> String {
+    fn calls_with_a_lambda_each_source(globals: &str, callee: &str, calls: usize) -> String {
         let mut source = format!(
             "module Main;\n{globals}\nmain : IO ();\nmain = (\n    \
              let n = *get_args.map(|args| args.@size);\n    let v = 0;\n"
@@ -763,7 +763,7 @@ main = (
     #[test]
     fn test_a_global_function_put_into_more_sets_than_its_copy_budget_is_within_it() {
         let calls = LS_COPY_BUDGET_BASE;
-        let prg = program_of(&calls_with_a_lambda_each(
+        let prg = program_of(&calls_with_a_lambda_each_source(
             "g : I64 -> I64;\n\
              g = |x| x * 3 + 1;\n\
              pick : (I64 -> I64) -> I64 -> I64;\n\
@@ -806,7 +806,7 @@ main = (
     fn sets_given_to_a_function_called_twice_by_each_copy_of_its_caller(
         calls: usize,
     ) -> Vec<Vec<Option<String>>> {
-        let prg = program_of(&calls_with_a_lambda_each(
+        let prg = program_of(&calls_with_a_lambda_each_source(
             "f0 : (I64 -> I64) -> I64 -> I64;\n\
              f0 = |g, x| g(x);\n\
              f1 : (I64 -> I64) -> I64 -> I64;\n\

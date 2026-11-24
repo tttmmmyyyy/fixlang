@@ -118,7 +118,7 @@ pub struct Component {
 impl Component {
     /// The body a copy giving the parameters the sets `args` has: the sets it gives `body_params`,
     /// in order. Copies of one body share their code in the rewritten program.
-    pub fn body_of(&self, args: &[SetId]) -> Vec<SetId> {
+    pub fn body_args(&self, args: &[SetId]) -> Vec<SetId> {
         self.body_params.iter().map(|p| args[*p]).collect()
     }
 }
@@ -953,7 +953,7 @@ fn generalize(
         for p in &body_params {
             solver.make_dynamic_found_in(
                 params[*p],
-                DynamicKind::CopyBudget,
+                DynamicKind::PastCopyBudget,
                 Some(symbols[0].clone()),
             );
         }
