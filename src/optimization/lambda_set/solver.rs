@@ -201,10 +201,18 @@ impl Solver {
     /// Records that the values at `v` are closures built at run time, for the reason `kind`, found
     /// in the current symbol. Each reason is recorded once per variable.
     pub fn make_dynamic(&mut self, v: SetVar, kind: DynamicKind) {
-        let reason = DynamicReason {
-            kind,
-            found_in: self.current_symbol.clone(),
-        };
+        self.make_dynamic_found_in(v, kind, self.current_symbol.clone());
+    }
+
+    /// Records that the values at `v` are closures built at run time, for the reason `kind`, found
+    /// in `found_in` (`DynamicReason::found_in`). Each reason is recorded once per variable.
+    pub fn make_dynamic_found_in(
+        &mut self,
+        v: SetVar,
+        kind: DynamicKind,
+        found_in: Option<FullName>,
+    ) {
+        let reason = DynamicReason { kind, found_in };
         let root = self.find(v);
         let members = &mut self.members[root.0 as usize];
         let known = members.iter().any(|m| match m {

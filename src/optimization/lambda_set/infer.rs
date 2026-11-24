@@ -938,9 +938,12 @@ fn generalize(
         }
     }
     if past_copy_budget {
-        solver.set_current_symbol(symbols.first().cloned());
         for p in &body_params {
-            solver.make_dynamic(params[*p], DynamicKind::CopyBudget);
+            solver.make_dynamic_found_in(
+                params[*p],
+                DynamicKind::CopyBudget,
+                symbols.first().cloned(),
+            );
         }
     }
     let roots_holding_current: Set<SetVar> = vars_holding_current
