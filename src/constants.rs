@@ -249,6 +249,23 @@ pub const MAX_LS_STORED_VALUE_WORDS: usize = 4;
 /// once those passes take linear time, up to `MAX_UNION_VARIANTS`.
 pub const MAX_LS_UNION_VARIANTS: usize = 32;
 const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
+/// How many lambdas a lambda set variable may hold during inference (lambda set specialization,
+/// `Solver`), counted one for each time a lambda is recorded in the variable or in one unified with
+/// it. A variable past it is made Dynamic, so its values are closures built at run time.
+///
+/// The bound keeps inference from taking time exponential in the length of a chain of functions
+/// that return functions: where each function refers to the next from two places and returns
+/// either result, what it returns holds twice the lambdas of what the next returns, and each
+/// reference copies them all.
+///
+/// The value is a tuning value. The doubling of such a chain passes any bound within a few steps,
+/// so the chain builds in the same time whether the bound is 32 or 1024. A small bound would make
+/// closures of sets a capture struct or a union stands for: a variable's lambdas outnumber the
+/// elements of its concrete set wherever several of them build the same values, as where a
+/// function returns one of forty values that forty calls of one function build, which are forty
+/// lambdas in the variable and one element in the set. A variable holding over a thousand lambdas
+/// is one an ordinary program does not have.
+pub const MAX_LS_VARIABLE_LAMBDAS: usize = 1024;
 /// How many bodies of a component lambda set specialization may ask for (`specialize`), beyond
 /// one for each reference (`Component::sites`) on the chains of references from the entry to the
 /// component. The bodies of a component are the distinct lists of sets its copies give

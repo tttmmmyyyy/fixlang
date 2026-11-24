@@ -615,13 +615,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 let lam_ty = self.layout.fresh(&ty, &mut self.analysis.solver);
                 let lam = self.new_lambda(e, index);
                 let own = lam_ty.slots[0];
-                self.analysis.solver.add(
-                    own,
-                    Member::Lam {
-                        lam,
-                        owner: Owner::Current,
-                    },
-                );
+                self.analysis.solver.add_lambda(own, lam, Owner::Current);
                 self.vars_holding_current.push(own);
                 let captures: Vec<(FullName, AType)> = e
                     .lambda_cap_names()
@@ -903,14 +897,13 @@ fn instantiate(scheme: &LambdaSetScheme, solver: &mut Solver) -> Vec<SetVar> {
             continue;
         };
         for member in members {
-            let member = match member {
-                LambdaSetSchemeMember::Lam { lam, args } => Member::Lam {
-                    lam: *lam,
-                    owner: Owner::Instance(args.iter().map(|a| vars[*a as usize]).collect()),
-                },
-                LambdaSetSchemeMember::Dynamic(reason) => Member::Dynamic(reason.clone()),
-            };
-            solver.add(*var, member);
+            match member {
+                LambdaSetSchemeMember::Lam { lam, args } => {
+                    let owner = Owner::Instance(args.iter().map(|a| vars[*a as usize]).collect());
+                    solver.add_lambda(*var, *lam, owner);
+                }
+                LambdaSetSchemeMember::Dynamic(reason) => solver.add_reason(*var, reason.clone()),
+            }
         }
     }
     vars

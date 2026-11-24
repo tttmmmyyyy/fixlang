@@ -113,7 +113,7 @@ mod tests {
     };
     use crate::{
         ast::program::Program,
-        constants::LS_COPY_BUDGET_BASE,
+        constants::{LS_COPY_BUDGET_BASE, MAX_LS_VARIABLE_LAMBDAS},
         elaboration::elaborate_at_max,
         optimization::{inline, inline_local, unwrap_newtype},
     };
@@ -837,6 +837,41 @@ main = (
         let past_budget =
             sets_given_to_a_function_called_twice_by_each_copy_of_its_caller(calls_at_budget + 1);
         assert_eq!(past_budget, vec![vec![None]]);
+    }
+
+    /// The set the one copy of `table` gives the elements of the array it returns, where `table`
+    /// returns an array of `count` lambdas, each written once: what `Inferred::writing_symbols`
+    /// gives of it.
+    fn set_of_an_array_of_lambdas(count: usize) -> Vec<Option<String>> {
+        let lambdas: Vec<String> = (0..count).map(|i| format!("|y| y + n + {i}")).collect();
+        let prg = program_of(&format!(
+            "module Main;\n\
+             table : I64 -> Array (I64 -> I64);\n\
+             table = |n| [{}];\n\
+             main : IO ();\n\
+             main = (\n    \
+                 let n = *get_args.map(|args| args.@size);\n    \
+                 println((table(n).@(0))(n).to_string)\n\
+             );\n",
+            lambdas.join(", ")
+        ));
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("table", &[1, 0]);
+        assert_eq!(sets.len(), 1);
+        inf.writing_symbols(sets[0])
+    }
+
+    /// A variable holding as many lambdas as `MAX_LS_VARIABLE_LAMBDAS` keeps them: its set holds
+    /// them all. Holding one more, it is Dynamic, and its set holds Dynamic alone.
+    #[test]
+    fn test_a_variable_is_dynamic_from_one_lambda_past_the_bound() {
+        let at_bound = set_of_an_array_of_lambdas(MAX_LS_VARIABLE_LAMBDAS);
+        assert_eq!(
+            at_bound,
+            vec![Some("table".to_string()); MAX_LS_VARIABLE_LAMBDAS]
+        );
+        let past_bound = set_of_an_array_of_lambdas(MAX_LS_VARIABLE_LAMBDAS + 1);
+        assert_eq!(past_bound, vec![None]);
     }
 
     /// A flow rule accounts for a slot by `same`, by `no_other_flow`, by `make_own_dynamic` or by

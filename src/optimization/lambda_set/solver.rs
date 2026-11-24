@@ -1,7 +1,10 @@
 // The lambda set variables, and the union-find that makes two of them one.
 
 use super::slots::AType;
-use crate::ast::{name::FullName, types::TyCon};
+use crate::{
+    ast::{name::FullName, types::TyCon},
+    constants::MAX_LS_VARIABLE_LAMBDAS,
+};
 use std::{mem, rc::Rc};
 
 /// A lambda set variable: the set of lambdas a value of function type can be at one place of the
@@ -19,7 +22,8 @@ impl SetVar {
 /// A lambda of the program, as its index into `Analysis::lambdas`.
 pub type LamId = u32;
 
-/// One thing a lambda set variable is known to hold.
+/// One thing a lambda set variable is known to hold. A variable holding `Member::Dynamic` holds no
+/// `Member::Lam`: its values are closures whatever lambdas build them.
 #[derive(Clone)]
 pub enum Member {
     /// The values the lambda `lam` builds, inside the copy of its symbol that `owner` names.
@@ -70,6 +74,8 @@ pub enum DynamicKind {
     /// A parameter the bodies of a component depend on (`Component::body_params`), where the
     /// program asks the component for more bodies than its copy budget (`LS_COPY_BUDGET_BASE`).
     PastCopyBudget,
+    /// A variable that more than `MAX_LS_VARIABLE_LAMBDAS` lambdas were recorded in.
+    TooManyLambdas,
 }
 
 impl DynamicReason {
@@ -87,6 +93,9 @@ impl DynamicReason {
             }
             DynamicKind::ReadsOwnCapture => "a lambda reading its own capture".to_string(),
             DynamicKind::PastCopyBudget => "given to a component past its copy budget".to_string(),
+            DynamicKind::TooManyLambdas => {
+                format!("holding more than {} lambdas", MAX_LS_VARIABLE_LAMBDAS)
+            }
         };
         match &self.found_in {
             Some(at) => format!("{} (in {})", kind, at.to_string()),
@@ -97,12 +106,20 @@ impl DynamicReason {
 
 /// The lambda set variables of the program and what each is known to hold. Unifying two variables
 /// makes them one, holding what both held.
+///
+/// A variable holds either lambdas, at most `MAX_LS_VARIABLE_LAMBDAS` of them, or Dynamic alone.
+/// The lambdas recorded in a variable are counted one per `add`, and those of two variables
+/// unified are added up. A variable whose count goes past the bound is made Dynamic
+/// (`DynamicKind::TooManyLambdas`), and a variable made Dynamic gives up its lambdas and takes no
+/// more. The count of a variable only grows and Dynamic stays, so which variables end up Dynamic
+/// does not depend on the order the lambdas are recorded and the variables unified in.
 pub struct Solver {
     /// The parent of each variable in the union-find forest; a root is its own parent.
     parent: Vec<u32>,
     /// The number of variables in the tree of each root, which decides which root a union keeps.
     size: Vec<u32>,
-    /// What each root holds. The entry of a variable that is not a root is empty.
+    /// What each root holds: `Member::Lam`s alone, at most `MAX_LS_VARIABLE_LAMBDAS` of them, or
+    /// `Member::Dynamic`s alone. The entry of a variable that is not a root is empty.
     members: Vec<Vec<Member>>,
     /// Whether each root is pinned: every reference to its component, and every copy, shares this
     /// one variable, whose members the components inferred later may add to.
@@ -158,7 +175,25 @@ impl Solver {
         SetVar(root)
     }
 
-    /// Makes `a` and `b` one variable, holding what both held.
+    /// Whether the root `root` holds Dynamic, and so no lambda.
+    fn root_is_dynamic(&self, root: SetVar) -> bool {
+        matches!(
+            self.members[root.0 as usize].first(),
+            Some(Member::Dynamic(_))
+        )
+    }
+
+    /// Makes the root `root`, which holds lambdas alone, Dynamic where it holds more of them than
+    /// `MAX_LS_VARIABLE_LAMBDAS`. The reason names the current symbol.
+    fn bound_lambdas(&mut self, root: SetVar) {
+        if self.members[root.0 as usize].len() > MAX_LS_VARIABLE_LAMBDAS {
+            self.make_dynamic(root, DynamicKind::TooManyLambdas);
+        }
+    }
+
+    /// Makes `a` and `b` one variable, holding what both held: the reasons of both where either
+    /// holds Dynamic, and the lambdas of both otherwise, unless they are more than
+    /// `MAX_LS_VARIABLE_LAMBDAS`.
     pub fn union(&mut self, a: SetVar, b: SetVar) {
         let a = self.find(a);
         let b = self.find(b);
@@ -172,9 +207,18 @@ impl Solver {
         };
         self.parent[drop.0 as usize] = keep.0;
         self.size[keep.0 as usize] += self.size[drop.0 as usize];
-        let moved = mem::take(&mut self.members[drop.0 as usize]);
-        self.members[keep.0 as usize].extend(moved);
         self.pinned[keep.0 as usize] |= self.pinned[drop.0 as usize];
+        let moved = mem::take(&mut self.members[drop.0 as usize]);
+        let moved_dynamic = matches!(moved.first(), Some(Member::Dynamic(_)));
+        match (self.root_is_dynamic(keep), moved_dynamic) {
+            (true, true) => self.members[keep.0 as usize].extend(moved),
+            (true, false) => {}
+            (false, true) => self.members[keep.0 as usize] = moved,
+            (false, false) => {
+                self.members[keep.0 as usize].extend(moved);
+                self.bound_lambdas(keep);
+            }
+        }
     }
 
     /// Makes each slot of `a` one variable with the slot of `b` at the same position. The two are
@@ -192,35 +236,48 @@ impl Solver {
         }
     }
 
-    /// Records that `v` holds `member`.
-    pub fn add(&mut self, v: SetVar, member: Member) {
+    /// Records that `v` holds the lambda `lam` of the copy `owner`. A variable holding Dynamic
+    /// stays as it is, and one this lambda takes past `MAX_LS_VARIABLE_LAMBDAS` becomes Dynamic.
+    pub fn add_lambda(&mut self, v: SetVar, lam: LamId, owner: Owner) {
         let root = self.find(v);
-        self.members[root.0 as usize].push(member);
+        if self.root_is_dynamic(root) {
+            return;
+        }
+        self.members[root.0 as usize].push(Member::Lam { lam, owner });
+        self.bound_lambdas(root);
     }
 
     /// Records that the values at `v` are closures built at run time, for the reason `kind`, found
-    /// in the current symbol. Each reason is recorded once per variable.
+    /// in the current symbol, as `add_reason` does.
     pub fn make_dynamic(&mut self, v: SetVar, kind: DynamicKind) {
         self.make_dynamic_found_in(v, kind, self.current_symbol.clone());
     }
 
     /// Records that the values at `v` are closures built at run time, for the reason `kind`, found
-    /// in `found_in` (`DynamicReason::found_in`). Each reason is recorded once per variable.
+    /// in `found_in` (`DynamicReason::found_in`), as `add_reason` does.
     pub fn make_dynamic_found_in(
         &mut self,
         v: SetVar,
         kind: DynamicKind,
         found_in: Option<FullName>,
     ) {
-        let reason = DynamicReason { kind, found_in };
+        self.add_reason(v, Rc::new(DynamicReason { kind, found_in }));
+    }
+
+    /// Records that the values at `v` are closures built at run time, for `reason`. Each reason is
+    /// recorded once per variable. The lambdas `v` held are dropped.
+    pub fn add_reason(&mut self, v: SetVar, reason: Rc<DynamicReason>) {
         let root = self.find(v);
+        if !self.root_is_dynamic(root) {
+            self.members[root.0 as usize].clear();
+        }
         let members = &mut self.members[root.0 as usize];
         let known = members.iter().any(|m| match m {
-            Member::Dynamic(known) => **known == reason,
-            _ => false,
+            Member::Dynamic(known) => *known == reason,
+            Member::Lam { .. } => false,
         });
         if !known {
-            members.push(Member::Dynamic(Rc::new(reason)));
+            members.push(Member::Dynamic(reason));
         }
     }
 
@@ -249,9 +306,97 @@ impl Solver {
         &self.members[root.0 as usize]
     }
 
-    /// What the root of `v` holds, for the caller to change.
-    pub fn members_mut(&mut self, v: SetVar) -> &mut Vec<Member> {
+    /// What the root of `v` holds, each member for the caller to change in place.
+    pub fn members_mut(&mut self, v: SetVar) -> &mut [Member] {
         let root = self.find(v);
         &mut self.members[root.0 as usize]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DynamicKind, Member, Owner, SetVar, Solver};
+    use crate::constants::MAX_LS_VARIABLE_LAMBDAS;
+
+    /// A new variable of `solver` that `count` lambdas were recorded in.
+    fn var_of_lambdas(solver: &mut Solver, count: usize) -> SetVar {
+        let v = solver.fresh();
+        for lam in 0..count {
+            solver.add_lambda(v, lam as u32, Owner::Current);
+        }
+        v
+    }
+
+    /// Whether `v` holds Dynamic alone, for the one reason of holding too many lambdas.
+    fn holds_too_many_lambdas(solver: &mut Solver, v: SetVar) -> bool {
+        match solver.members(v) {
+            [Member::Dynamic(reason)] => reason.kind == DynamicKind::TooManyLambdas,
+            _ => false,
+        }
+    }
+
+    /// A variable keeps the lambdas recorded in it up to `MAX_LS_VARIABLE_LAMBDAS`, and the next
+    /// one makes it Dynamic, holding no lambda.
+    #[test]
+    fn test_a_variable_keeps_its_lambdas_up_to_the_bound_and_is_dynamic_past_it() {
+        let mut solver = Solver::new();
+        let v = var_of_lambdas(&mut solver, MAX_LS_VARIABLE_LAMBDAS);
+        assert_eq!(solver.members(v).len(), MAX_LS_VARIABLE_LAMBDAS);
+        assert!(solver
+            .members(v)
+            .iter()
+            .all(|m| matches!(m, Member::Lam { .. })));
+        solver.add_lambda(v, MAX_LS_VARIABLE_LAMBDAS as u32, Owner::Current);
+        assert!(holds_too_many_lambdas(&mut solver, v));
+    }
+
+    /// Two variables unified keep the lambdas of both where these are `MAX_LS_VARIABLE_LAMBDAS`
+    /// between them, and are Dynamic where they are one more, whichever of the two holds more.
+    #[test]
+    fn test_unified_variables_keep_their_lambdas_up_to_the_bound_and_are_dynamic_past_it() {
+        let few = 3;
+        for (a_count, b_count, past) in [
+            (MAX_LS_VARIABLE_LAMBDAS - few, few, false),
+            (few, MAX_LS_VARIABLE_LAMBDAS - few, false),
+            (MAX_LS_VARIABLE_LAMBDAS - few, few + 1, true),
+            (few + 1, MAX_LS_VARIABLE_LAMBDAS - few, true),
+        ] {
+            let mut solver = Solver::new();
+            let a = var_of_lambdas(&mut solver, a_count);
+            let b = var_of_lambdas(&mut solver, b_count);
+            solver.union(a, b);
+            assert_eq!(holds_too_many_lambdas(&mut solver, a), past);
+            if !past {
+                assert_eq!(solver.members(a).len(), MAX_LS_VARIABLE_LAMBDAS);
+            }
+        }
+    }
+
+    /// A variable holding Dynamic holds no lambda: making a variable Dynamic drops its lambdas, a
+    /// lambda recorded in it afterwards is left out, and unifying it with a variable of lambdas,
+    /// from either side, leaves the reason alone.
+    #[test]
+    fn test_a_dynamic_variable_holds_no_lambda() {
+        let is_entry_alone = |solver: &mut Solver, v: SetVar| match solver.members(v) {
+            [Member::Dynamic(reason)] => reason.kind == DynamicKind::Entry,
+            _ => false,
+        };
+        let mut solver = Solver::new();
+        let v = var_of_lambdas(&mut solver, 2);
+        solver.make_dynamic(v, DynamicKind::Entry);
+        assert!(is_entry_alone(&mut solver, v));
+        solver.add_lambda(v, 7, Owner::Current);
+        assert!(is_entry_alone(&mut solver, v));
+        // The variable of more variables is the root a union keeps, so each side is tried as it.
+        for dynamic_is_larger in [false, true] {
+            let mut solver = Solver::new();
+            let dynamic = solver.fresh();
+            solver.make_dynamic(dynamic, DynamicKind::Entry);
+            let lambdas = var_of_lambdas(&mut solver, 2);
+            let extra = solver.fresh();
+            solver.union(if dynamic_is_larger { dynamic } else { lambdas }, extra);
+            solver.union(dynamic, lambdas);
+            assert!(is_entry_alone(&mut solver, lambdas));
+        }
     }
 }
