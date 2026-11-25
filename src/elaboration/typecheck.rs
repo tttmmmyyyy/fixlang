@@ -1376,9 +1376,15 @@ impl TypeCheckContext {
                             &Some(site.span.clone()),
                         );
                         // The name this expression writes is what the editor offers to import, so
-                        // a report on another expression carries none.
-                        let at_this_use = ei.source.as_ref() == Some(&site.span);
-                        (error, at_this_use.then(|| var.name.to_string()))
+                        // a report on an earlier expression carries none. The constraints this
+                        // context holds before the candidates are checked are those the earlier
+                        // expressions required.
+                        let at_earlier_use = self.predicates.iter().any(|pred| {
+                            pred.required_by
+                                .as_ref()
+                                .is_some_and(|held| Arc::ptr_eq(held, site))
+                        });
+                        (error, (!at_earlier_use).then(|| var.name.to_string()))
                     } else if let [(tyvar_sources, fullname, scm, e)] = failures.as_slice() {
                         let error = self.create_use_mismatch_report(
                             tyvar_sources,
