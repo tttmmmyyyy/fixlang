@@ -407,6 +407,26 @@ mod tests {
         );
     }
 
+    /// A trait constraint that fails only once a later name settles the type it is on is shown in
+    /// the editor at the value that required it.
+    #[test]
+    fn test_a_constraint_failing_at_a_later_name_is_shown_at_the_value_that_required_it() {
+        let (_temp_dir, project_dir) = setup_test_env("constraint_at_value_that_required_it");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+        let diag = sole_diagnostic_containing(&diagnostics, "`Std::F64 : Std::Rem` cannot be deduced.");
+        // `main.fix` writes `%` on the 4th line, at the 17th column, which the protocol counts from
+        // zero.
+        assert_eq!(
+            diag["range"],
+            json!({
+                "start": { "line": 3, "character": 16 },
+                "end": { "line": 3, "character": 17 },
+            }),
+            "the report is {:?}",
+            diag
+        );
+    }
+
     /// A completion request leaves the error of another file reported.
     ///
     /// A completion re-checks the program in error-tolerant mode, which reports no diagnostic
