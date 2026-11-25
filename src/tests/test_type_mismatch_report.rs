@@ -400,20 +400,20 @@ pub fn test_an_argument_unchecked_at_the_error_is_located_as_the_expression_its_
     let source = r##"
 module Main;
 
-g : a -> Bool;
-g = |x| x < x;
+g : I64 -> Bool;
+g = |x| let h = 1; h(x);
 
 main : IO () = println(g(1).to_string);
 "##;
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        "`Std::LessThan::less_than` of type `[a : Std::LessThan] a -> a -> Std::Bool` does not match the expected type `#1 -> #1 -> Std::Bool`.\n\n5:11-5:12 in ",
+        "`h` of type `Std::I64` does not match the expected type `#1 -> Std::Bool`.",
     );
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        "`#1` is the type expected for `x`.\n\n5:13-5:14 in ",
+        "`#1` is the type expected for `x`.\n\n5:22-5:23 in ",
     );
 }
 
@@ -729,5 +729,49 @@ main : IO () = (
         ": `Std::F64 : Std::Rem` cannot be deduced.\n\
          `Std::Rem::rem` of type `[a : Std::Rem] a -> a -> a` does not match the expected type `Std::F64 -> Std::F64 -> Std::F64`.\n\n\
          15:17-15:18 in ",
+    );
+}
+
+/// A trait constraint left unsettled to the end of the body it is checked in is reported at the use
+/// of the value that required it, rather than on the whole body.
+#[test]
+pub fn test_a_constraint_failing_at_the_end_of_the_body_is_reported_at_the_value_that_required_it() {
+    let source = r##"
+module Main;
+
+f : I64 = (
+    let x = 1.0 % 2.0;
+    0
+);
+
+main : IO () = println(f.to_string);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Std::F64 : Std::Rem` is required in the type inference of this expression but cannot be deduced from assumptions.\n\n\
+         5:17-5:18 in ",
+    );
+}
+
+/// A trait constraint that the type of a value states, and that an associated type in the same type
+/// asks for as well, is reported at the use of that value.
+#[test]
+pub fn test_a_constraint_an_associated_type_also_asks_for_is_reported_at_the_value_that_states_it()
+{
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let x = Iterator::get_first(1.0);
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Std::F64 : Std::Iterator` cannot be deduced.\n\
+         `Std::Iterator::get_first` of type `[iter : Std::Iterator] iter -> Std::Option (Std::Iterator::Item iter)` does not match the expected type `Std::F64 -> Std::Option (Std::Iterator::Item Std::F64)`.\n\n\
+         5:13-5:32 in ",
     );
 }
