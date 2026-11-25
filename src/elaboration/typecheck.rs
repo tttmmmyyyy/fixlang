@@ -1336,11 +1336,11 @@ impl TypeCheckContext {
                     .filter(|cand| cand.is_ok())
                     .count();
                 if ok_count == 0 {
-                    let failed = candidates_check_res
+                    let failed_checks = candidates_check_res
                         .iter()
                         .filter_map(|cand| cand.as_ref().err())
                         .collect::<Vec<_>>();
-                    let failures = failed
+                    let failures = failed_checks
                         .iter()
                         .map(|(tc, fullname, scm, e)| {
                             (
@@ -1354,7 +1354,7 @@ impl TypeCheckContext {
                     // A constraint every candidate fails on, required by the value an expression
                     // uses, is reported at that expression: a constraint left from an earlier
                     // expression fails here once this name settles the type it is on.
-                    let required_by = failed
+                    let required_by = failed_checks
                         .iter()
                         .map(|(_, _, _, e)| e.required_by())
                         .reduce(|site1, site2| match (site1, site2) {
@@ -1362,10 +1362,10 @@ impl TypeCheckContext {
                             _ => None,
                         })
                         .expect("a name with no candidate is reported before the candidates are checked");
-                    let (mut error, value) = if let Some(site) = required_by {
+                    let (mut error, name_to_import) = if let Some(site) = required_by {
                         // The types are those the failed check settled, which include the ones
                         // that make the constraint fail.
-                        let (tc, _, _, _) = failed[0];
+                        let (tc, _, _, _) = failed_checks[0];
                         let (tyvar_sources, _, _, e) = &failures[0];
                         let error = self.create_use_mismatch_report(
                             tyvar_sources,
@@ -1405,7 +1405,7 @@ impl TypeCheckContext {
                         (error, Some(var.name.to_string()))
                     };
                     error.code = Some(ERR_NO_VALUE_MATCH);
-                    error.data = value.map(Value::String);
+                    error.data = name_to_import.map(Value::String);
                     return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
                     // FullName of candidates.
