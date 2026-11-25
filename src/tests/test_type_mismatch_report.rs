@@ -734,7 +734,8 @@ main : IO () = (
 /// A trait constraint left unsettled to the end of the body it is checked in is reported at the use
 /// of the value that required it.
 #[test]
-pub fn test_a_constraint_failing_at_the_end_of_the_body_is_reported_at_the_value_that_required_it() {
+pub fn test_a_constraint_failing_at_the_end_of_the_body_is_reported_at_the_value_that_required_it()
+{
     let source = r##"
 module Main;
 
@@ -828,8 +829,8 @@ main : IO () = println(f.to_string);
 /// A trait constraint whose deduction is circular, left from an earlier expression, is reported at
 /// the use of the value that required it.
 #[test]
-pub fn test_a_circular_constraint_failing_at_a_later_name_is_reported_at_the_value_that_required_it()
-{
+pub fn test_a_circular_constraint_failing_at_a_later_name_is_reported_at_the_value_that_required_it(
+) {
     let source = r##"
 module Main;
 
