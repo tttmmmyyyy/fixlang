@@ -650,8 +650,7 @@ main : IO () = (
 }
 
 /// A trait constraint that the type of a value required, and that fails only once a later name
-/// settles the type it is on, is reported at the use of that value, with that value's type, rather
-/// than at the later name.
+/// settles the type it is on, is reported at the use of that value, with that value's type.
 #[test]
 pub fn test_a_constraint_failing_at_a_later_name_is_reported_at_the_value_that_required_it() {
     let source = r##"
@@ -733,7 +732,7 @@ main : IO () = (
 }
 
 /// A trait constraint left unsettled to the end of the body it is checked in is reported at the use
-/// of the value that required it, rather than on the whole body.
+/// of the value that required it.
 #[test]
 pub fn test_a_constraint_failing_at_the_end_of_the_body_is_reported_at_the_value_that_required_it() {
     let source = r##"
@@ -804,7 +803,7 @@ main : IO () = (
 
 /// A trait constraint that the type of a value states, and that an associated type in that type asks
 /// for as well, is reported at the use of that value when it is left unsettled to the end of the
-/// body, rather than on the whole body.
+/// body.
 #[test]
 pub fn test_a_constraint_an_associated_type_asks_for_failing_at_the_end_of_the_body_is_reported_at_its_value(
 ) {
