@@ -775,3 +775,82 @@ main : IO () = (
          5:13-5:32 in ",
     );
 }
+
+/// A trait constraint that the type of a value states, and that an associated type in that type asks
+/// for as well, is reported at the use of that value when it fails at a later name, even where the
+/// copy the associated type asks for is found failing first.
+#[test]
+pub fn test_a_constraint_an_associated_type_asks_for_failing_at_a_later_name_is_reported_at_its_value(
+) {
+    let source = r##"
+module Main;
+
+h : [a : Iterator] a -> Option (Iterator::Item a) -> I64;
+h = |_, _| 0;
+
+main : IO () = (
+    let n = h(1.0, none());
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Std::F64 : Std::Iterator` cannot be deduced.\n`Main::h` of type ",
+    );
+    test_source_fail(source, Configuration::develop_mode(), "\n\n8:13-8:14 in ");
+    test_source_fail_excludes(source, Configuration::develop_mode(), "Std::Option::none");
+}
+
+/// A trait constraint that the type of a value states, and that an associated type in that type asks
+/// for as well, is reported at the use of that value when it is left unsettled to the end of the
+/// body, rather than on the whole body.
+#[test]
+pub fn test_a_constraint_an_associated_type_asks_for_failing_at_the_end_of_the_body_is_reported_at_its_value(
+) {
+    let source = r##"
+module Main;
+
+f : I64 = (
+    let x = Iterator::get_first(1.0);
+    0
+);
+
+main : IO () = println(f.to_string);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Std::F64 : Std::Iterator` is required in the type inference of this expression but cannot be deduced from assumptions.\n\n\
+         5:13-5:32 in ",
+    );
+}
+
+/// A trait constraint whose deduction is circular, left from an earlier expression, is reported at
+/// the use of the value that required it.
+#[test]
+pub fn test_a_circular_constraint_failing_at_a_later_name_is_reported_at_the_value_that_required_it()
+{
+    let source = r##"
+module Main;
+
+trait a : Marker {}
+
+type Foo a = unbox struct { x : a };
+
+impl [Foo a : Marker] Foo a : Marker {}
+
+need_marker : [a : Marker] a -> I64;
+need_marker = |_| 0;
+
+main : IO ();
+main = println(need_marker(Foo { x : 42 }).to_string);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Main::Foo Std::I64 : Main::Marker` cannot be deduced. The inference is circular.\n\
+         `Main::need_marker` of type ",
+    );
+    test_source_fail(source, Configuration::develop_mode(), "\n\n14:16-14:27 in ");
+}
