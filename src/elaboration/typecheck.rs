@@ -1361,7 +1361,7 @@ impl TypeCheckContext {
                             (Some(site1), Some(site2)) if Arc::ptr_eq(site1, site2) => Some(site1),
                             _ => None,
                         })
-                        .flatten();
+                        .expect("a name with no candidate is reported before the candidates are checked");
                     let (mut error, value) = if let Some(site) = required_by {
                         // The types are those the failed check settled, which include the ones
                         // that make the constraint fail.
