@@ -532,7 +532,7 @@ pub enum InstantiationMode {
     /// Each variable the scheme generalizes is replaced by a fresh type variable, and each
     /// constraint becomes one the type checking has to deduce. `site`, when given, is where an
     /// expression uses the value that has this scheme; diagnostics point there each fresh variable
-    /// that replaces a variable written in the source.
+    /// that replaces a variable written in the source, and each constraint that cannot be deduced.
     Require { site: Option<InstantiationSite> },
     /// Each variable the scheme generalizes stays as the scheme writes it and is fixed against
     /// replacement, and each constraint becomes one that later deductions may use.
