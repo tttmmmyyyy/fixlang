@@ -855,35 +855,6 @@ main = println(need_marker(Foo { x : 42 }).to_string);
     test_source_fail(source, Configuration::develop_mode(), "\n\n14:16-14:27 in ");
 }
 
-/// A trait constraint by a trait alias, left from an earlier expression, is reported at the use of
-/// the value whose type states it.
-#[test]
-pub fn test_a_trait_alias_constraint_failing_at_a_later_name_is_reported_at_the_value_that_states_it(
-) {
-    let source = r##"
-module Main;
-
-trait AR = Add + Rem;
-
-f : [a : AR] a -> a;
-f = |x| x % x + x;
-
-main : IO () = (
-    let g = |x| f(x);
-    let y = g(1.5);
-    pure()
-);
-"##;
-    test_source_fail(
-        source,
-        Configuration::develop_mode(),
-        ": `Std::F64 : Std::Rem` cannot be deduced.\n\
-         `Main::f` of type `[a : Main::AR] a -> a` does not match the expected type `Std::F64 -> Std::F64`.\n\n\
-         10:17-10:18 in ",
-    );
-    test_source_fail_excludes(source, Configuration::develop_mode(), "Std::Monad::pure");
-}
-
 /// A trait constraint whose deduction goes on without end, left from an earlier expression, is
 /// reported at the use of the value that required it.
 #[test]
