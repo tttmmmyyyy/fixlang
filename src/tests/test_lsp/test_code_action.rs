@@ -213,6 +213,31 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// A trait constraint reported at the value that required it, away from the name whose check
+    /// found it failing, draws no quick fix importing that name.
+    #[test]
+    fn test_quickfix_offers_no_import_for_a_constraint_reported_at_another_value() {
+        let mut ctx = LspQuickFixCtx::setup("constraint_at_value_that_required_it", &["main.fix"]);
+        let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+        let diag = diagnostic_with_code(&diagnostics, "no-value-match");
+        let (start_line, start_col, end_line, end_col) = range_of(diag);
+        let actions = ctx.code_actions(
+            "main.fix",
+            vec![diag.clone()],
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+        );
+        let titles = action_titles(&actions);
+        assert!(
+            !titles.iter().any(|t| t.starts_with("Import")),
+            "The report at `%` should draw no import. Got actions: {:?}",
+            titles
+        );
+        ctx.shutdown();
+    }
+
     /// Test that quick fix suggests inserting stub implementations for missing trait members
     /// and associated types.
     #[test]
