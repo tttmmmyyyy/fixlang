@@ -1834,9 +1834,9 @@ impl TypeCheckContext {
         &self.tyvar_sources
     }
 
-    /// Build the error saying that the value `value`, with type scheme `scm`, which the expression
-    /// at `source` uses, does not match `expected_ty`, the type the expression expects of it:
-    /// unifying the two, or deducing a constraint of `scm`, failed with `e`.
+    /// Build the error saying that `value`, of type scheme `scm`, used by the expression at
+    /// `source`, does not match `expected_ty`, the type the expression expects of it. `e` is the
+    /// failure of unifying the two or of deducing a constraint of `scm`.
     fn create_use_mismatch_report(
         &self,
         tyvar_sources: &TyVarSources,
@@ -2649,10 +2649,10 @@ impl TypeCheckContext {
     /// Reduces predicates stored in `self.predicates` as long as possible.
     /// If a predicate is unsatisfiable, returns `Err`.
     ///
-    /// Of the predicates that cannot be deduced, the error is about one that the use of a value
-    /// required, where there is one, so that the report can point at that use. A predicate that an
-    /// associated type in a type asks for is required by no use, and the type that settles it often
-    /// settles a predicate a use required as well.
+    /// When several predicates cannot be deduced, the error is about one that the use of a value
+    /// required, if there is one, so that the report can point at that use. A predicate that an
+    /// associated type asks for is required by no use, and it often fails on the same type as a
+    /// predicate that a use required.
     pub(crate) fn reduce_predicates(&mut self) -> Result<(), UnifOrOtherErr> {
         let mut irreducible_preds = vec![];
         let mut deduction = PredicateDeduction::default();
@@ -3531,11 +3531,11 @@ struct PredicateDeduction {
     /// The printed form of each predicate on `path`. Meeting one of these again is meeting a
     /// predicate whose deduction needs itself.
     on_path: Set<String>,
-    /// The printed form of each predicate whose deduction ended, with the index among the
-    /// irreducible predicates of the one it ended at, for a predicate kept to be deduced later.
-    /// Recorded on the way out, so that a predicate the deduction is still inside is not taken for
-    /// one already deduced. It keeps a predicate that several instance contexts ask for from being
-    /// deduced once for each of them.
+    /// The printed form of each predicate whose deduction ended. A predicate kept to be deduced later
+    /// maps to its index in the `irreducible_preds` of `reduce_predicate`. Recorded on the way out,
+    /// so that a predicate the deduction is still inside is not taken for one already deduced. It
+    /// keeps a predicate that several instance contexts ask for from being deduced once for each of
+    /// them.
     settled: Map<String, Option<usize>>,
 }
 
