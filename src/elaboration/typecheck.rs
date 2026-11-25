@@ -1363,16 +1363,22 @@ impl TypeCheckContext {
                         })
                         .flatten();
                     let (mut error, value) = if let Some(site) = required_by {
+                        // The types are those the failed check settled, which include the ones
+                        // that make the constraint fail.
+                        let (tc, _, _, _) = failed[0];
                         let (tyvar_sources, _, _, e) = &failures[0];
                         let error = self.create_use_mismatch_report(
                             tyvar_sources,
                             &site.value,
-                            &self.substitution.substitute_scheme(&site.scheme),
-                            &self.substitute_type(&site.expected_ty),
+                            &tc.substitution.substitute_scheme(&site.scheme),
+                            &tc.substitute_type(&site.expected_ty),
                             e,
                             &Some(site.span.clone()),
                         );
-                        (error, site.value.to_string())
+                        // The name this expression writes is what the editor offers to import, so
+                        // a report on another expression carries none.
+                        let at_this_use = ei.source.as_ref() == Some(&site.span);
+                        (error, at_this_use.then(|| var.name.to_string()))
                     } else if let [(tyvar_sources, fullname, scm, e)] = failures.as_slice() {
                         let error = self.create_use_mismatch_report(
                             tyvar_sources,
@@ -1382,7 +1388,7 @@ impl TypeCheckContext {
                             e,
                             &ei.source,
                         );
-                        (error, var.name.to_string())
+                        (error, Some(var.name.to_string()))
                     } else {
                         let error = self.create_no_candidate_matches_report(
                             &var.name,
@@ -1390,10 +1396,10 @@ impl TypeCheckContext {
                             &failures,
                             &ei.source,
                         );
-                        (error, var.name.to_string())
+                        (error, Some(var.name.to_string()))
                     };
                     error.code = Some(ERR_NO_VALUE_MATCH);
-                    error.data = Some(Value::String(value));
+                    error.data = value.map(Value::String);
                     return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
                     // FullName of candidates.
@@ -2140,12 +2146,17 @@ impl TypeCheckContext {
 
         /// Build the error reported when a constraint required by the
         /// inference cannot be deduced from the assumptions, attaching
-        /// source-location notes for the type variables it mentions.
+        /// source-location notes for the type variables it mentions. It
+        /// points at the use of the value that required the constraint,
+        /// or at `src` for a constraint no use required.
         fn make_error(
             tc: &TypeCheckContext,
             unif_err: UnificationErr,
             src: &Option<Span>,
         ) -> Error {
+            let src = &unif_err
+                .required_by()
+                .map_or(src.clone(), |site| Some(site.span.clone()));
             let unif_err = tc.substitution.substitute_unification_error(&unif_err);
             let names = ReportTyVarNames::new(&unif_err.free_vars_vec());
             let printed_err = names.rename_unification_error(&unif_err);
@@ -2251,7 +2262,11 @@ impl TypeCheckContext {
             return Ok((expr, Errors::from_err(make_error(self, e, &src))));
         }
         if self.predicates.len() > 0 {
-            let pred = &self.predicates[0];
+            let pred = self
+                .predicates
+                .iter()
+                .find(|pred| pred.required_by.is_some())
+                .unwrap_or(&self.predicates[0]);
             let e = UnificationErr::Unsatisfiable(pred.clone());
             return Ok((expr, Errors::from_err(make_error(self, e, &src))));
         }
@@ -2631,11 +2646,26 @@ impl TypeCheckContext {
 
     /// Reduces predicates stored in `self.predicates` as long as possible.
     /// If a predicate is unsatisfiable, returns `Err`.
+    ///
+    /// Of the predicates that cannot be deduced, the error is about one that the use of a value
+    /// required, where there is one, so that the report can point at that use. A predicate that an
+    /// associated type in a type asks for is required by no use, and the type that settles it often
+    /// settles a predicate a use required as well.
     pub(crate) fn reduce_predicates(&mut self) -> Result<(), UnifOrOtherErr> {
         let mut irreducible_preds = vec![];
         let mut deduction = PredicateDeduction::default();
+        let mut unattributed_failure = None;
         while let Some(pred) = self.predicates.pop() {
-            self.reduce_predicate(pred, &mut irreducible_preds, &mut deduction)?;
+            match self.reduce_predicate(pred, &mut irreducible_preds, &mut deduction) {
+                Ok(()) => {}
+                Err(UnifOrOtherErr::UnifErr(e)) if e.required_by().is_none() => {
+                    unattributed_failure.get_or_insert(e);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        if let Some(e) = unattributed_failure {
+            return Err(UnifOrOtherErr::UnifErr(e));
         }
         self.predicates = irreducible_preds;
         Ok(())
@@ -2678,7 +2708,15 @@ impl TypeCheckContext {
         // type closes on a spelling it has already met. The depth bound below is what ends a
         // deduction that keeps finding new spellings.
         let pred_str = pred.to_string();
-        if deduction.settled.contains(&pred_str) {
+        if let Some(ended_at) = deduction.settled.get(&pred_str) {
+            // The copy kept to be deduced later stands for this one too, so it takes this one's use
+            // where it has none.
+            if let Some(i) = ended_at {
+                let kept = &mut irreducible_preds[*i];
+                if kept.required_by.is_none() {
+                    kept.required_by = pred.required_by;
+                }
+            }
             return Ok(());
         }
         if deduction.on_path.contains(&pred_str) {
@@ -2730,7 +2768,7 @@ impl TypeCheckContext {
                     irreducible_preds,
                     deduction,
                 )?;
-                deduction.settled.insert(pred_str);
+                deduction.settled.insert(pred_str, None);
                 return Ok(());
             } else if !unifiable {
                 // If match fails, then we cannot reduce the predicate at now.
@@ -2743,8 +2781,10 @@ impl TypeCheckContext {
         if !unifiable {
             return Err(UnificationErr::Unsatisfiable(pred).into());
         }
+        deduction
+            .settled
+            .insert(pred_str, Some(irreducible_preds.len()));
         irreducible_preds.push(pred);
-        deduction.settled.insert(pred_str);
         return Ok(());
     }
 
@@ -3489,10 +3529,12 @@ struct PredicateDeduction {
     /// The printed form of each predicate on `path`. Meeting one of these again is meeting a
     /// predicate whose deduction needs itself.
     on_path: Set<String>,
-    /// The printed form of each predicate whose deduction ended. Recorded on the way out, so that a
-    /// predicate the deduction is still inside is not taken for one already deduced. It keeps a
-    /// predicate that several instance contexts ask for from being deduced once for each of them.
-    settled: Set<String>,
+    /// The printed form of each predicate whose deduction ended, with the index among the
+    /// irreducible predicates of the one it ended at, for a predicate kept to be deduced later.
+    /// Recorded on the way out, so that a predicate the deduction is still inside is not taken for
+    /// one already deduced. It keeps a predicate that several instance contexts ask for from being
+    /// deduced once for each of them.
+    settled: Map<String, Option<usize>>,
 }
 
 impl PredicateDeduction {
