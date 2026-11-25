@@ -2262,11 +2262,7 @@ impl TypeCheckContext {
             return Ok((expr, Errors::from_err(make_error(self, e, &src))));
         }
         if self.predicates.len() > 0 {
-            let pred = self
-                .predicates
-                .iter()
-                .find(|pred| pred.required_by.is_some())
-                .unwrap_or(&self.predicates[0]);
+            let pred = &self.predicates[0];
             let e = UnificationErr::Unsatisfiable(pred.clone());
             return Ok((expr, Errors::from_err(make_error(self, e, &src))));
         }
