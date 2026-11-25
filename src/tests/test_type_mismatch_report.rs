@@ -408,7 +408,7 @@ main : IO () = println(g(1).to_string);
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        "`x` of type `a` does not match the expected type `#1`.",
+        "`Std::LessThan::less_than` of type `[a : Std::LessThan] a -> a -> Std::Bool` does not match the expected type `#1 -> #1 -> Std::Bool`.\n\n5:11-5:12 in ",
     );
     test_source_fail(
         source,
@@ -646,5 +646,88 @@ main : IO () = (
         source,
         Configuration::develop_mode(),
         "`#1` in (2) is `b` in the type of `Main::B::conv`.\n\n15:24-15:28 in ",
+    );
+}
+
+/// A trait constraint that the type of a value required, and that fails only once a later name
+/// settles the type it is on, is reported at the use of that value, with that value's type, rather
+/// than at the later name.
+#[test]
+pub fn test_a_constraint_failing_at_a_later_name_is_reported_at_the_value_that_required_it() {
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let x = 1.0 % 2.0;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Std::F64 : Std::Rem` cannot be deduced.\n\
+         `Std::Rem::rem` of type `[a : Std::Rem] a -> a -> a` does not match the expected type `Std::F64 -> Std::F64 -> Std::F64`.\n\n\
+         5:17-5:18 in ",
+    );
+    test_source_fail_excludes(source, Configuration::develop_mode(), "Std::Monad::pure");
+}
+
+/// A constraint that an instance asks for, on the way to deducing a constraint a value required, is
+/// reported at the use of that value.
+#[test]
+pub fn test_a_constraint_an_instance_asks_for_is_reported_at_the_value_that_required_the_first() {
+    let source = r##"
+module Main;
+
+trait a : Foo {
+    foo : a -> I64;
+}
+
+impl [a : Foo] Array a : Foo {
+    foo = |xs| xs.get_size;
+}
+
+main : IO () = (
+    let n = foo([1.0]);
+    println(n.to_string)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Std::F64 : Main::Foo` cannot be deduced.\n\
+         `Main::Foo::foo` of type `[a : Main::Foo] a -> Std::I64` does not match the expected type `Std::Array Std::F64 -> Std::I64`.\n\n\
+         13:13-13:16 in ",
+    );
+}
+
+/// A constraint left from an earlier expression that fails for every value an overloaded name
+/// stands for is reported once, at the use of the value that required it.
+#[test]
+pub fn test_a_constraint_every_value_of_an_overloaded_name_fails_on_is_reported_at_its_value() {
+    let source = r##"
+module Main;
+
+namespace A {
+    g : I64 -> IO ();
+    g = |n| println(n.to_string);
+}
+
+namespace B {
+    g : I64 -> IO ();
+    g = |n| println((n + 1).to_string);
+}
+
+main : IO () = (
+    let x = 1.0 % 2.0;
+    g(1)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Std::F64 : Std::Rem` cannot be deduced.\n\
+         `Std::Rem::rem` of type `[a : Std::Rem] a -> a -> a` does not match the expected type `Std::F64 -> Std::F64 -> Std::F64`.\n\n\
+         15:17-15:18 in ",
     );
 }
