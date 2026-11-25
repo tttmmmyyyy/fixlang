@@ -541,10 +541,15 @@ pub enum InstantiationMode {
 
 /// Where an expression uses a global value. Instantiating the value's type scheme replaces each of
 /// its variables with a fresh one, and diagnostics point here each fresh one that replaces a
-/// variable written in the source.
+/// variable written in the source. A constraint of the scheme that cannot be deduced is reported
+/// here as well, as the value failing to match the type the expression expects.
 pub struct InstantiationSite {
     /// The value the expression uses.
     value: Arc<FullName>,
+    /// The type scheme of the value.
+    scheme: Arc<Scheme>,
+    /// The type the expression expects of the value.
+    expected_ty: Arc<TypeNode>,
     /// The span of the expression that uses it.
     span: Span,
 }
@@ -1069,6 +1074,14 @@ impl TypeCheckContext {
         let mut eqs = scheme.equalities.clone();
         match mode {
             InstantiationMode::Require { site } => {
+                if let Some(site) = &site {
+                    assert!(
+                        Arc::ptr_eq(&site.scheme, scheme),
+                        "the site of `{}` carries the scheme instantiated",
+                        site.value.to_string()
+                    );
+                }
+                let site = site.map(Arc::new);
                 // Instantiate type variables.
                 let mut sub = Substitution::default();
                 for tv in &scheme.gen_vars {
@@ -1113,6 +1126,7 @@ impl TypeCheckContext {
                 // Add constraints to the TypeCheckerContext.
                 for pred in &mut preds {
                     sub.substitute_predicate(pred);
+                    pred.required_by = site.clone();
                 }
                 self.predicates.append(&mut preds);
                 for eq in eqs {
@@ -1299,6 +1313,8 @@ impl TypeCheckContext {
                         InstantiationMode::Require {
                             site: ei.source.clone().map(|span| InstantiationSite {
                                 value: Arc::new(fullname.clone()),
+                                scheme: scm.clone(),
+                                expected_ty: ty.clone(),
                                 span,
                             }),
                         },
@@ -1320,10 +1336,12 @@ impl TypeCheckContext {
                     .filter(|cand| cand.is_ok())
                     .count();
                 if ok_count == 0 {
-                    let expected_type = self.substitute_type(&ty);
-                    let failures = candidates_check_res
+                    let failed = candidates_check_res
                         .iter()
                         .filter_map(|cand| cand.as_ref().err())
+                        .collect::<Vec<_>>();
+                    let failures = failed
+                        .iter()
                         .map(|(tc, fullname, scm, e)| {
                             (
                                 self.tyvar_sources_with_those_created_in(tc),
@@ -1333,46 +1351,49 @@ impl TypeCheckContext {
                             )
                         })
                         .collect::<Vec<_>>();
-                    let mut error = if let [(tyvar_sources, fullname, scm, e)] = failures.as_slice()
-                    {
-                        // A value with no type variable of its own, mismatched with the expected
-                        // type as a whole, is reported by the sentence naming the two types.
-                        let whole = scm.gen_vars.is_empty().then(|| (&scm.ty, &expected_type));
-                        let mut tvs = vec![];
-                        scm.free_vars_to_vec(&mut tvs);
-                        expected_type.free_vars_to_vec(&mut tvs);
-                        // The variable standing for a `*x` has a name the source never writes, so
-                        // the message quotes the `*x`.
-                        let subject = if fullname.is_bind_result() {
-                            let src = ei
-                                .source
-                                .as_ref()
-                                .expect("the variable for the result of a `*x` spans the `*x`");
-                            match short_span_snippet(src) {
-                                Some(snippet) => format!("`{}`", snippet),
-                                None => "This expression".to_string(),
-                            }
-                        } else {
-                            format!("`{}`", fullname.to_string())
-                        };
-                        tyvar_sources.create_mismatch_report(e, whole, tvs, &ei.source, |names| {
-                            format!(
-                                "{} of type `{}` does not match the expected type `{}`.",
-                                subject,
-                                names.scheme(scm),
-                                names.ty(&expected_type),
-                            )
+                    // A constraint every candidate fails on, required by the value an expression
+                    // uses, is reported at that expression: a constraint left from an earlier
+                    // expression fails here once this name settles the type it is on.
+                    let required_by = failed
+                        .iter()
+                        .map(|(_, _, _, e)| e.required_by())
+                        .reduce(|site1, site2| match (site1, site2) {
+                            (Some(site1), Some(site2)) if Arc::ptr_eq(site1, site2) => Some(site1),
+                            _ => None,
                         })
+                        .flatten();
+                    let (mut error, value) = if let Some(site) = required_by {
+                        let (tyvar_sources, _, _, e) = &failures[0];
+                        let error = self.create_use_mismatch_report(
+                            tyvar_sources,
+                            &site.value,
+                            &self.substitution.substitute_scheme(&site.scheme),
+                            &self.substitute_type(&site.expected_ty),
+                            e,
+                            &Some(site.span.clone()),
+                        );
+                        (error, site.value.to_string())
+                    } else if let [(tyvar_sources, fullname, scm, e)] = failures.as_slice() {
+                        let error = self.create_use_mismatch_report(
+                            tyvar_sources,
+                            fullname,
+                            scm,
+                            &self.substitute_type(&ty),
+                            e,
+                            &ei.source,
+                        );
+                        (error, var.name.to_string())
                     } else {
-                        self.create_no_candidate_matches_report(
+                        let error = self.create_no_candidate_matches_report(
                             &var.name,
-                            &expected_type,
+                            &self.substitute_type(&ty),
                             &failures,
                             &ei.source,
-                        )
+                        );
+                        (error, var.name.to_string())
                     };
                     error.code = Some(ERR_NO_VALUE_MATCH);
-                    error.data = Some(Value::String(var.name.to_string()));
+                    error.data = Some(Value::String(value));
                     return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
                     // FullName of candidates.
@@ -1799,6 +1820,47 @@ impl TypeCheckContext {
     /// The expression or pattern each type variable the inference created arose at.
     pub fn tyvar_sources(&self) -> &TyVarSources {
         &self.tyvar_sources
+    }
+
+    /// Build the error saying that the value `value`, with type scheme `scm`, which the expression
+    /// at `source` uses, does not match `expected_ty`, the type the expression expects of it:
+    /// unifying the two, or deducing a constraint of `scm`, failed with `e`.
+    fn create_use_mismatch_report(
+        &self,
+        tyvar_sources: &TyVarSources,
+        value: &FullName,
+        scm: &Arc<Scheme>,
+        expected_ty: &Arc<TypeNode>,
+        e: &UnificationErr,
+        source: &Option<Span>,
+    ) -> Error {
+        // A value with no type variable of its own, mismatched with the expected type as a whole,
+        // is reported by the sentence naming the two types.
+        let whole = scm.gen_vars.is_empty().then(|| (&scm.ty, expected_ty));
+        let mut tvs = vec![];
+        scm.free_vars_to_vec(&mut tvs);
+        expected_ty.free_vars_to_vec(&mut tvs);
+        // The variable standing for a `*x` has a name the source never writes, so the message
+        // quotes the `*x`.
+        let subject = if value.is_bind_result() {
+            let src = source
+                .as_ref()
+                .expect("the variable for the result of a `*x` spans the `*x`");
+            match short_span_snippet(src) {
+                Some(snippet) => format!("`{}`", snippet),
+                None => "This expression".to_string(),
+            }
+        } else {
+            format!("`{}`", value.to_string())
+        };
+        tyvar_sources.create_mismatch_report(e, whole, tvs, source, |names| {
+            format!(
+                "{} of type `{}` does not match the expected type `{}`.",
+                subject,
+                names.scheme(scm),
+                names.ty(expected_ty),
+            )
+        })
     }
 
     /// Build the error reported at `source` where none of the values the
@@ -2302,6 +2364,7 @@ impl TypeCheckContext {
                     ty: args[0].clone(),
                     src: None,
                     trait_src: None,
+                    required_by: None,
                 };
                 self.predicates.push(pred);
 
@@ -2656,6 +2719,7 @@ impl TypeCheckContext {
                     .into_iter()
                     .map(|mut ctx_pred| {
                         match_subst.substitute_predicate(&mut ctx_pred);
+                        ctx_pred.required_by = pred.required_by.clone();
                         ctx_pred
                     })
                     .collect();
@@ -3735,6 +3799,18 @@ impl UnificationErr {
         let mut buf = vec![];
         self.free_vars_to_vec(&mut buf);
         buf
+    }
+
+    /// The use of a global value whose type required the constraint this error is about, for a
+    /// constraint that cannot be deduced.
+    fn required_by(&self) -> Option<&Arc<InstantiationSite>> {
+        match self {
+            UnificationErr::Unsatisfiable(p) => p.required_by.as_ref(),
+            UnificationErr::Circular(way) | UnificationErr::Endless(way) => {
+                Self::reported_predicate(way).required_by.as_ref()
+            }
+            UnificationErr::Disjoint(_, _) | UnificationErr::IndivisibleOpaque(_, _) => None,
+        }
     }
 
     /// The predicate a failed deduction is about: the one the report names.

@@ -2099,6 +2099,7 @@ impl TypeNode {
                         ty: args[0].clone(),
                         src: ty.get_source().clone(),
                         trait_src: None,
+                        required_by: None,
                     };
                     buf.push(pred);
                     for arg in args {
@@ -2529,6 +2530,7 @@ impl Scheme {
                     ty: eq.args[0].clone(),
                     src: None,
                     trait_src: None,
+                    required_by: None,
                 };
                 return Err(Errors::from_msg_srcs(
                     format!(

@@ -4,6 +4,7 @@ use crate::ast::traits::{TraitAliasEnv, TraitId};
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{is_opaque_tyvar, TyVar, Type, TypeNode};
 use crate::elaboration::name_resolution::NameResolutionContext;
+use crate::elaboration::typecheck::InstantiationSite;
 use crate::error::Errors;
 use crate::parse::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,10 @@ pub struct Predicate {
     pub src: Option<Span>,
     // Source span of the trait name only (e.g., `Describable` in `I64 : Describable`).
     pub trait_src: Option<Span>,
+    /// For a constraint that type checking has to deduce, the use of the global value whose type
+    /// requires it. A constraint deduced on the way to another one is required by the same use.
+    #[serde(skip)]
+    pub required_by: Option<Arc<InstantiationSite>>,
 }
 
 impl Predicate {
@@ -49,6 +54,7 @@ impl Predicate {
             ty: self.ty.global_to_absolute(),
             src: self.src.clone(),
             trait_src: self.trait_src.clone(),
+            required_by: self.required_by.clone(),
         }
     }
 
@@ -62,6 +68,7 @@ impl Predicate {
             ty,
             src: None,
             trait_src: None,
+            required_by: None,
         }
     }
 
