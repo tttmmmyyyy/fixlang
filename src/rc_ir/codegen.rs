@@ -830,20 +830,20 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .set_atomic_ordering(AtomicOrdering::Acquire)
                 .expect("a load takes acquire ordering");
         }
-        let is_uninitialized = self
+        let is_not_initialized = self
             .builder()
             .build_int_compare(
                 IntPredicate::NE,
                 flag,
                 flag_ty.const_int(INIT_FLAG_INITIALIZED, false),
-                "is_uninitialized",
+                "is_not_initialized",
             )
             .unwrap();
-        let init_bb = self.context.append_basic_block(acc_fn, "uninitialized");
+        let init_bb = self.context.append_basic_block(acc_fn, "not_initialized");
         let end_bb = self.context.append_basic_block(acc_fn, "initialized");
         let branch = self
             .builder()
-            .build_conditional_branch(is_uninitialized, init_bb, end_bb)
+            .build_conditional_branch(is_not_initialized, init_bb, end_bb)
             .unwrap();
 
         // The flag is unset on the first access alone. Saying so keeps the initialization away
