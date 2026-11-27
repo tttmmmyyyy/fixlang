@@ -1300,17 +1300,6 @@ impl TypeCheckContext {
                     err.data = Some(Value::String(var.name.to_string()));
                     return Err(Errors::from_err(err));
                 }
-                // A constraint left from an earlier expression that fails before this name settles
-                // anything is reported at the expression that required it. One no use required is
-                // left for the checks of the candidates.
-                if let Err(e) = UnifOrOtherErr::extract_others(self.reduce_predicates())? {
-                    if let Some(site) = e.required_by() {
-                        let e = self.substitution.substitute_unification_error(&e);
-                        let mut error = self.create_report_at_site(&self.tyvar_sources, site, &e);
-                        error.code = Some(ERR_NO_VALUE_MATCH);
-                        return Err(Errors::from_err(error));
-                    }
-                }
                 let mut candidates_check_res: Vec<
                     Result<
                         (TypeCheckContext, NameSpace),
@@ -1352,6 +1341,25 @@ impl TypeCheckContext {
                     .filter(|cand| cand.is_ok())
                     .count();
                 if ok_count == 0 {
+                    // A constraint left from an earlier expression that fails without any value of
+                    // this name is reported at the expression that required it.
+                    let mut without_candidates = self.clone();
+                    if let Err(e) =
+                        UnifOrOtherErr::extract_others(without_candidates.reduce_predicates())?
+                    {
+                        if let Some(site) = e.required_by() {
+                            let e = without_candidates
+                                .substitution
+                                .substitute_unification_error(&e);
+                            let mut error = without_candidates.create_report_at_site(
+                                &without_candidates.tyvar_sources,
+                                site,
+                                &e,
+                            );
+                            error.code = Some(ERR_NO_VALUE_MATCH);
+                            return Err(Errors::from_err(error));
+                        }
+                    }
                     let failed_checks = candidates_check_res
                         .iter()
                         .filter_map(|cand| cand.as_ref().err())
@@ -2674,8 +2682,7 @@ impl TypeCheckContext {
     }
 
     /// Reduces predicates stored in `self.predicates` as long as possible.
-    /// If a predicate is unsatisfiable, returns `Err`, leaving in `self.predicates` every predicate
-    /// that is not deduced, the unsatisfiable one among them.
+    /// If a predicate is unsatisfiable, returns `Err`.
     ///
     /// The predicates that the use of a value required are deduced first. Each predicate their
     /// deduction reaches carries that use, and keeps it when a predicate no use required reaches it
@@ -2695,15 +2702,7 @@ impl TypeCheckContext {
                 .partition(|pred| pred.required_by.is_some());
         self.predicates = required_by_none;
         while let Some(pred) = required_by_uses.pop().or_else(|| self.predicates.pop()) {
-            if let Err(e) =
-                self.reduce_predicate(pred.clone(), &mut irreducible_preds, &mut deduction)
-            {
-                irreducible_preds.push(pred);
-                irreducible_preds.append(&mut required_by_uses);
-                irreducible_preds.append(&mut self.predicates);
-                self.predicates = irreducible_preds;
-                return Err(e);
-            }
+            self.reduce_predicate(pred, &mut irreducible_preds, &mut deduction)?;
         }
         assert!(
             irreducible_preds
