@@ -15,8 +15,8 @@ use crate::{
     misc::function_name,
     target_triple::build_target_triple,
     tests::test_util::{
-        compile_c_object, emitted_llvm_ir, fix_command, standalone_generator, test_source,
-        test_source_fail, test_source_with_c, test_source_with_c_under, EmittedIr,
+        assert_source_prints, compile_c_object, emitted_llvm_ir, fix_command, standalone_generator,
+        test_source, test_source_fail, test_source_with_c, test_source_with_c_under, EmittedIr,
     },
 };
 use inkwell::{attributes::AttributeLoc, context::Context, targets::TargetTriple};
@@ -829,6 +829,24 @@ pub fn test_ffi_call_of_the_entry_point_at_another_signature_fails() {
         Configuration::develop_mode(),
         "One C function has one signature",
     );
+}
+
+/// A multi-threaded program may call `sched_yield`, which its runtime also calls, at the signature
+/// C gives the function.
+#[test]
+pub fn test_ffi_call_of_sched_yield_in_a_threaded_build() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            let status = *FFI_CALL_IO[CInt sched_yield()];
+            println(status.to_string)
+        );
+    "##;
+    let mut config = Configuration::develop_mode();
+    config.threaded = true;
+    assert_source_prints(&source, config, "0");
 }
 
 /// The export defines the C function and the call goes through that one definition, so a call
