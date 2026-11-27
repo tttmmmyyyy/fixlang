@@ -1356,8 +1356,8 @@ impl TypeCheckContext {
                             )
                         })
                         .collect::<Vec<_>>();
-                    // A constraint left from an earlier expression that fails without any value of
-                    // this name is reported at the expression that required it.
+                    // A constraint left from an earlier expression that already fails before any
+                    // value of this name is checked is reported at the expression that required it.
                     let report_without_candidates = {
                         let mut without_candidates = self.clone();
                         let failure =
@@ -1892,8 +1892,8 @@ impl TypeCheckContext {
     }
 
     /// Build the error saying that the use `site` does not match the type it was expected to have,
-    /// with the types the inference of this context has settled. `e` is the failure of deducing a
-    /// constraint of the scheme of that use.
+    /// with the types this context has inferred so far. `e` is the failure of deducing a constraint
+    /// of the scheme of that use.
     fn create_use_mismatch_report_at_site(
         &self,
         tyvar_sources: &TyVarSources,
