@@ -997,3 +997,37 @@ main : IO () = pure();
          7:15-7:17 in ",
     );
 }
+
+/// A trait constraint left from an earlier expression, whose type an earlier expression settled, is
+/// reported at the use of the value that required it when the next name is overloaded and one of
+/// its values fails to match for a reason of its own.
+#[test]
+pub fn test_a_constraint_failing_before_an_overloaded_name_is_checked_is_reported_at_the_value_that_required_it(
+) {
+    let source = r##"
+module Main;
+
+namespace A {
+    g : I64 -> IO ();
+    g = |n| println(n.to_string);
+}
+
+namespace B {
+    g : I64 -> I64;
+    g = |n| n;
+}
+
+main : IO () = (
+    let x = 1.0 % 2.0;
+    g(1)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Std::F64 : Std::Rem` cannot be deduced.\n\
+         `Std::Rem::rem` of type `[a : Std::Rem] a -> a -> a` does not match the expected type ",
+    );
+    test_source_fail(source, Configuration::develop_mode(), "\n\n15:17-15:18 in ");
+    test_source_fail_excludes(source, Configuration::develop_mode(), "No value named `g`");
+}
