@@ -6,7 +6,7 @@
 
 #### Tool
 
-- #23: A multi-threaded build (`--threaded`, or `threaded` in the project file) no longer links the pthread library. A program that calls pthread through the FFI names it in `dynamic_links`. On macOS, such a build no longer warns that it cannot specify how the library is linked.
+- #23, #1077: A multi-threaded build (`--threaded`, or `threaded` in the project file) no longer links the pthread library. A program that calls pthread through the FFI names it in `dynamic_links`. On macOS, such a build no longer warns that it cannot specify how the library is linked.
 - #1028: In the language server, hover and go to definition on the parentheses or a comma of a tuple, or on `()`, now answer nothing. Hover there used to show `Std::Tuple2` or `()`.
 
 ### Fixed
