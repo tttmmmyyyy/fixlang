@@ -533,7 +533,9 @@ pub enum InstantiationMode {
     /// constraint becomes one the type checking has to deduce. `site`, when given, is where an
     /// expression uses the value that has this scheme; diagnostics point there each fresh variable
     /// that replaces a variable written in the source, and each constraint that cannot be deduced.
-    Require { site: Option<InstantiationSite> },
+    Require {
+        site: Option<Arc<InstantiationSite>>,
+    },
     /// Each variable the scheme generalizes stays as the scheme writes it and is fixed against
     /// replacement, and each constraint becomes one that later deductions may use.
     Assume,
@@ -1081,7 +1083,6 @@ impl TypeCheckContext {
                         site.value.to_string()
                     );
                 }
-                let site = site.map(Arc::new);
                 // Instantiate type variables.
                 let mut sub = Substitution::default();
                 for tv in &scheme.gen_vars {
@@ -1305,20 +1306,23 @@ impl TypeCheckContext {
                         (TypeCheckContext, FullName, Arc<Scheme>, UnificationErr),
                     >,
                 > = vec![];
+                // The use of each candidate, which the constraints its scheme states carry.
+                let mut sites_of_candidates = vec![];
                 for (ns, scm) in &candidates {
                     let fullname = FullName::new(ns, &var.name.name);
+                    let site = ei.source.clone().map(|span| {
+                        Arc::new(InstantiationSite {
+                            value: Arc::new(fullname.clone()),
+                            scheme: scm.clone(),
+                            expected_ty: ty.clone(),
+                            span,
+                        })
+                    });
+                    sites_of_candidates.extend(site.clone());
                     let mut tc = self.clone();
-                    let var_ty = UnifOrOtherErr::extract_others(tc.instantiate_scheme(
-                        &scm,
-                        InstantiationMode::Require {
-                            site: ei.source.clone().map(|span| InstantiationSite {
-                                value: Arc::new(fullname.clone()),
-                                scheme: scm.clone(),
-                                expected_ty: ty.clone(),
-                                span,
-                            }),
-                        },
-                    ))?;
+                    let var_ty = UnifOrOtherErr::extract_others(
+                        tc.instantiate_scheme(&scm, InstantiationMode::Require { site }),
+                    )?;
                     if let Err(e) = var_ty {
                         candidates_check_res.push(Err((tc, fullname, scm.clone(), e)))
                     } else if let Err(e) =
@@ -1353,8 +1357,7 @@ impl TypeCheckContext {
                         .collect::<Vec<_>>();
                     // A constraint every candidate fails on, left from an earlier expression, fails
                     // here once this name settles the type it is on, and is reported at the
-                    // expression that required it. The constraints this context holds before the
-                    // candidates are checked are those the earlier expressions required.
+                    // expression that required it.
                     let earlier_use = failed_checks
                         .iter()
                         .map(|(_, _, _, e)| e.required_by())
@@ -1364,11 +1367,9 @@ impl TypeCheckContext {
                         })
                         .expect("a name with no candidate is reported before the candidates are checked")
                         .filter(|site| {
-                            self.predicates.iter().any(|pred| {
-                                pred.required_by
-                                    .as_ref()
-                                    .is_some_and(|held| Arc::ptr_eq(held, site))
-                            })
+                            !sites_of_candidates
+                                .iter()
+                                .any(|own| Arc::ptr_eq(own, site))
                         });
                     let mut error = if let Some(site) = earlier_use {
                         // The types are those the failed check settled, which include the ones
