@@ -855,7 +855,7 @@ main = println(need_marker(Foo { x : 42 }).to_string);
     test_source_fail(source, Configuration::develop_mode(), "\n\n14:16-14:27 in ");
 }
 
-/// A trait constraint whose deduction goes on without end, left from an earlier expression, is
+/// A trait constraint whose deduction never ends, left from an earlier expression, is
 /// reported at the use of the value that required it.
 #[test]
 pub fn test_an_endless_constraint_failing_at_a_later_name_is_reported_at_the_value_that_required_it(
@@ -891,9 +891,8 @@ main : IO () = (
     );
 }
 
-/// A trait constraint that the value a name stands for requires, and that fails at that name, is
-/// reported with the type the name's context expects, as the context knew it before the name was
-/// checked.
+/// A trait constraint that the type of a name's value requires, and that fails at that name, is
+/// reported with the type the name's context expected before the name was checked.
 #[test]
 pub fn test_a_constraint_failing_at_the_name_that_required_it_quotes_the_type_its_context_expects()
 {
