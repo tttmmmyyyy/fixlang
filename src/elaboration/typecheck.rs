@@ -1300,6 +1300,17 @@ impl TypeCheckContext {
                     err.data = Some(Value::String(var.name.to_string()));
                     return Err(Errors::from_err(err));
                 }
+                // A constraint left from an earlier expression that fails before this name settles
+                // anything is reported at the expression that required it. One no use required is
+                // left for the checks of the candidates.
+                if let Err(e) = UnifOrOtherErr::extract_others(self.reduce_predicates())? {
+                    if let Some(site) = e.required_by() {
+                        let e = self.substitution.substitute_unification_error(&e);
+                        let mut error = self.create_report_at_site(&self.tyvar_sources, site, &e);
+                        error.code = Some(ERR_NO_VALUE_MATCH);
+                        return Err(Errors::from_err(error));
+                    }
+                }
                 let mut candidates_check_res: Vec<
                     Result<
                         (TypeCheckContext, NameSpace),
@@ -1377,14 +1388,7 @@ impl TypeCheckContext {
                         // that make the constraint fail.
                         let (tc, _, _, _) = failed_checks[0];
                         let (tyvar_sources, _, _, e) = &failures[0];
-                        self.create_use_mismatch_report(
-                            tyvar_sources,
-                            &site.value,
-                            &tc.substitution.substitute_scheme(&site.scheme),
-                            &tc.substitute_type(&site.expected_ty),
-                            e,
-                            &Some(site.span.clone()),
-                        )
+                        tc.create_report_at_site(tyvar_sources, site, e)
                     } else if let [(tyvar_sources, fullname, scm, e)] = failures.as_slice() {
                         self.create_use_mismatch_report(
                             tyvar_sources,
@@ -1875,6 +1879,25 @@ impl TypeCheckContext {
                 names.ty(expected_ty),
             )
         })
+    }
+
+    /// Build the error saying that the use `site` does not match the type it was expected to have,
+    /// with the types the inference of this context has settled. `e`, with those types, is the
+    /// failure of deducing a constraint of the scheme of that use.
+    fn create_report_at_site(
+        &self,
+        tyvar_sources: &TyVarSources,
+        site: &InstantiationSite,
+        e: &UnificationErr,
+    ) -> Error {
+        self.create_use_mismatch_report(
+            tyvar_sources,
+            &site.value,
+            &self.substitution.substitute_scheme(&site.scheme),
+            &self.substitute_type(&site.expected_ty),
+            e,
+            &Some(site.span.clone()),
+        )
     }
 
     /// Build the error reported at `source` where none of the values the
@@ -2651,7 +2674,8 @@ impl TypeCheckContext {
     }
 
     /// Reduces predicates stored in `self.predicates` as long as possible.
-    /// If a predicate is unsatisfiable, returns `Err`.
+    /// If a predicate is unsatisfiable, returns `Err`, leaving in `self.predicates` every predicate
+    /// that is not deduced, the unsatisfiable one among them.
     ///
     /// The predicates that the use of a value required are deduced first. Each predicate their
     /// deduction reaches carries that use, and keeps it when a predicate no use required reaches it
@@ -2671,7 +2695,15 @@ impl TypeCheckContext {
                 .partition(|pred| pred.required_by.is_some());
         self.predicates = required_by_none;
         while let Some(pred) = required_by_uses.pop().or_else(|| self.predicates.pop()) {
-            self.reduce_predicate(pred, &mut irreducible_preds, &mut deduction)?;
+            if let Err(e) =
+                self.reduce_predicate(pred.clone(), &mut irreducible_preds, &mut deduction)
+            {
+                irreducible_preds.push(pred);
+                irreducible_preds.append(&mut required_by_uses);
+                irreducible_preds.append(&mut self.predicates);
+                self.predicates = irreducible_preds;
+                return Err(e);
+            }
         }
         assert!(
             irreducible_preds
