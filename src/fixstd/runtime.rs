@@ -1,7 +1,7 @@
 use crate::configuration::OutputFileType;
 use crate::constants::{
-    C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, INIT_FLAG_INITIALIZED,
-    INIT_FLAG_INITIALIZING, INIT_FLAG_UNINITIALIZED,
+    init_flag_type, C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV,
+    INIT_FLAG_INITIALIZED, INIT_FLAG_INITIALIZING, INIT_FLAG_UNINITIALIZED,
 };
 use crate::generator::Generator;
 use crate::tbaa::MemoryRegion;
@@ -282,8 +282,9 @@ fn build_run_once_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) 
     gc.add_enum_attribute(func, "cold", AttributeLoc::Function);
     gc.add_enum_attribute(func, "noinline", AttributeLoc::Function);
     let flag_ptr = func.get_nth_param(0).unwrap().into_pointer_value();
+    flag_ptr.set_name("init_flag");
     let init = func.get_nth_param(1).unwrap().into_pointer_value();
-    let flag_ty = gc.context.i8_type();
+    let flag_ty = init_flag_type(gc.context);
 
     let _builder_guard = gc.push_builder();
     let entry_bb = gc.context.append_basic_block(func, "entry");
@@ -327,12 +328,14 @@ fn build_run_once_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) 
 
     gc.builder().position_at_end(wait_bb);
     let flag = gc
-        .build_load(MemoryRegion::Data, flag_ty, flag_ptr, "flag")
+        .build_load_ordered(
+            MemoryRegion::Data,
+            flag_ty,
+            flag_ptr,
+            Some(AtomicOrdering::Acquire),
+            "flag",
+        )
         .into_int_value();
-    flag.as_instruction_value()
-        .expect("a load is an instruction")
-        .set_atomic_ordering(AtomicOrdering::Acquire)
-        .expect("a load takes acquire ordering");
     let initialized = gc
         .builder()
         .build_int_compare(
