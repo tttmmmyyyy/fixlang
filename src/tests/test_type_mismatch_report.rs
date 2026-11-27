@@ -918,3 +918,83 @@ main : IO () = (
         "`#1` is the type expected for `r`.\n\n5:9-5:10 in ",
     );
 }
+
+/// A trait constraint that an instance asks for, on the way to a constraint that both the type of a
+/// value and an associated type in it require, is reported at the use of that value, whichever of
+/// the two asks for the constraint first.
+#[test]
+pub fn test_a_constraint_an_instance_asks_for_after_an_associated_type_is_reported_at_the_value() {
+    let source = r##"
+module Main;
+
+trait c : Container {
+    type Content c;
+    size_of : c -> I64;
+}
+
+type Bag a = box struct { items : Array a };
+
+impl [a : ToString] Bag a : Container {
+    type Content (Bag a) = a;
+    size_of = |b| b.@items.get_size;
+}
+
+type P = struct { v : I64 };
+
+impl P : Eq {
+    eq = |x, y| x.@v == y.@v;
+}
+
+get : [c : Container] c -> Content c;
+get = |_| undefined("");
+
+same : [d : Eq] d -> d -> Bool;
+same = |x, y| x == y;
+
+main : IO () = (
+    let f = |b| (
+        let x = get(b);
+        let y = same(x, x);
+        let z = 0;
+        let _ = z;
+        0
+    );
+    let bag = Bag { items : [] };
+    let n = f(bag);
+    let w : Bag P = bag;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Main::P : Std::ToString` cannot be deduced.\n\
+         `Main::get` of type `[c : Main::Container] c -> Main::Container::Content c` does not match ",
+    );
+    test_source_fail(source, Configuration::develop_mode(), "\n\n30:17-30:20 in ");
+}
+
+/// Of the trait constraints left unsettled to the end of a body, one that the type of a value
+/// required is reported, at the use of that value.
+#[test]
+pub fn test_of_the_constraints_failing_at_the_end_of_the_body_one_a_value_required_is_reported() {
+    let source = r##"
+module Main;
+
+f : [a : Iterator] a -> Bool;
+f = |it| (
+    let x = it.get_first.as_some;
+    let b = x == x;
+    let y : Option (Iterator::Item (Iterator::Item a)) = none();
+    b
+);
+
+main : IO () = pure();
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Std::Iterator::Item a : Std::Eq` is required in the type inference of this expression but cannot be deduced from assumptions.\n\n\
+         7:15-7:17 in ",
+    );
+}
