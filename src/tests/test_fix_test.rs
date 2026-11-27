@@ -405,3 +405,84 @@ fn test_malformed_test_pragmas_are_rejected() {
         }
     }
 }
+
+/// Where a Fix example does not compile, the example fails by itself, and `Test::test` and the
+/// values the `TEST[...]` pragmas name still run, from the program of the sources.
+#[test]
+fn test_declared_tests_run_where_an_example_does_not_compile() {
+    let lib = r#"module Lib;
+
+// ```fix
+// let x : I64 = "a string";
+// pure()
+// ```
+value : I64;
+value = 1;
+
+value_is_one : IO ();
+value_is_one = assert_eq(|_|"", value, 1);
+TEST[value_is_one];
+"#;
+    let test = "module Test;\ntest : IO ();\ntest = pure();\n";
+    let dir = project_dir(&[("lib.fix", lib)], &[("test.fix", test)]);
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success()
+            && stderr.contains("test Test::test ... ok")
+            && stderr.contains("test Lib::value_is_one ... ok")
+            && stderr.contains("doc test lib.fix:3 ... FAILED")
+            && stderr.contains("test result: 2 passed, 1 failed, 0 ignored."),
+        "the example fails, and the declared tests run and pass\n{}",
+        streams(&output)
+    );
+}
+
+/// The failures are shown in an order fixed by the tests, whatever order they end in: `Test::test`,
+/// then the values the `TEST[...]` pragmas name, then the Fix examples.
+#[test]
+fn test_failures_are_shown_test_function_first_then_declared_tests_then_examples() {
+    let lib = r#"module Lib;
+
+// ```fix
+// assert_eq(|_|"the example fails", 1, 2)
+// ```
+value : I64;
+value = 1;
+
+fails : IO ();
+fails = assert_eq(|_|"the declared test fails", value, 2);
+TEST[fails];
+"#;
+    let test = "module Test;\ntest : IO ();\ntest = assert_eq(|_|\"Test::test fails\", 1, 2);\n";
+    let dir = project_dir(&[("lib.fix", lib)], &[("test.fix", test)]);
+    let output = fix_test(&dir, &[]);
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("failures:\n    Test::test\n    Lib::fails\n    lib.fix:3\n"),
+        "the failures are listed in the order of their kinds\n{}",
+        streams(&output)
+    );
+}
+
+/// A `TEST[...]` pragma names a value in a namespace inside where it is written by a relative path
+/// through that namespace.
+#[test]
+fn test_pragma_names_a_value_of_an_inner_namespace_by_a_relative_path() {
+    let lib = r#"module Lib;
+
+namespace Checks {
+    passes : IO ();
+    passes = pure();
+}
+TEST[Checks::passes];
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    assert!(
+        output.status.success()
+            && String::from_utf8_lossy(&output.stderr).contains("test Lib::Checks::passes ... ok"),
+        "the value of the inner namespace runs as a test\n{}",
+        streams(&output)
+    );
+}
