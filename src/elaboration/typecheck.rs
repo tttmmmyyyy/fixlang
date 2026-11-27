@@ -2268,6 +2268,7 @@ impl TypeCheckContext {
             return Ok((expr, Errors::from_err(make_error(self, e, &src))));
         }
         if self.predicates.len() > 0 {
+            // The first is one a use required, where there is one, and the report points at it.
             let pred = &self.predicates[0];
             let e = UnificationErr::Unsatisfiable(pred.clone());
             return Ok((expr, Errors::from_err(make_error(self, e, &src))));
@@ -2649,26 +2650,32 @@ impl TypeCheckContext {
     /// Reduces predicates stored in `self.predicates` as long as possible.
     /// If a predicate is unsatisfiable, returns `Err`.
     ///
-    /// When several predicates cannot be deduced, the error is about one that the use of a value
-    /// required, if there is one, so that the report can point at that use. A predicate that an
-    /// associated type asks for is required by no use, and it often fails on the same type as a
-    /// predicate that a use required.
+    /// The predicates the use of a value required are deduced first. A predicate deduced on the way
+    /// to one of them then carries that use, also where a predicate no use required asks for it as
+    /// well, and so does the error when one of them cannot be deduced, so that the report can point
+    /// at that use. A predicate that an associated type asks for is required by no use, and it often
+    /// fails on the same type as a predicate that a use required. Reducing an associated type adds
+    /// such a predicate to `self.predicates` while the deduction runs.
+    ///
+    /// The predicates left to be deduced later keep that order: those a use required come first.
     pub(crate) fn reduce_predicates(&mut self) -> Result<(), UnifOrOtherErr> {
         let mut irreducible_preds = vec![];
         let mut deduction = PredicateDeduction::default();
-        let mut unattributed_failure = None;
-        while let Some(pred) = self.predicates.pop() {
-            match self.reduce_predicate(pred, &mut irreducible_preds, &mut deduction) {
-                Ok(()) => {}
-                Err(UnifOrOtherErr::UnifErr(e)) if e.required_by().is_none() => {
-                    unattributed_failure.get_or_insert(e);
-                }
-                Err(e) => return Err(e),
-            }
+        let (mut required_by_uses, required_by_none): (Vec<_>, Vec<_>) =
+            std::mem::take(&mut self.predicates)
+                .into_iter()
+                .partition(|pred| pred.required_by.is_some());
+        self.predicates = required_by_none;
+        while let Some(pred) = required_by_uses.pop().or_else(|| self.predicates.pop()) {
+            self.reduce_predicate(pred, &mut irreducible_preds, &mut deduction)?;
         }
-        if let Some(e) = unattributed_failure {
-            return Err(UnifOrOtherErr::UnifErr(e));
-        }
+        assert!(
+            irreducible_preds
+                .iter()
+                .skip_while(|pred| pred.required_by.is_some())
+                .all(|pred| pred.required_by.is_none()),
+            "a predicate a use required is left after one no use required"
+        );
         self.predicates = irreducible_preds;
         Ok(())
     }
@@ -2710,15 +2717,7 @@ impl TypeCheckContext {
         // type closes on a spelling it has already met. The depth bound below is what ends a
         // deduction that keeps finding new spellings.
         let pred_str = pred.to_string();
-        if let Some(ended_at) = deduction.settled.get(&pred_str) {
-            // The copy kept to be deduced later stands for this one too, so it takes this one's use
-            // where it has none.
-            if let Some(i) = ended_at {
-                let kept = &mut irreducible_preds[*i];
-                if kept.required_by.is_none() {
-                    kept.required_by = pred.required_by;
-                }
-            }
+        if deduction.settled.contains(&pred_str) {
             return Ok(());
         }
         if deduction.on_path.contains(&pred_str) {
@@ -2770,7 +2769,7 @@ impl TypeCheckContext {
                     irreducible_preds,
                     deduction,
                 )?;
-                deduction.settled.insert(pred_str, None);
+                deduction.settled.insert(pred_str);
                 return Ok(());
             } else if !unifiable {
                 // If match fails, then we cannot reduce the predicate at now.
@@ -2783,9 +2782,7 @@ impl TypeCheckContext {
         if !unifiable {
             return Err(UnificationErr::Unsatisfiable(pred).into());
         }
-        deduction
-            .settled
-            .insert(pred_str, Some(irreducible_preds.len()));
+        deduction.settled.insert(pred_str);
         irreducible_preds.push(pred);
         return Ok(());
     }
@@ -3531,12 +3528,10 @@ struct PredicateDeduction {
     /// The printed form of each predicate on `path`. Meeting one of these again is meeting a
     /// predicate whose deduction needs itself.
     on_path: Set<String>,
-    /// The printed form of each predicate whose deduction ended. A predicate kept to be deduced later
-    /// maps to its index in the `irreducible_preds` of `reduce_predicate`. Recorded on the way out,
-    /// so that a predicate the deduction is still inside is not taken for one already deduced. It
-    /// keeps a predicate that several instance contexts ask for from being deduced once for each of
-    /// them.
-    settled: Map<String, Option<usize>>,
+    /// The printed form of each predicate whose deduction ended. Recorded on the way out, so that a
+    /// predicate the deduction is still inside is not taken for one already deduced. It keeps a
+    /// predicate that several instance contexts ask for from being deduced once for each of them.
+    settled: Set<String>,
 }
 
 impl PredicateDeduction {
