@@ -998,9 +998,9 @@ main : IO () = pure();
     );
 }
 
-/// A trait constraint left from an earlier expression, whose type an earlier expression settled, is
-/// reported at the use of the value that required it when the next name is overloaded and one of
-/// its values fails to match for a reason of its own.
+/// A trait constraint that an earlier expression required and that already fails before the next
+/// name is checked is reported at the use of the value that required it, when the next name is
+/// overloaded and one of its values fails to match for a reason of its own.
 #[test]
 pub fn test_a_constraint_failing_before_an_overloaded_name_is_checked_is_reported_at_the_value_that_required_it(
 ) {
@@ -1032,9 +1032,9 @@ main : IO () = (
     test_source_fail_excludes(source, Configuration::develop_mode(), "No value named `g`");
 }
 
-/// A trait constraint left from an earlier expression, whose type an earlier expression settled, is
-/// reported at the use of the value that required it when the next name has one value, which fails
-/// to match for a reason of its own.
+/// A trait constraint that an earlier expression required and that already fails before the next
+/// name is checked is reported at the use of the value that required it, when the next name has one
+/// value and that value fails to match for a reason of its own.
 #[test]
 pub fn test_a_constraint_failing_before_a_name_of_one_value_is_checked_is_reported_at_the_value_that_required_it(
 ) {
