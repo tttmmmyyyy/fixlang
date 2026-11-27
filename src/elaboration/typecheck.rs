@@ -1341,25 +1341,6 @@ impl TypeCheckContext {
                     .filter(|cand| cand.is_ok())
                     .count();
                 if ok_count == 0 {
-                    // A constraint left from an earlier expression that fails without any value of
-                    // this name is reported at the expression that required it.
-                    let mut without_candidates = self.clone();
-                    if let Err(e) =
-                        UnifOrOtherErr::extract_others(without_candidates.reduce_predicates())?
-                    {
-                        if let Some(site) = e.required_by() {
-                            let e = without_candidates
-                                .substitution
-                                .substitute_unification_error(&e);
-                            let mut error = without_candidates.create_report_at_site(
-                                &without_candidates.tyvar_sources,
-                                site,
-                                &e,
-                            );
-                            error.code = Some(ERR_NO_VALUE_MATCH);
-                            return Err(Errors::from_err(error));
-                        }
-                    }
                     let failed_checks = candidates_check_res
                         .iter()
                         .filter_map(|cand| cand.as_ref().err())
@@ -1375,28 +1356,49 @@ impl TypeCheckContext {
                             )
                         })
                         .collect::<Vec<_>>();
-                    // A constraint left from an earlier expression can fail here, once this name
-                    // settles the type it is on. When every candidate fails on one such constraint,
-                    // it is reported at the expression that required it.
-                    let earlier_use = failed_checks
-                        .iter()
-                        .map(|(_, _, _, e)| e.required_by())
-                        .reduce(|site1, site2| match (site1, site2) {
-                            (Some(site1), Some(site2)) if Arc::ptr_eq(site1, site2) => Some(site1),
-                            _ => None,
-                        })
-                        .expect("a name with no candidate is reported before the candidates are checked")
-                        .filter(|site| {
-                            !sites_of_candidates
-                                .iter()
-                                .any(|own| Arc::ptr_eq(own, site))
+                    // A constraint left from an earlier expression that fails without any value of
+                    // this name is reported at the expression that required it.
+                    let mut without_candidates = self.clone();
+                    let failure_without_candidates =
+                        UnifOrOtherErr::extract_others(without_candidates.reduce_predicates())?
+                            .err();
+                    let report_without_candidates =
+                        failure_without_candidates.as_ref().and_then(|e| {
+                            Some(without_candidates.create_report_at_site(
+                                &without_candidates.tyvar_sources,
+                                e.required_by()?,
+                                e,
+                            ))
                         });
-                    let mut error = if let Some(site) = earlier_use {
-                        // The types are those the failed check settled, which include the ones
-                        // that make the constraint fail.
-                        let (tc, _, _, _) = failed_checks[0];
-                        let (tyvar_sources, _, _, e) = &failures[0];
-                        tc.create_report_at_site(tyvar_sources, site, e)
+                    // A constraint left from an earlier expression can also fail once this name
+                    // settles the type it is on. When every candidate fails on one such constraint,
+                    // it is reported at the expression that required it, with the types the failed
+                    // check settled.
+                    let report_at_earlier_use = report_without_candidates.or_else(|| {
+                        let site = failed_checks
+                            .iter()
+                            .map(|(_, _, _, e)| e.required_by())
+                            .reduce(|site1, site2| match (site1, site2) {
+                                (Some(site1), Some(site2)) if Arc::ptr_eq(site1, site2) => {
+                                    Some(site1)
+                                }
+                                _ => None,
+                            })
+                            .expect(
+                                "a name with no candidate is reported before the candidates are checked",
+                            )
+                            .filter(|site| {
+                                !sites_of_candidates
+                                    .iter()
+                                    .any(|own| Arc::ptr_eq(own, site))
+                            })?;
+                        let (tc, _, _, e) = failed_checks[0];
+                        let (tyvar_sources, _, _, _) = &failures[0];
+                        Some(tc.create_report_at_site(tyvar_sources, site, e))
+                    });
+                    let at_earlier_use = report_at_earlier_use.is_some();
+                    let mut error = if let Some(error) = report_at_earlier_use {
+                        error
                     } else if let [(tyvar_sources, fullname, scm, e)] = failures.as_slice() {
                         self.create_use_mismatch_report(
                             tyvar_sources,
@@ -1417,9 +1419,7 @@ impl TypeCheckContext {
                     error.code = Some(ERR_NO_VALUE_MATCH);
                     // The name this expression writes is what the editor offers to import, so a
                     // report on an earlier expression carries none.
-                    error.data = earlier_use
-                        .is_none()
-                        .then(|| Value::String(var.name.to_string()));
+                    error.data = (!at_earlier_use).then(|| Value::String(var.name.to_string()));
                     return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
                     // FullName of candidates.
@@ -1890,8 +1890,8 @@ impl TypeCheckContext {
     }
 
     /// Build the error saying that the use `site` does not match the type it was expected to have,
-    /// with the types the inference of this context has settled. `e`, with those types, is the
-    /// failure of deducing a constraint of the scheme of that use.
+    /// with the types the inference of this context has settled. `e` is the failure of deducing a
+    /// constraint of the scheme of that use.
     fn create_report_at_site(
         &self,
         tyvar_sources: &TyVarSources,
@@ -1903,7 +1903,7 @@ impl TypeCheckContext {
             &site.value,
             &self.substitution.substitute_scheme(&site.scheme),
             &self.substitute_type(&site.expected_ty),
-            e,
+            &self.substitution.substitute_unification_error(e),
             &Some(site.span.clone()),
         )
     }
