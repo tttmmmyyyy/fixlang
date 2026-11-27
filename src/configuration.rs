@@ -527,8 +527,7 @@ pub struct Configuration {
     /// relocations, and an executable is the kind that carries the entry point.
     pub output_file_type: OutputFileType,
     /// Whether the program is built to run several threads, which makes its reference counting
-    /// safe to share between them at the cost of speed. Turn it on through `set_threaded`, which
-    /// also links the pthread library.
+    /// safe to share between them at the cost of speed.
     pub threaded: bool,
     /// The macros the runtime's C sources are compiled with, each of which turns on a part of it.
     pub runtime_c_macro: Vec<String>,
@@ -899,13 +898,6 @@ impl Configuration {
             None => PathBuf::from(self.output_file_type.default_file_name()),
             Some(out_file_path) => out_file_path.clone(),
         }
-    }
-
-    /// Builds the program to run several threads, and links the pthread library its runtime then
-    /// calls into.
-    pub fn set_threaded(&mut self) {
-        self.threaded = true;
-        self.add_dynamic_library("pthread");
     }
 
     /// Generates the debug information a debugger reads, and takes the optimization level down to

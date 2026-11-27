@@ -36,9 +36,10 @@ pub const RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE: &str = "fixruntime_shift_amount_out
 pub const RUNTIME_FLOAT_TO_INTEGER_OUT_OF_RANGE: &str = "fixruntime_float_to_integer_out_of_range";
 /// libc `sprintf`, which writes a formatted value into a buffer the caller provides.
 pub const RUNTIME_SPRINTF: &str = "sprintf";
-/// libc `pthread_once`, which runs an initializer at the first thread to reach it and makes every
-/// other thread wait for that run to finish.
-pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
+/// The runtime function a `--threaded` build initializes each global value through. It takes the
+/// global's initialization flag and a function of no arguments that stores the value, runs that
+/// function in the first thread to reach it, and returns in every thread once the value is stored.
+pub const RUNTIME_RUN_ONCE: &str = "fixruntime_run_once";
 /// The runtime function giving the number of command line arguments the program was started with.
 pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";
 /// The runtime function giving the command line argument at an index, as a C string.
@@ -133,7 +134,7 @@ pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     );
     build_sprintf_function(gc, mode);
     if gc.config.threaded {
-        build_pthread_once_function(gc, mode);
+        build_run_once_function(gc, mode);
     }
     build_get_argc_function(gc, mode);
     build_get_argv_function(gc, mode);
@@ -239,15 +240,15 @@ fn build_sprintf_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     declare_external_runtime_function(gc, mode, RUNTIME_SPRINTF, fn_ty);
 }
 
-/// Declare `pthread_once`, which takes the flag recording whether the initializer has run and the
-/// initializer itself. A multi-threaded program initializes each global through it.
-pub fn build_pthread_once_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
+/// Declare `fixruntime_run_once`, which takes a global value's initialization flag and the function
+/// storing the value.
+fn build_run_once_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let fn_ty = gc
         .context
         .void_type()
         .fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
-    declare_external_runtime_function(gc, mode, RUNTIME_PTHREAD_ONCE, fn_ty);
+    declare_external_runtime_function(gc, mode, RUNTIME_RUN_ONCE, fn_ty);
 }
 
 /// Build `fixruntime_get_argc`, which returns the number of command line arguments the program was

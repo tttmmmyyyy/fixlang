@@ -1215,7 +1215,7 @@ fn test_a_struct_of_functions_marked_threaded_keeps_its_lambdas() {
         println((b2.@g)(5).to_string + " " + (b2.@h)(5).to_string);;"#,
     );
     let mut config = Configuration::develop_mode();
-    config.set_threaded();
+    config.threaded = true;
     assert_source_prints(&source, config, "15 14");
 }
 

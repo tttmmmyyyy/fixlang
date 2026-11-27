@@ -708,7 +708,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
         // Set `threaded`.
         if args.contains_id("threaded") {
-            config.set_threaded();
+            config.threaded = true;
         }
 
         // Set `sanitizer`.

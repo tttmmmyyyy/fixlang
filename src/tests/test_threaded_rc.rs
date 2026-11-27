@@ -168,7 +168,7 @@ fn test_threaded_orderings_are_checkable_optimized() {
 #[test]
 fn test_threaded_build_checks_its_uniqueness_proofs() {
     let mut config = Configuration::develop_mode();
-    config.set_threaded();
+    config.threaded = true;
     let output = run_source_capture(SOURCE, config);
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),

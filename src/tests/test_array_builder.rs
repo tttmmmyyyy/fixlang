@@ -276,7 +276,7 @@ main : IO () = (
 );
 "#;
         let mut config = Configuration::develop_mode();
-        config.set_threaded();
+        config.threaded = true;
         test_source(source, config);
     }
 
@@ -445,7 +445,7 @@ main : IO () = (
 );
 "#;
         let mut config = Configuration::develop_mode();
-        config.set_threaded();
+        config.threaded = true;
         test_source(source, config);
     }
 

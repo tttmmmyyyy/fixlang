@@ -10,8 +10,10 @@ The C functions and values the Fix standard library is implemented with.
 #include <errno.h>
 #include <inttypes.h>
 #include <math.h>
+#include <sched.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -45,6 +47,42 @@ int64_t fixruntime_clock()
 double fixruntime_clocks_to_sec(int64_t clocks)
 {
     return (double)(clock_t)clocks / CLOCKS_PER_SEC;
+}
+
+// The values of a global value's initialization flag, which the generated accessor of the global
+// reads before it reads the value. `INIT_FLAG_UNINITIALIZED` and `INIT_FLAG_INITIALIZED` in
+// `constants.rs` give the first two, and the two definitions must stay the same.
+//
+// The value is not stored yet.
+#define FIXRUNTIME_UNINITIALIZED 0
+// The value is stored, and stays as it is for the rest of the program.
+#define FIXRUNTIME_INITIALIZED 1
+// A thread is running the function that stores the value.
+#define FIXRUNTIME_INITIALIZING 2
+
+// Runs `init`, which stores a global value, in the first thread to reach it, and returns in every
+// thread once `init` has returned in that one. `flag` is the global's initialization flag. A
+// `--threaded` build calls this where the accessor of the global finds the flag unset, and the
+// accessor reads the flag with acquire ordering.
+//
+// A thread that arrives while another runs `init` waits by giving up the processor until the flag
+// is set. Two threads meet here only when both read a global value for the first time at once.
+__attribute__((cold)) void fixruntime_run_once(uint8_t *flag, void (*init)(void))
+{
+    uint8_t state = FIXRUNTIME_UNINITIALIZED;
+    if (__atomic_compare_exchange_n(flag, &state, FIXRUNTIME_INITIALIZING, false, __ATOMIC_RELAXED,
+                                    __ATOMIC_RELAXED))
+    {
+        init();
+        // Release ordering makes what `init` stored visible to every thread whose acquire read of
+        // the flag finds it set.
+        __atomic_store_n(flag, FIXRUNTIME_INITIALIZED, __ATOMIC_RELEASE);
+        return;
+    }
+    while (__atomic_load_n(flag, __ATOMIC_ACQUIRE) != FIXRUNTIME_INITIALIZED)
+    {
+        sched_yield();
+    }
 }
 
 // File handle resistant to being closed multiple times.

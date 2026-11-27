@@ -912,13 +912,13 @@ impl ProjectFile {
         // Set threaded-mode.
         if let Some(threaded) = self.build.threaded {
             if threaded {
-                config.set_threaded();
+                config.threaded = true;
             }
         }
         if mode == BuildConfigType::Test {
             if let Some(threaded) = self.build.test.as_ref().and_then(|test| test.threaded) {
                 if threaded {
-                    config.set_threaded();
+                    config.threaded = true;
                 }
             }
         }
