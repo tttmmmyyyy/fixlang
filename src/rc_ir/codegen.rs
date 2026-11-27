@@ -10,11 +10,11 @@ use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
 use crate::constants::{
-    init_flag_type, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, DYNAMIC_OBJ_CAP_IDX,
-    INIT_FLAG_INITIALIZED, INIT_FLAG_UNINITIALIZED,
+    CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, DYNAMIC_OBJ_CAP_IDX, INIT_FLAG_INITIALIZED,
+    INIT_FLAG_UNINITIALIZED,
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
-use crate::fixstd::runtime::RUNTIME_RUN_ONCE;
+use crate::fixstd::runtime::{init_flag_type, RUNTIME_RUN_ONCE};
 use crate::generator::{
     enum_attribute_kind_id, global_accessor_name, module_functions, object_file_symbol_name,
     Generator, Object,

@@ -1,13 +1,15 @@
 use crate::configuration::OutputFileType;
 use crate::constants::{
-    init_flag_type, C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV,
+    C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, INIT_FLAG_BITS,
     INIT_FLAG_INITIALIZED, INIT_FLAG_INITIALIZING, INIT_FLAG_UNINITIALIZED,
 };
 use crate::generator::Generator;
+use crate::object::int_type_of_bits;
 use crate::tbaa::MemoryRegion;
 use inkwell::attributes::AttributeLoc;
+use inkwell::context::Context;
 use inkwell::module::Linkage;
-use inkwell::types::{BasicMetadataTypeEnum, FunctionType};
+use inkwell::types::{BasicMetadataTypeEnum, FunctionType, IntType};
 use inkwell::values::{BasicValue, FunctionValue};
 use inkwell::{AddressSpace, AtomicOrdering, IntPredicate};
 
@@ -243,6 +245,12 @@ fn build_sprintf_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
         true,
     );
     declare_external_runtime_function(gc, mode, RUNTIME_SPRINTF, fn_ty);
+}
+
+/// The integer type of a global value's initialization flag, which holds one of the
+/// `INIT_FLAG_*` values.
+pub fn init_flag_type<'c>(context: &'c Context) -> IntType<'c> {
+    int_type_of_bits(context, INIT_FLAG_BITS)
 }
 
 /// Build `fixruntime_run_once`, which takes a global value's initialization flag and the function
