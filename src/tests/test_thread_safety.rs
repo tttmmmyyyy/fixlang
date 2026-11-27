@@ -3,9 +3,9 @@
 //!
 //! `Std::mark_threaded` is what puts a value's reference count into the mode that updates it
 //! atomically, and the promise is that a program which uses it has no data race in its reference
-//! counting. The `hammer` program shares one value with eight threads and asks ThreadSanitizer
-//! whether the promise held. Its control is the same program run without the call. It has to be
-//! reported: a check that cannot fail says nothing about the runs where it passes.
+//! counting. The `hammer` program shares one value with eight threads, and ThreadSanitizer reports
+//! whether the promise held. Its control runs the same program without the call, and ThreadSanitizer
+//! has to report a race there: a check that cannot fail says nothing about the runs where it passes.
 //!
 //! A global value is computed on its first read, and the promise is that threads reading it for the
 //! first time together see it computed once and read it whole. The `first_read` program reads one

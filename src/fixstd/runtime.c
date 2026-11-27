@@ -49,8 +49,8 @@ double fixruntime_clocks_to_sec(int64_t clocks)
     return (double)(clock_t)clocks / CLOCKS_PER_SEC;
 }
 
-// A thread is running the function that stores a global value, which is the value of the global's
-// initialization flag while the function runs. The compiler gives the flag's other two values as
+// The value of a global value's initialization flag while a thread runs the function that stores
+// the value. The compiler gives the flag's other two values as
 // `FIXRUNTIME_INIT_FLAG_UNINITIALIZED` and `FIXRUNTIME_INIT_FLAG_INITIALIZED`, defined when it
 // compiles this source (`runtime_c_shared_values` in `runtime.rs`).
 #define FIXRUNTIME_INIT_FLAG_INITIALIZING 2

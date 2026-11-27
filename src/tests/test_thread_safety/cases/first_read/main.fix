@@ -11,7 +11,7 @@ squares = (
 );
 
 // `start` plus the sum of the elements of `squares`, which every thread computes. A thread that read
-// the value before the initializing thread had stored all of it gets another sum.
+// the value before the initializing thread had stored all of it gets a different sum.
 sum_squares : I64 -> I64;
 sum_squares = |start| squares.to_iter.fold(start, Add::add);
 FFI_EXPORT[sum_squares, fix_sum_squares];
