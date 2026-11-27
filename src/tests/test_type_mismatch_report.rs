@@ -777,8 +777,8 @@ main : IO () = (
 }
 
 /// A trait constraint that the type of a value states, and that an associated type in that type asks
-/// for as well, is reported at the use of that value when it fails at a later name, even where the
-/// copy the associated type asks for is found failing first.
+/// for as well, is reported at the use of that value when it fails at a later name, whichever of the
+/// two asks for the constraint first.
 #[test]
 pub fn test_a_constraint_an_associated_type_asks_for_failing_at_a_later_name_is_reported_at_its_value(
 ) {
