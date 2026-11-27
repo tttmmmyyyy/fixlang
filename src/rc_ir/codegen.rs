@@ -10,8 +10,8 @@ use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
 use crate::constants::{
-    CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, DYNAMIC_OBJ_CAP_IDX, INIT_FLAG_INITIALIZED,
-    INIT_FLAG_UNINITIALIZED,
+    init_flag_type, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, DYNAMIC_OBJ_CAP_IDX,
+    INIT_FLAG_INITIALIZED, INIT_FLAG_UNINITIALIZED,
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_RUN_ONCE;
@@ -805,7 +805,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             owned_linkage,
         );
 
-        let flag_ty = self.context.i8_type();
+        let flag_ty = init_flag_type(self.context);
         let init_flag_ptr = self.add_global_variable(
             &format!("InitFlag#{}", object_file_symbol_name(&global_init.symbol)),
             flag_ty.into(),
@@ -822,14 +822,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         // flag with acquire ordering, so that a thread finding the flag set also finds the value
         // the initializing thread stored before setting it.
         let flag = self
-            .build_load(MemoryRegion::Data, flag_ty, init_flag_ptr, "load_init_flag")
+            .build_load_ordered(
+                MemoryRegion::Data,
+                flag_ty,
+                init_flag_ptr,
+                self.config.threaded.then_some(AtomicOrdering::Acquire),
+                "load_init_flag",
+            )
             .into_int_value();
-        if self.config.threaded {
-            flag.as_instruction_value()
-                .expect("a load is an instruction")
-                .set_atomic_ordering(AtomicOrdering::Acquire)
-                .expect("a load takes acquire ordering");
-        }
         let is_not_initialized = self
             .builder()
             .build_int_compare(

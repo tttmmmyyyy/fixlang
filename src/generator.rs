@@ -1228,6 +1228,28 @@ impl<'c, 'm> Generator<'c, 'm> {
         loaded
     }
 
+    /// Emit a load of `ty` from `ptr` under `ordering`, an access into `region`, naming the loaded
+    /// value `name` in the emitted code. A load with no `ordering` is a plain one, as `build_load`
+    /// emits.
+    pub fn build_load_ordered<T: BasicType<'c>>(
+        &self,
+        region: MemoryRegion,
+        ty: T,
+        ptr: PointerValue<'c>,
+        ordering: Option<AtomicOrdering>,
+        name: &str,
+    ) -> BasicValueEnum<'c> {
+        let loaded = self.build_load(region, ty, ptr, name);
+        if let Some(ordering) = ordering {
+            loaded
+                .as_instruction_value()
+                .expect("a load is an instruction")
+                .set_atomic_ordering(ordering)
+                .expect("a load takes an atomic ordering");
+        }
+        loaded
+    }
+
     /// Emit a store of `value` through `ptr`, an access into `region`, and return the store.
     pub fn build_store<V: BasicValue<'c>>(
         &self,
@@ -1441,20 +1463,14 @@ impl<'c, 'm> Generator<'c, 'm> {
     ) -> IntValue<'c> {
         let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
         let refcnt = self
-            .build_load(
+            .build_load_ordered(
                 MemoryRegion::Refcnt,
                 refcnt_type(self.context),
                 ptr_to_refcnt,
+                acquire.then_some(AtomicOrdering::Acquire),
                 &format!("refcnt{}", name_suffix),
             )
             .into_int_value();
-        if acquire {
-            refcnt
-                .as_instruction_value()
-                .unwrap()
-                .set_atomic_ordering(AtomicOrdering::Acquire)
-                .expect("Set atomic ordering failed");
-        }
         let one = refcnt_type(self.context).const_int(1, false);
         self.builder()
             .build_int_compare(

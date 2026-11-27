@@ -1,3 +1,5 @@
+use inkwell::{context::Context, types::IntType};
+
 pub const NAMESPACE_SEPARATOR: &str = "::";
 pub const MODULE_SEPARATOR: &str = ".";
 
@@ -491,6 +493,12 @@ pub const FUNC_ARGS_MAX: u32 = 100;
 pub const TUPLE_SIZE_BASE: u32 = 3;
 // Is tuple unboxed?
 pub const TUPLE_UNBOX: bool = true;
+
+/// The integer type of a global value's initialization flag, which holds one of the
+/// `INIT_FLAG_*` values.
+pub fn init_flag_type<'c>(context: &'c Context) -> IntType<'c> {
+    context.i8_type()
+}
 
 /// The value of a global value's initialization flag before the value is stored. A global's
 /// accessor reads the flag before it reads the value.
