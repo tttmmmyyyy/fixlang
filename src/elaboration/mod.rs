@@ -70,6 +70,12 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // Validate constraints of global value type.
     program.validate_global_value_type_constraints()?;
 
+    // Check that each `TEST[...]` pragma names a global value. Runs before
+    // `validate_import_statements`, which would otherwise report a missing value at the reference
+    // the program built by `fix test` makes to it, and after `add_methods` and
+    // `create_trait_member_symbols`, which add global values.
+    program.validate_test_statement_names()?;
+
     // Check if all items referred in import statements are defined.
     // This check should be done after `add_methods` and `create_trait_member_symbols`.
     program.validate_import_statements()?;
@@ -84,10 +90,10 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // the type variables in it.
     program.validate_overlapping_instances()?;
 
-    // Check that each `TEST[...]` pragma names a global value of type `IO ()`. Runs after the
-    // namespaces and the type aliases of the declarations are resolved, which the type it compares
-    // is written in.
-    program.validate_test_statements()?;
+    // Check that each value a `TEST[...]` pragma names has type `IO ()`. Runs after the namespaces
+    // and the type aliases of the declarations are resolved, which the type it compares is written
+    // in.
+    program.validate_test_statement_types()?;
 
     // If typechecking is not needed, return here.
     if !config.subcommand.typecheck() {

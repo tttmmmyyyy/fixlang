@@ -2603,9 +2603,9 @@ impl Program {
         errors.to_result()
     }
 
-    /// Checks the `TEST[...]` pragmas: each names, by a path relative to where it is written, a
-    /// global value declared at type `IO ()`, and no two of them name one value.
-    pub fn validate_test_statements(&self) -> Result<(), Errors> {
+    /// Checks the names the `TEST[...]` pragmas write: each names, by a path relative to where it is
+    /// written, a global value of the program, and no two of them name one value.
+    pub fn validate_test_statement_names(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         // The pragma that first names each value.
         let mut first_pragmas: Map<FullName, Option<Span>> = Map::default();
@@ -2639,8 +2639,16 @@ impl Program {
                     ),
                     &[&stmt.src],
                 ));
-                continue;
             }
+        }
+        errors.to_result()
+    }
+
+    /// Checks that each value a `TEST[...]` pragma names is declared at type `IO ()`. The names are
+    /// checked first (see `validate_test_statement_names`).
+    pub fn validate_test_statement_types(&self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+        for stmt in &self.test_statements {
             errors.eat_err(self.check_value_has_type(
                 &stmt.value_name,
                 &make_io_unit_ty(),

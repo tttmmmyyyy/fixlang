@@ -358,9 +358,9 @@ fn test_tests_of_a_dependency_are_not_run() {
     );
 }
 
-/// A `TEST[...]` pragma is checked wherever the program is compiled, `fix build` included: it names
-/// a global value declared under where it is written, by a relative path, at type `IO ()`, no other
-/// pragma names that value, and its mark is `ignore`.
+/// A `TEST[...]` pragma is checked wherever the program is compiled, and `fix build` and `fix test`
+/// report its errors at the pragma: it names a global value declared under where it is written, by
+/// a relative path, at type `IO ()`, no other pragma names that value, and its mark is `ignore`.
 #[test]
 fn test_malformed_test_pragmas_are_rejected() {
     for (pragma, error) in [
@@ -387,17 +387,21 @@ fn test_malformed_test_pragmas_are_rejected() {
     ] {
         let main = format!("module Main;\n{}\nmain : IO () = pure();\n", pragma);
         let dir = project_dir(&[("main.fix", &main)], &[]);
-        let output = fix_command()
-            .arg("build")
-            .current_dir(dir.path())
-            .output()
-            .expect("Failed to execute fix build");
-        assert!(
-            !output.status.success() && String::from_utf8_lossy(&output.stderr).contains(error),
-            "`fix build` rejects\n{}\nwith `{}`\n{}",
-            pragma,
-            error,
-            streams(&output)
-        );
+        for subcommand in ["build", "test"] {
+            let output = fix_command()
+                .arg(subcommand)
+                .current_dir(dir.path())
+                .output()
+                .expect("Failed to execute fix");
+            assert!(
+                !output.status.success()
+                    && String::from_utf8_lossy(&output.stderr).contains(error),
+                "`fix {}` rejects\n{}\nwith `{}`\n{}",
+                subcommand,
+                pragma,
+                error,
+                streams(&output)
+            );
+        }
     }
 }

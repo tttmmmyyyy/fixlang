@@ -11,7 +11,7 @@ use crate::parse::sourcefile::Span;
 pub struct TestStatement {
     /// The global value the test runs: the path the pragma writes, joined under `origin_namespace`.
     /// A path written absolute keeps `namespace.is_absolute`, so that
-    /// `Program::validate_test_statements` can reject it.
+    /// `Program::validate_test_statement_names` can reject it.
     pub value_name: FullName,
     /// The span of the last name of the path (`bar` in `TEST[Foo::bar];`), for the references the
     /// language server finds.
