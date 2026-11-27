@@ -2823,8 +2823,8 @@ impl TypeCheckContext {
         if !unifiable {
             return Err(UnificationErr::Unsatisfiable(pred).into());
         }
-        deduction.settled.insert(pred_str);
         irreducible_preds.push(pred);
+        deduction.settled.insert(pred_str);
         return Ok(());
     }
 
