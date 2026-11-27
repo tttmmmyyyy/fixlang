@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sched.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -48,10 +49,12 @@ static void rendezvous(void) {
     pthread_mutex_unlock(&gate);
 }
 
-static void *worker(void *unused) {
-    (void)unused;
-    rendezvous();
-    int64_t sum = fix_sum_squares(0);
+// Set by the first thread of the waiting group to finish reading the global value. It is written
+// and read with relaxed ordering, so that a thread of the late group finding it set has no
+// happens-before edge to the initializing thread other than the one the global's accessor makes.
+static int read_done;
+
+static void check(int64_t sum) {
     // The sum of i * i for i in [0, SIZE).
     int64_t expected = (int64_t)(SIZE - 1) * SIZE * (2 * SIZE - 1) / 6;
     if (sum != expected) {
@@ -59,14 +62,34 @@ static void *worker(void *unused) {
                 (long long)expected);
         abort();
     }
+}
+
+// A thread of the waiting group: arrives with the others while the initializer is running.
+static void *waiting_reader(void *unused) {
+    (void)unused;
+    rendezvous();
+    check(fix_sum_squares(0));
+    __atomic_store_n(&read_done, 1, __ATOMIC_RELAXED);
     return 0;
 }
 
-// Reads the global value from `threads` threads at once, and waits for them.
+// A thread of the late group: reads the global value once a thread of the waiting group has read
+// it, and so finds the initialization flag set.
+static void *late_reader(void *unused) {
+    (void)unused;
+    while (!__atomic_load_n(&read_done, __ATOMIC_RELAXED)) sched_yield();
+    check(fix_sum_squares(0));
+    return 0;
+}
+
+// Reads the global value from two groups of `threads` threads, and waits for them. The waiting
+// group reaches the global value while its initializer is running, and the late group after it
+// has finished.
 void read_from_threads(int threads) {
-    assert(threads >= 1 && threads <= MAX_THREADS);
+    assert(threads >= 1 && 2 * threads <= MAX_THREADS);
     pthread_t ids[MAX_THREADS];
     participants = threads;
-    for (int i = 0; i < threads; i++) pthread_create(&ids[i], 0, worker, 0);
-    for (int i = 0; i < threads; i++) pthread_join(ids[i], 0);
+    for (int i = 0; i < threads; i++) pthread_create(&ids[i], 0, late_reader, 0);
+    for (int i = threads; i < 2 * threads; i++) pthread_create(&ids[i], 0, waiting_reader, 0);
+    for (int i = 0; i < 2 * threads; i++) pthread_join(ids[i], 0);
 }
