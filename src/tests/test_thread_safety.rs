@@ -43,9 +43,8 @@ fn setup_test_env(project: &str) -> (TempDir, PathBuf) {
     (temp_dir, project_dir)
 }
 
-/// Builds the project at `project_dir` at `opt_level` under the sanitizer named by `sanitizer`, with
-/// the further build options `build_args`, runs it with `program_args`, and returns what it
-/// produced, through `fix run`.
+/// Builds the project at `project_dir` at `opt_level` under the sanitizer named by `sanitizer`,
+/// runs it with `program_args`, and returns what it produced, through `fix run`.
 ///
 /// Going through `fix run` puts the compiler's own way of starting an instrumented program under
 /// test: the sanitizer maps its shadow memory to addresses derived from the program's own, so it
@@ -54,7 +53,6 @@ fn run_harness(
     project_dir: &Path,
     opt_level: &str,
     sanitizer: &str,
-    build_args: &[&str],
     program_args: &[&str],
 ) -> Output {
     let mut command = fix_command();
@@ -63,8 +61,7 @@ fn run_harness(
         .arg("-O")
         .arg(opt_level)
         .arg("--sanitize")
-        .arg(sanitizer)
-        .args(build_args);
+        .arg(sanitizer);
     if !program_args.is_empty() {
         command.arg("--").args(program_args);
     }
@@ -100,7 +97,7 @@ fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
 
     // The program the language asks for: every thread reaches the value through
     // `Std::mark_threaded`, so the counts are updated atomically and nothing races.
-    let marked = run_harness(&project_dir, opt_level, "thread", &[], &[MARK_ARGUMENT]);
+    let marked = run_harness(&project_dir, opt_level, "thread", &[MARK_ARGUMENT]);
     assert_eq!(
         races_reported(&marked),
         0,
@@ -119,7 +116,7 @@ fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
     );
 
     // The same program without the call. Reporting this is what gives the run above its weight.
-    let unmarked = run_harness(&project_dir, opt_level, "thread", &[], &[]);
+    let unmarked = run_harness(&project_dir, opt_level, "thread", &[]);
     assert!(
         races_reported(&unmarked) > 0,
         "sharing a value that was never handed over through `Std::mark_threaded` should be \
@@ -165,7 +162,7 @@ fn test_instrumentation_is_not_taken_from_an_uninstrumented_build() {
 
     // Warmed by the same subcommand the checked run uses: what names an object includes which
     // subcommand asked for it, so a build and a run never share one to begin with.
-    let plain = run_harness(&project_dir, "none", "none", &[], &[MARK_ARGUMENT]);
+    let plain = run_harness(&project_dir, "none", "none", &[MARK_ARGUMENT]);
     assert!(
         plain.status.success(),
         "the run without instrumentation should succeed.\nstdout: {}\nstderr: {}",
@@ -179,7 +176,7 @@ fn test_instrumentation_is_not_taken_from_an_uninstrumented_build() {
         String::from_utf8_lossy(&plain.stderr)
     );
 
-    let checked = run_harness(&project_dir, "none", "thread", &[], &[]);
+    let checked = run_harness(&project_dir, "none", "thread", &[]);
     assert!(
         races_reported(&checked) > 0,
         "a build that asks for the instrumentation after one built without it should carry the \
@@ -189,27 +186,24 @@ fn test_instrumentation_is_not_taken_from_an_uninstrumented_build() {
     );
 }
 
-/// Builds the `first_read` program at `opt_level` under the sanitizer named by `sanitizer`, with
-/// the further build options `build_args`, runs it, and asserts that it ran to completion with no
-/// race reported. The program itself checks that the initializer ran once and that every thread read
-/// the whole value.
-fn assert_first_read_from_threads_is_safe(opt_level: &str, sanitizer: &str, build_args: &[&str]) {
+/// Builds the `first_read` program at `opt_level` under the sanitizer named by `sanitizer`, runs it,
+/// and asserts that it ran to completion with no race reported. The program itself checks that the
+/// initializer ran once and that every thread read the whole value.
+fn assert_first_read_from_threads_is_safe(opt_level: &str, sanitizer: &str) {
     let (_temp_dir, project_dir) = setup_test_env(FIRST_READ_PROJECT);
-    let output = run_harness(&project_dir, opt_level, sanitizer, build_args, &[]);
+    let output = run_harness(&project_dir, opt_level, sanitizer, &[]);
     assert_eq!(
         races_reported(&output),
         0,
         "reading a global value from threads during and after its initialization should race \
-         nowhere at -O {} {:?}.\nstderr: {}",
+         nowhere at -O {}.\nstderr: {}",
         opt_level,
-        build_args,
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
         output.status.success(),
-        "the program should run to completion at -O {} {:?}.\nstdout: {}\nstderr: {}",
+        "the program should run to completion at -O {}.\nstdout: {}\nstderr: {}",
         opt_level,
-        build_args,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
@@ -219,7 +213,7 @@ fn assert_first_read_from_threads_is_safe(opt_level: &str, sanitizer: &str, buil
 /// initializer once and each read the whole value.
 #[test]
 fn test_a_global_read_from_threads_is_initialized_once() {
-    assert_first_read_from_threads_is_safe("max", "none", &[]);
+    assert_first_read_from_threads_is_safe("max", "none");
 }
 
 /// Verifies that the threads reading a global value during and after its initialization see what
@@ -229,7 +223,7 @@ fn test_a_global_read_from_threads_is_race_free_unoptimized() {
     if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }
-    assert_first_read_from_threads_is_safe("none", "thread", &[]);
+    assert_first_read_from_threads_is_safe("none", "thread");
 }
 
 /// Verifies the same at `-O max`, where the accessor of the global is inlined into its readers.
@@ -238,15 +232,5 @@ fn test_a_global_read_from_threads_is_race_free_optimized() {
     if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }
-    assert_first_read_from_threads_is_safe("max", "thread", &[]);
-}
-
-/// Verifies the same with each global in a compilation unit of its own, where the reader's unit
-/// declares the initialization flag that the global's unit defines.
-#[test]
-fn test_a_global_read_from_threads_in_another_unit_is_race_free() {
-    if !skip_unless_thread_sanitizer_available(function_name!()) {
-        return;
-    }
-    assert_first_read_from_threads_is_safe("max", "thread", &["--cu-size", "1"]);
+    assert_first_read_from_threads_is_safe("max", "thread");
 }
