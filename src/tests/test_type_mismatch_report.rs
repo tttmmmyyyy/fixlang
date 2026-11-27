@@ -649,8 +649,8 @@ main : IO () = (
     );
 }
 
-/// A trait constraint that the type of a value required, and that fails only once a later name
-/// settles the type it is on, is reported at the use of that value, with that value's type.
+/// A trait constraint that the type of a value required, and that is left undeduced until the next
+/// name is checked, is reported at the use of that value, with that value's type.
 #[test]
 pub fn test_a_constraint_failing_at_a_later_name_is_reported_at_the_value_that_required_it() {
     let source = r##"
