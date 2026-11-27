@@ -2675,7 +2675,11 @@ impl TypeCheckContext {
                 .iter()
                 .skip_while(|pred| pred.required_by.is_some())
                 .all(|pred| pred.required_by.is_none()),
-            "a predicate a use required is left after one no use required"
+            "a predicate a use required is left after one no use required: {:?}",
+            irreducible_preds
+                .iter()
+                .map(|pred| (pred.to_string(), pred.required_by.is_some()))
+                .collect::<Vec<_>>()
         );
         self.predicates = irreducible_preds;
         Ok(())
