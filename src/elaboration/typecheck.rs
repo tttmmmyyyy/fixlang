@@ -1306,7 +1306,8 @@ impl TypeCheckContext {
                         (TypeCheckContext, FullName, Arc<Scheme>, UnificationErr),
                     >,
                 > = vec![];
-                // The use of each candidate, which the constraints its scheme states carry.
+                // The site of this use under each candidate. Each constraint the candidate's scheme
+                // states carries that site.
                 let mut sites_of_candidates = vec![];
                 for (ns, scm) in &candidates {
                     let fullname = FullName::new(ns, &var.name.name);
@@ -1355,9 +1356,9 @@ impl TypeCheckContext {
                             )
                         })
                         .collect::<Vec<_>>();
-                    // A constraint every candidate fails on, left from an earlier expression, fails
-                    // here once this name settles the type it is on, and is reported at the
-                    // expression that required it.
+                    // A constraint left from an earlier expression can fail here, once this name
+                    // settles the type it is on. When every candidate fails on one such constraint,
+                    // it is reported at the expression that required it.
                     let earlier_use = failed_checks
                         .iter()
                         .map(|(_, _, _, e)| e.required_by())
@@ -2269,7 +2270,8 @@ impl TypeCheckContext {
             return Ok((expr, Errors::from_err(make_error(self, e, &src))));
         }
         if self.predicates.len() > 0 {
-            // The first is one a use required, where there is one, and the report points at it.
+            // `reduce_predicates` puts the predicates a use required first, so the report points
+            // at a use when one is left.
             let pred = &self.predicates[0];
             let e = UnificationErr::Unsatisfiable(pred.clone());
             return Ok((expr, Errors::from_err(make_error(self, e, &src))));
@@ -2651,14 +2653,15 @@ impl TypeCheckContext {
     /// Reduces predicates stored in `self.predicates` as long as possible.
     /// If a predicate is unsatisfiable, returns `Err`.
     ///
-    /// The predicates the use of a value required are deduced first. A predicate deduced on the way
-    /// to one of them then carries that use, also where a predicate no use required asks for it as
-    /// well, and so does the error when one of them cannot be deduced, so that the report can point
-    /// at that use. A predicate that an associated type asks for is required by no use, and it often
-    /// fails on the same type as a predicate that a use required. Reducing an associated type adds
-    /// such a predicate to `self.predicates` while the deduction runs.
+    /// The predicates that the use of a value required are deduced first. Each predicate their
+    /// deduction reaches carries that use, and keeps it when a predicate no use required reaches it
+    /// again later. An error on such a predicate carries the use as well, so the report can point at
+    /// that use. This matters for a predicate an associated type asks for: no use requires it, and it
+    /// often fails on the same type as a predicate a use required. Reducing an associated type adds
+    /// such predicates to `self.predicates` during the deduction, and they are deduced after the
+    /// ones a use required.
     ///
-    /// The predicates left to be deduced later keep that order: those a use required come first.
+    /// The predicates left to be deduced later keep this order: those a use required come first.
     pub(crate) fn reduce_predicates(&mut self) -> Result<(), UnifOrOtherErr> {
         let mut irreducible_preds = vec![];
         let mut deduction = PredicateDeduction::default();

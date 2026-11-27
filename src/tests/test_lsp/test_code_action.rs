@@ -213,8 +213,8 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// A name none of whose values in scope matches its use draws a quick fix importing the value
-    /// of that name another module declares.
+    /// When no value of a name in scope matches its use, the report draws a quick fix importing the
+    /// value of that name that another module declares.
     #[test]
     fn test_quickfix_imports_a_value_for_a_name_no_value_in_scope_matches() {
         let mut ctx = LspQuickFixCtx::setup("quickfix_import_for_a_mismatched_name", &["main.fix"]);
