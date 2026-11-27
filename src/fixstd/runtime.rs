@@ -1,5 +1,8 @@
 use crate::configuration::OutputFileType;
-use crate::constants::{C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
+use crate::constants::{
+    C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, INIT_FLAG_INITIALIZED,
+    INIT_FLAG_UNINITIALIZED,
+};
 use crate::generator::Generator;
 use crate::tbaa::MemoryRegion;
 use inkwell::attributes::AttributeLoc;
@@ -90,6 +93,18 @@ pub fn compiler_defined_c_function_reason(name: &str, output: OutputFileType) ->
         ));
     }
     None
+}
+
+/// The macros every compilation of `runtime.c` defines, as `NAME=VALUE`, which give the runtime the
+/// values it shares with the generated code.
+pub fn runtime_c_shared_values() -> Vec<String> {
+    vec![
+        format!(
+            "FIXRUNTIME_INIT_FLAG_UNINITIALIZED={}",
+            INIT_FLAG_UNINITIALIZED
+        ),
+        format!("FIXRUNTIME_INIT_FLAG_INITIALIZED={}", INIT_FLAG_INITIALIZED),
+    ]
 }
 
 /// Emits the runtime support functions into the module: their declarations when

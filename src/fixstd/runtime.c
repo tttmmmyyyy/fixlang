@@ -49,16 +49,15 @@ double fixruntime_clocks_to_sec(int64_t clocks)
     return (double)(clock_t)clocks / CLOCKS_PER_SEC;
 }
 
-// The values of a global value's initialization flag, which the generated accessor of the global
-// reads before it reads the value. `INIT_FLAG_UNINITIALIZED` and `INIT_FLAG_INITIALIZED` in
-// `constants.rs` give the first two, and the two definitions must stay the same.
-//
-// The value is not stored yet.
-#define FIXRUNTIME_UNINITIALIZED 0
-// The value is stored, and stays as it is for the rest of the program.
-#define FIXRUNTIME_INITIALIZED 1
-// A thread is running the function that stores the value.
-#define FIXRUNTIME_INITIALIZING 2
+// A thread is running the function that stores a global value, which is the value of the global's
+// initialization flag while the function runs. The compiler gives the flag's other two values as
+// `FIXRUNTIME_INIT_FLAG_UNINITIALIZED` and `FIXRUNTIME_INIT_FLAG_INITIALIZED`, defined when it
+// compiles this source (`runtime_c_shared_values` in `runtime.rs`).
+#define FIXRUNTIME_INIT_FLAG_INITIALIZING 2
+#if FIXRUNTIME_INIT_FLAG_INITIALIZING == FIXRUNTIME_INIT_FLAG_UNINITIALIZED ||                      \
+    FIXRUNTIME_INIT_FLAG_INITIALIZING == FIXRUNTIME_INIT_FLAG_INITIALIZED
+#error "the values of a global value's initialization flag must differ"
+#endif
 
 // Runs `init`, which stores a global value, in the first thread to reach it, and returns in every
 // thread once `init` has returned in that one. `flag` is the global's initialization flag. A
@@ -69,17 +68,17 @@ double fixruntime_clocks_to_sec(int64_t clocks)
 // is set. Two threads meet here only when both read a global value for the first time at once.
 __attribute__((cold)) void fixruntime_run_once(uint8_t *flag, void (*init)(void))
 {
-    uint8_t state = FIXRUNTIME_UNINITIALIZED;
-    if (__atomic_compare_exchange_n(flag, &state, FIXRUNTIME_INITIALIZING, false, __ATOMIC_RELAXED,
-                                    __ATOMIC_RELAXED))
+    uint8_t state = FIXRUNTIME_INIT_FLAG_UNINITIALIZED;
+    if (__atomic_compare_exchange_n(flag, &state, FIXRUNTIME_INIT_FLAG_INITIALIZING, false,
+                                    __ATOMIC_RELAXED, __ATOMIC_RELAXED))
     {
         init();
         // Release ordering makes what `init` stored visible to every thread whose acquire read of
         // the flag finds it set.
-        __atomic_store_n(flag, FIXRUNTIME_INITIALIZED, __ATOMIC_RELEASE);
+        __atomic_store_n(flag, FIXRUNTIME_INIT_FLAG_INITIALIZED, __ATOMIC_RELEASE);
         return;
     }
-    while (__atomic_load_n(flag, __ATOMIC_ACQUIRE) != FIXRUNTIME_INITIALIZED)
+    while (__atomic_load_n(flag, __ATOMIC_ACQUIRE) != FIXRUNTIME_INIT_FLAG_INITIALIZED)
     {
         sched_yield();
     }
