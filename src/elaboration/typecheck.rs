@@ -1365,7 +1365,7 @@ impl TypeCheckContext {
                                 .err();
                         failure.and_then(|e| {
                             let site = e.required_by()?;
-                            Some(without_candidates.create_report_at_site(
+                            Some(without_candidates.create_use_mismatch_report_at_site(
                                 &without_candidates.tyvar_sources,
                                 site,
                                 &e,
@@ -1396,7 +1396,7 @@ impl TypeCheckContext {
                             })?;
                         let (tc, _, _, e) = failed_checks[0];
                         let (tyvar_sources, _, _, _) = &failures[0];
-                        Some(tc.create_report_at_site(tyvar_sources, site, e))
+                        Some(tc.create_use_mismatch_report_at_site(tyvar_sources, site, e))
                     });
                     let at_earlier_use = report_at_earlier_use.is_some();
                     let mut error = if let Some(error) = report_at_earlier_use {
@@ -1894,7 +1894,7 @@ impl TypeCheckContext {
     /// Build the error saying that the use `site` does not match the type it was expected to have,
     /// with the types the inference of this context has settled. `e` is the failure of deducing a
     /// constraint of the scheme of that use.
-    fn create_report_at_site(
+    fn create_use_mismatch_report_at_site(
         &self,
         tyvar_sources: &TyVarSources,
         site: &InstantiationSite,
