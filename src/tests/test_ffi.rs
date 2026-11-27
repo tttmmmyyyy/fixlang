@@ -831,8 +831,8 @@ pub fn test_ffi_call_of_the_entry_point_at_another_signature_fails() {
     );
 }
 
-/// A multi-threaded program may call `sched_yield`, which its runtime also calls, at the signature
-/// C gives the function.
+/// Verifies that a `--threaded` program can call `sched_yield` through `FFI_CALL` at its C
+/// signature, although the runtime declares the same function.
 #[test]
 pub fn test_ffi_call_of_sched_yield_in_a_threaded_build() {
     let source = r##"

@@ -271,9 +271,8 @@ pub fn init_flag_type<'c>(context: &'c Context) -> IntType<'c> {
 /// the accessor does, so it sees what `init` stored before the release store set it. The
 /// compare-and-swap is relaxed: the thread that wins it reads nothing another thread wrote.
 ///
-/// A thread that arrives while another runs `init` keeps the processor between its calls to
-/// `sched_yield`. Two threads meet here only when both read a global value for the first time at
-/// once.
+/// A thread that arrives while another runs `init` spins, calling `sched_yield` on each turn of the
+/// loop. Two threads meet here only when both read a global value for the first time at once.
 fn build_run_once_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let sched_yield_ty = gc.context.i32_type().fn_type(&[], false);
@@ -286,7 +285,7 @@ fn build_run_once_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) 
     let Some(func) = declare_or_lookup_runtime_function(gc, mode, RUNTIME_RUN_ONCE, fn_ty) else {
         return;
     };
-    // A global's accessor calls this on the first read alone.
+    // A global's accessor calls this only until the global is initialized.
     gc.add_enum_attribute(func, "cold", AttributeLoc::Function);
     gc.add_enum_attribute(func, "noinline", AttributeLoc::Function);
     let flag_ptr = func.get_nth_param(0).unwrap().into_pointer_value();

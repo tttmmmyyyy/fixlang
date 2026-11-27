@@ -1229,8 +1229,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Emit a load of `ty` from `ptr` under `ordering`, an access into `region`, naming the loaded
-    /// value `name` in the emitted code. A load with no `ordering` is a plain one, as `build_load`
-    /// emits.
+    /// value `name` in the emitted code. A `None` ordering gives the plain load `build_load` emits.
     pub fn build_load_ordered<T: BasicType<'c>>(
         &self,
         region: MemoryRegion,
