@@ -890,3 +890,31 @@ main : IO () = (
          14:17-14:26 in ",
     );
 }
+
+/// A trait constraint that the value a name stands for requires, and that fails at that name, is
+/// reported with the type the name's context expects, as the context knew it before the name was
+/// checked.
+#[test]
+pub fn test_a_constraint_failing_at_the_name_that_required_it_quotes_the_type_its_context_expects()
+{
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let r = 1.0.rem;
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Std::F64 : Std::Rem` cannot be deduced.\n\
+         `Std::Rem::rem` of type `[a : Std::Rem] a -> a -> a` does not match the expected type `Std::F64 -> #1`.\n\n\
+         5:17-5:20 in ",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` is the type expected for `r`.\n\n5:9-5:10 in ",
+    );
+}

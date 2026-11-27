@@ -1351,61 +1351,61 @@ impl TypeCheckContext {
                             )
                         })
                         .collect::<Vec<_>>();
-                    // A constraint every candidate fails on, required by the value an expression
-                    // uses, is reported at that expression: a constraint left from an earlier
-                    // expression fails here once this name settles the type it is on.
-                    let required_by = failed_checks
+                    // A constraint every candidate fails on, left from an earlier expression, fails
+                    // here once this name settles the type it is on, and is reported at the
+                    // expression that required it. The constraints this context holds before the
+                    // candidates are checked are those the earlier expressions required.
+                    let earlier_use = failed_checks
                         .iter()
                         .map(|(_, _, _, e)| e.required_by())
                         .reduce(|site1, site2| match (site1, site2) {
                             (Some(site1), Some(site2)) if Arc::ptr_eq(site1, site2) => Some(site1),
                             _ => None,
                         })
-                        .expect("a name with no candidate is reported before the candidates are checked");
-                    let (mut error, name_to_import) = if let Some(site) = required_by {
+                        .expect("a name with no candidate is reported before the candidates are checked")
+                        .filter(|site| {
+                            self.predicates.iter().any(|pred| {
+                                pred.required_by
+                                    .as_ref()
+                                    .is_some_and(|held| Arc::ptr_eq(held, site))
+                            })
+                        });
+                    let mut error = if let Some(site) = earlier_use {
                         // The types are those the failed check settled, which include the ones
                         // that make the constraint fail.
                         let (tc, _, _, _) = failed_checks[0];
                         let (tyvar_sources, _, _, e) = &failures[0];
-                        let error = self.create_use_mismatch_report(
+                        self.create_use_mismatch_report(
                             tyvar_sources,
                             &site.value,
                             &tc.substitution.substitute_scheme(&site.scheme),
                             &tc.substitute_type(&site.expected_ty),
                             e,
                             &Some(site.span.clone()),
-                        );
-                        // The name this expression writes is what the editor offers to import, so
-                        // a report on an earlier expression carries none. The constraints this
-                        // context holds before the candidates are checked are those the earlier
-                        // expressions required.
-                        let at_earlier_use = self.predicates.iter().any(|pred| {
-                            pred.required_by
-                                .as_ref()
-                                .is_some_and(|held| Arc::ptr_eq(held, site))
-                        });
-                        (error, (!at_earlier_use).then(|| var.name.to_string()))
+                        )
                     } else if let [(tyvar_sources, fullname, scm, e)] = failures.as_slice() {
-                        let error = self.create_use_mismatch_report(
+                        self.create_use_mismatch_report(
                             tyvar_sources,
                             fullname,
                             scm,
                             &self.substitute_type(&ty),
                             e,
                             &ei.source,
-                        );
-                        (error, Some(var.name.to_string()))
+                        )
                     } else {
-                        let error = self.create_no_candidate_matches_report(
+                        self.create_no_candidate_matches_report(
                             &var.name,
                             &self.substitute_type(&ty),
                             &failures,
                             &ei.source,
-                        );
-                        (error, Some(var.name.to_string()))
+                        )
                     };
                     error.code = Some(ERR_NO_VALUE_MATCH);
-                    error.data = name_to_import.map(Value::String);
+                    // The name this expression writes is what the editor offers to import, so a
+                    // report on an earlier expression carries none.
+                    error.data = earlier_use
+                        .is_none()
+                        .then(|| Value::String(var.name.to_string()));
                     return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
                     // FullName of candidates.
