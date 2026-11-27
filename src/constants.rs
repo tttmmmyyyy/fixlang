@@ -1,4 +1,3 @@
-
 pub const NAMESPACE_SEPARATOR: &str = "::";
 pub const MODULE_SEPARATOR: &str = ".";
 
