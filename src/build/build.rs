@@ -3,7 +3,6 @@ use crate::configuration::{Configuration, LinkType, OutputFileType, Sanitizer};
 use crate::constants::INTERMEDIATE_PATH;
 use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
-use crate::fixstd::runtime::runtime_c_shared_values;
 use crate::misc::info_msg;
 use crate::project_fs::remove_inside_dot_fixlang;
 use rand::{thread_rng, Rng};
@@ -140,10 +139,7 @@ fn build_runtime_object(config: &Configuration) -> Result<PathBuf, Errors> {
         .arg(compiled_name)
         .arg("-c")
         .arg(RUNTIME_SOURCE_PATH);
-    for m in runtime_c_shared_values()
-        .iter()
-        .chain(&config.runtime_c_macro)
-    {
+    for m in &config.runtime_c_macro {
         com.arg(format!("-D{}", m));
     }
     if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
@@ -256,7 +252,6 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
 #[cfg(test)]
 mod tests {
     use super::{RUNTIME_SOURCE, RUNTIME_SOURCE_PATH};
-    use crate::fixstd::runtime::runtime_c_shared_values;
     use std::fs;
     use std::process::Command;
 
@@ -271,7 +266,6 @@ mod tests {
         let output = Command::new("gcc")
             .current_dir(build_dir.path())
             .args(["-O2", "-c", "-o", object, RUNTIME_SOURCE_PATH])
-            .args(runtime_c_shared_values().iter().map(|m| format!("-D{}", m)))
             .output()
             .expect("failed to run gcc");
         assert!(

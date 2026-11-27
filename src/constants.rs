@@ -494,14 +494,13 @@ pub const TUPLE_UNBOX: bool = true;
 
 /// The value of a global value's initialization flag before the value is stored. A global's
 /// accessor reads the flag before it reads the value.
-///
-/// `runtime.c` receives this value and `INIT_FLAG_INITIALIZED` from `runtime_c_shared_values`. A
-/// `--threaded` build gives the flag a third value, which `runtime.c` defines, while one thread
-/// computes the value.
 pub const INIT_FLAG_UNINITIALIZED: u64 = 0;
 /// The value of a global value's initialization flag once the value is stored, which it keeps for
 /// the rest of the program.
 pub const INIT_FLAG_INITIALIZED: u64 = 1;
+/// The value of a global value's initialization flag while a thread of a `--threaded` build runs
+/// the function storing the value. `fixruntime_run_once` alone writes it.
+pub const INIT_FLAG_INITIALIZING: u64 = 2;
 
 pub const GLOBAL_VAR_NAME_ARGC: &str = "fixruntime_argc";
 pub const GLOBAL_VAR_NAME_ARGV: &str = "fixruntime_argv";

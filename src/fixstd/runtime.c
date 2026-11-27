@@ -10,10 +10,8 @@ The C functions and values the Fix standard library is implemented with.
 #include <errno.h>
 #include <inttypes.h>
 #include <math.h>
-#include <sched.h>
 #include <signal.h>
 #include <stdarg.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -47,41 +45,6 @@ int64_t fixruntime_clock()
 double fixruntime_clocks_to_sec(int64_t clocks)
 {
     return (double)(clock_t)clocks / CLOCKS_PER_SEC;
-}
-
-// The value of a global value's initialization flag while a thread runs the function that stores
-// the value. The compiler gives the flag's other two values as
-// `FIXRUNTIME_INIT_FLAG_UNINITIALIZED` and `FIXRUNTIME_INIT_FLAG_INITIALIZED`, defined when it
-// compiles this source (`runtime_c_shared_values` in `runtime.rs`).
-#define FIXRUNTIME_INIT_FLAG_INITIALIZING 2
-#if FIXRUNTIME_INIT_FLAG_INITIALIZING == FIXRUNTIME_INIT_FLAG_UNINITIALIZED ||                      \
-    FIXRUNTIME_INIT_FLAG_INITIALIZING == FIXRUNTIME_INIT_FLAG_INITIALIZED
-#error "the values of a global value's initialization flag must differ"
-#endif
-
-// Runs `init`, which stores a global value, in the first thread to reach it, and returns in every
-// thread once `init` has returned in that one. `flag` is the global's initialization flag. A
-// `--threaded` build calls this where the accessor of the global finds the flag unset, and the
-// accessor reads the flag with acquire ordering.
-//
-// A thread that arrives while another runs `init` waits by giving up the processor until the flag
-// is set. Two threads meet here only when both read a global value for the first time at once.
-__attribute__((cold)) void fixruntime_run_once(uint8_t *flag, void (*init)(void))
-{
-    uint8_t state = FIXRUNTIME_INIT_FLAG_UNINITIALIZED;
-    if (__atomic_compare_exchange_n(flag, &state, FIXRUNTIME_INIT_FLAG_INITIALIZING, false,
-                                    __ATOMIC_RELAXED, __ATOMIC_RELAXED))
-    {
-        init();
-        // Release ordering makes what `init` stored visible to every thread whose acquire read of
-        // the flag finds it set.
-        __atomic_store_n(flag, FIXRUNTIME_INIT_FLAG_INITIALIZED, __ATOMIC_RELEASE);
-        return;
-    }
-    while (__atomic_load_n(flag, __ATOMIC_ACQUIRE) != FIXRUNTIME_INIT_FLAG_INITIALIZED)
-    {
-        sched_yield();
-    }
 }
 
 // File handle resistant to being closed multiple times.
