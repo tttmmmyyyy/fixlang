@@ -2663,7 +2663,7 @@ impl TypeCheckContext {
         let mut irreducible_preds = vec![];
         let mut deduction = PredicateDeduction::default();
         let (mut required_by_uses, required_by_none): (Vec<_>, Vec<_>) =
-            std::mem::take(&mut self.predicates)
+            mem::take(&mut self.predicates)
                 .into_iter()
                 .partition(|pred| pred.required_by.is_some());
         self.predicates = required_by_none;
