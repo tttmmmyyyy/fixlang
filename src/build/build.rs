@@ -140,7 +140,10 @@ fn build_runtime_object(config: &Configuration) -> Result<PathBuf, Errors> {
         .arg(compiled_name)
         .arg("-c")
         .arg(RUNTIME_SOURCE_PATH);
-    for m in runtime_c_shared_values().iter().chain(&config.runtime_c_macro) {
+    for m in runtime_c_shared_values()
+        .iter()
+        .chain(&config.runtime_c_macro)
+    {
         com.arg(format!("-D{}", m));
     }
     if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
