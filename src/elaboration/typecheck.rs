@@ -1358,18 +1358,20 @@ impl TypeCheckContext {
                         .collect::<Vec<_>>();
                     // A constraint left from an earlier expression that fails without any value of
                     // this name is reported at the expression that required it.
-                    let mut without_candidates = self.clone();
-                    let failure_without_candidates =
-                        UnifOrOtherErr::extract_others(without_candidates.reduce_predicates())?
-                            .err();
-                    let report_without_candidates =
-                        failure_without_candidates.as_ref().and_then(|e| {
+                    let report_without_candidates = {
+                        let mut without_candidates = self.clone();
+                        let failure =
+                            UnifOrOtherErr::extract_others(without_candidates.reduce_predicates())?
+                                .err();
+                        failure.and_then(|e| {
+                            let site = e.required_by()?;
                             Some(without_candidates.create_report_at_site(
                                 &without_candidates.tyvar_sources,
-                                e.required_by()?,
-                                e,
+                                site,
+                                &e,
                             ))
-                        });
+                        })
+                    };
                     // A constraint left from an earlier expression can also fail once this name
                     // settles the type it is on. When every candidate fails on one such constraint,
                     // it is reported at the expression that required it, with the types the failed
