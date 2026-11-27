@@ -1,0 +1,4 @@
+module Lib2;
+
+times_two : I64 -> I64;
+times_two = |n| n * 2;

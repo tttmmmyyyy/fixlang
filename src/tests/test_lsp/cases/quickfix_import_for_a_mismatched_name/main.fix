@@ -1,0 +1,11 @@
+module Main;
+
+import Lib;
+
+times_two : String -> String;
+times_two = |s| s + s;
+
+main : IO () = (
+    let n : I64 = times_two(21);
+    println(n.to_string)
+);

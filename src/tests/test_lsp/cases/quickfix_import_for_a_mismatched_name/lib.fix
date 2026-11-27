@@ -1,0 +1,4 @@
+module Lib;
+
+times_two : Bool -> Bool;
+times_two = |b| b;
