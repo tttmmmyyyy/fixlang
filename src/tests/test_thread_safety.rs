@@ -17,10 +17,11 @@ use std::path::{Path, PathBuf};
 use std::process::Output;
 use tempfile::TempDir;
 
-/// The argument that asks the program to hand the value over the way the language says to.
+/// The argument that asks the `hammer` program to hand the value over the way the language says
+/// to.
 const MARK_ARGUMENT: &str = "mark";
 
-/// What the program prints once the threads have finished with the value.
+/// What the `hammer` program prints once the threads have finished with the value.
 const EXPECTED_OUTPUT: &str = "ok";
 
 /// The project that shares one value with eight threads.
@@ -39,8 +40,8 @@ fn setup_test_env(project: &str) -> (TempDir, PathBuf) {
     (temp_dir, project_dir)
 }
 
-/// Builds the harness at `opt_level` under the sanitizer named by `sanitizer`, runs it with
-/// `program_args`, and returns what it produced, through `fix run`.
+/// Builds the project at `project_dir` at `opt_level` under the sanitizer named by `sanitizer`,
+/// runs it with `program_args`, and returns what it produced, through `fix run`.
 ///
 /// Going through `fix run` puts the compiler's own way of starting an instrumented program under
 /// test: the sanitizer maps its shadow memory to addresses derived from the program's own, so it
@@ -87,7 +88,7 @@ fn skip_unless_thread_sanitizer_available(test_name: &str) -> bool {
     false
 }
 
-/// Builds the harness at `opt_level` and asks ThreadSanitizer about both of its runs.
+/// Builds the `hammer` program at `opt_level` and asks ThreadSanitizer about both of its runs.
 fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
     let (_temp_dir, project_dir) = setup_test_env(HAMMER_PROJECT);
 
