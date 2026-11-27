@@ -1,0 +1,6 @@
+[general]
+name = "quickfix-import-for-a-mismatched-name"
+version = "0.1.0"
+
+[build]
+files = ["main.fix", "lib.fix", "lib2.fix"]
