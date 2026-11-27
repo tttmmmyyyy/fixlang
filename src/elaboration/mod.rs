@@ -84,6 +84,11 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // the type variables in it.
     program.validate_overlapping_instances()?;
 
+    // Check that each `TEST[...]` pragma names a global value of type `IO ()`. Runs after the
+    // namespaces and the type aliases of the declarations are resolved, which the type it compares
+    // is written in.
+    program.validate_test_statements()?;
+
     // If typechecking is not needed, return here.
     if !config.subcommand.typecheck() {
         assert!(!config.subcommand.build_binary());
@@ -143,14 +148,14 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         .deferred_errors
         .append(program.collect_diagnostics_of_typed_program(config));
 
-    // In a program built from several Fix examples, check that the `main` of each example has type
-    // `IO ()`, as an entry point must. The program calls each `main` as an `IO ()`, which a `main`
+    // In a program built from several tests, check that each value the program runs has type
+    // `IO ()`, as an entry point must. The program calls each of them as an `IO ()`, which a value
     // of a more general type, such as `[m : Monad] m ()`, can be instantiated to; this check makes
-    // such an example fail here as it fails when built alone.
-    if let Some(example_build) = &config.example_build {
+    // such a test fail here as it fails when built alone.
+    if let Some(test_build) = &config.test_build {
         let mut errors = Errors::empty();
-        for main in example_build.dispatched_mains() {
-            errors.eat_err(program.check_value_has_type(&main, &make_io_unit_ty(), &None));
+        for value in test_build.dispatched_values() {
+            errors.eat_err(program.check_value_has_type(value, &make_io_unit_ty(), &None));
         }
         errors.to_result()?;
     }
@@ -222,9 +227,9 @@ pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
         });
     }
     for (source, renaming) in config
-        .example_build
+        .test_build
         .iter()
-        .flat_map(|example_build| example_build.sources())
+        .flat_map(|test_build| test_build.sources())
     {
         let parse_result = parse_renamed_source_file(source, renaming, config);
         errors.eat_err_or(parse_result, |parsed_program| {

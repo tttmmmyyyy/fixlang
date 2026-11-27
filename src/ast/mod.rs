@@ -12,6 +12,7 @@ pub mod predicate;
 pub mod program;
 pub mod qual_pred;
 pub mod qual_type;
+pub mod test_statement;
 pub mod traits;
 pub mod traverse;
 pub mod type_agreement;

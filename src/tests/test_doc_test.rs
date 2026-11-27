@@ -1,16 +1,16 @@
 //! Tests of the Fix examples written in comments: the examples of `Std` itself, and what
 //! `fix test` does with the examples of a project.
 
-use crate::commands::test::{test_examples, ExampleOutcome};
+use crate::commands::test::{run_tests, TestCase, TestOutcome};
 use crate::configuration::Configuration;
 use crate::doc_test::{collect_examples, examples_in_text, TextLine};
 use crate::error::panic_if_err;
 use crate::parse::parser::parse_file_path;
 use crate::parse::sourcefile::{SourceFile, Span};
-use crate::tests::test_util::fix_command;
+use crate::tests::test_util::{fix_command, fix_test, project_dir, streams};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Output;
+use std::thread;
 use tempfile::TempDir;
 
 /// The Fix examples of `Std` pass: those of the comments in `std.fix`, and those of the
@@ -37,14 +37,19 @@ fn test_std_doc_examples() {
         )));
     }
 
+    let tests = examples
+        .iter()
+        .map(TestCase::of_example)
+        .collect::<Vec<_>>();
+    let threads = thread::available_parallelism().map_or(1, |threads| threads.get());
     let mut failures = vec![];
     let mut tested = 0;
-    let result = test_examples(&config, &examples, |example, outcome| match outcome {
-        ExampleOutcome::Ignored => {}
-        ExampleOutcome::Passed => tested += 1,
-        ExampleOutcome::Failed(failure) => {
+    let result = run_tests(&config, &tests, &[], threads, |index, outcome| match outcome {
+        TestOutcome::Ignored => {}
+        TestOutcome::Passed => tested += 1,
+        TestOutcome::Failed(failure) => {
             tested += 1;
-            failures.push(format!("{}:\n{}", example.location(), failure));
+            failures.push(format!("{}:\n{}", examples[index].location(), failure));
         }
     });
     panic_if_err(result);
@@ -75,9 +80,13 @@ fn test_example_of_std_narrows_std_by_its_import_statements() {
         &markdown_file_lines(&document),
         &"Std".to_string(),
     ));
+    let tests = examples
+        .iter()
+        .map(TestCase::of_example)
+        .collect::<Vec<_>>();
     let mut outcomes = vec![];
-    panic_if_err(test_examples(&config, &examples, |_, outcome| {
-        outcomes.push(matches!(outcome, ExampleOutcome::Failed(_)))
+    panic_if_err(run_tests(&config, &tests, &[], 1, |_, outcome| {
+        outcomes.push(matches!(outcome, TestOutcome::Failed(_)))
     }));
     assert_eq!(
         outcomes,
@@ -106,51 +115,6 @@ fn markdown_file_lines(path: &Path) -> Vec<TextLine> {
         line_start += line.len() + 1;
     }
     lines
-}
-
-/// A temporary directory holding a project whose `build` section lists `build_files` and whose
-/// `build.test` section lists `test_files`, each given as its path and its content.
-fn project_dir(build_files: &[(&str, &str)], test_files: &[(&str, &str)]) -> TempDir {
-    let dir = TempDir::new().expect("Failed to create temp directory");
-    let list = |files: &[(&str, &str)]| {
-        files
-            .iter()
-            .map(|(path, _)| format!("\"{}\"", path))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-    let mut project_file = format!(
-        "[general]\nname = \"doc-test-case\"\nversion = \"0.1.0\"\n\n[build]\nfiles = [{}]\n",
-        list(build_files)
-    );
-    if !test_files.is_empty() {
-        project_file += &format!("\n[build.test]\nfiles = [{}]\n", list(test_files));
-    }
-    fs::write(dir.path().join("fixproj.toml"), project_file)
-        .expect("Failed to write the project file");
-    for (path, content) in build_files.iter().chain(test_files) {
-        fs::write(dir.path().join(path), content).expect("Failed to write a source file");
-    }
-    dir
-}
-
-/// Runs `fix test` with `args` in `dir`.
-fn fix_test(dir: &TempDir, args: &[&str]) -> Output {
-    fix_command()
-        .arg("test")
-        .args(args)
-        .current_dir(dir.path())
-        .output()
-        .expect("Failed to execute fix test")
-}
-
-/// The standard error of `output`, followed by its standard output, for a failure message.
-fn streams(output: &Output) -> String {
-    format!(
-        "stderr:\n{}\nstdout:\n{}",
-        String::from_utf8_lossy(&output.stderr),
-        String::from_utf8_lossy(&output.stdout)
-    )
 }
 
 /// A module `Lib` whose comments hold a Fix example of each kind: one in the expression form,
@@ -199,11 +163,11 @@ test = (
 );
 "#;
 
-/// `fix test` runs `Test::test` and then each Fix example of the comments: an example in the
-/// expression form and one in the source form run and pass, one marked `no_run` is compiled alone,
-/// and one marked `ignore` is left out.
+/// `fix test` runs `Test::test` and each Fix example of the comments: an example in the expression
+/// form and one in the source form run and pass, one marked `no_run` is compiled alone, and one
+/// marked `ignore` is left out. What a passing test writes is not shown.
 #[test]
-fn test_fix_test_runs_the_test_function_and_then_the_examples() {
+fn test_fix_test_runs_the_test_function_and_the_examples() {
     let dir = project_dir(
         &[("lib.fix", LIB_WITH_PASSING_EXAMPLES)],
         &[("test.fix", TEST_ANNOUNCING_ITSELF)],
@@ -216,8 +180,8 @@ fn test_fix_test_runs_the_test_function_and_then_the_examples() {
         streams(&output)
     );
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("Test::test ran"),
-        "`Test::test` runs\n{}",
+        stderr.contains("test Test::test ... ok") && !streams(&output).contains("Test::test ran"),
+        "`Test::test` runs and passes, and what it writes is not shown\n{}",
         streams(&output)
     );
     for line in [4, 11, 21] {
@@ -255,7 +219,7 @@ fn test_fix_test_selects_the_tests_by_the_doc_options() {
         streams(&output)
     );
     assert!(
-        !String::from_utf8_lossy(&output.stdout).contains("Test::test ran"),
+        !String::from_utf8_lossy(&output.stderr).contains("Test::test"),
         "`--doc` leaves `Test::test` out\n{}",
         streams(&output)
     );
@@ -272,7 +236,7 @@ fn test_fix_test_selects_the_tests_by_the_doc_options() {
         streams(&output)
     );
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("Test::test ran"),
+        String::from_utf8_lossy(&output.stderr).contains("test Test::test ... ok"),
         "`--no-doc` runs `Test::test`\n{}",
         streams(&output)
     );
@@ -284,7 +248,7 @@ fn test_fix_test_selects_the_tests_by_the_doc_options() {
 }
 
 /// A project without `Test::test` has its Fix examples run alone, and a project with neither is
-/// reported as missing `Test::test`.
+/// reported as having no test to run.
 #[test]
 fn test_fix_test_without_the_test_function() {
     let dir = project_dir(&[("lib.fix", LIB_WITH_PASSING_EXAMPLES)], &[]);
@@ -307,8 +271,8 @@ fn test_fix_test_without_the_test_function() {
     let output = fix_test(&dir, &[]);
     assert!(
         !output.status.success()
-            && String::from_utf8_lossy(&output.stderr).contains("`Test::test` is not found"),
-        "a project with neither `Test::test` nor an example reports the missing `Test::test`\n{}",
+            && String::from_utf8_lossy(&output.stderr).contains("There is no test to run."),
+        "a project with neither `Test::test` nor an example reports that it has no test\n{}",
         streams(&output)
     );
 }

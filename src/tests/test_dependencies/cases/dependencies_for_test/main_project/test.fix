@@ -8,7 +8,5 @@ test = (
     // Test using both normal-dep and test-dep
     let greeting = NormalDep::greet("Test");
     let expected = "Hello from normal-dep, Test!";
-    let result = if greeting == expected { "PASS" } else { "FAIL" };
-    let msg = TestDep::assert_msg("test_greet", result);
-    println(msg)
+    assert_eq(|_| TestDep::assert_msg("test_greet", "FAIL"), greeting, expected)
 );

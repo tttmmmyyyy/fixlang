@@ -511,6 +511,18 @@ impl Span {
         self.start_line_col().0
     }
 
+    /// The file this span lies in and the line it begins on, as a report names a place.
+    ///
+    /// # Examples
+    /// `src/geometry.fix:12`
+    pub fn file_and_line(&self) -> String {
+        format!(
+            "{}:{}",
+            self.input.reported_path().to_string_lossy(),
+            self.start_line_no()
+        )
+    }
+
     /// The line and the column this span begins at. Both count from 1, and the column counts the
     /// characters of the line.
     pub fn start_line_col(&self) -> (usize, usize) {

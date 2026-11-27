@@ -191,6 +191,16 @@ pub(super) fn find_global_value_references(
         }
     }
 
+    // Walk `TEST[...]` pragmas: include the value-name span if the pragma
+    // names `target`.
+    for stmt in &program.test_statements {
+        if &stmt.value_name == target {
+            if let Some(span) = &stmt.value_name_src {
+                refs.push(span.clone());
+            }
+        }
+    }
+
     refs
 }
 

@@ -1106,6 +1106,20 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// Renaming a global value rewrites the name inside the `TEST[...]` pragma naming it, and the
+    /// name inside the pragma renames the value: the declaration on line 2, the definition on
+    /// line 3 and the pragma on line 4 are each rewritten.
+    #[test]
+    fn test_rename_test_pragma_name() {
+        for (line, col) in [(2, 0), (4, 5)] {
+            let mut ctx = LspTestCtx::setup("rename_test_pragma", &["main.fix"]);
+            let we = ctx.rename("main.fix", line, col, "fresh_test");
+            assert_eq!(count_edits(&we), 3, "WorkspaceEdit: {:?}", we);
+            assert_all_edits_have_new_text(&we, "fresh_test");
+            ctx.shutdown();
+        }
+    }
+
     // =======================================================================
     // rename_index_syntax fixture (0-indexed):
     //

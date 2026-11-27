@@ -2,10 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+#### Language
+
+- #1078: The pragma `TEST[f];` (Experimental) declares a global value `f` of type `IO ()` as a test, which `fix test` runs and reports under its full name. `TEST[f, ignore];` has `fix test` report the test as ignored without running it.
+
+#### Tool
+
+- #1078: `fix test --filter <text>` runs the tests whose names contain `<text>`, and `fix test --test-threads <n>` runs `<n>` tests at once, where the default is the number of CPUs.
+
 ### Changed
 
 #### Tool
 
+- #1078: `fix test` runs `Test::test`, the tests `TEST[...]` declares and the Fix examples alike: each in a process of its own, several at once, with a line reporting it as it ends. What a test writes is shown, after every test has ended, only when it fails, and the counts of the tests now cover `Test::test`. `fix test` fails when no test is selected, and takes `-o` only when one test is selected, which `-o` keeps the executable of.
 - #1028: In the language server, hover and go to definition on the parentheses or a comma of a tuple, or on `()`, now answer nothing. Hover there used to show `Std::Tuple2` or `()`.
 
 ### Fixed

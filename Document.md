@@ -100,6 +100,7 @@
     - [Registry file](#registry-file)
     - [Deprecation](#deprecation)
     - [Tests](#tests)
+        - [Declaring tests with `TEST` (Experimental)](#declaring-tests-with-test-experimental)
         - [Fix examples in comments (Experimental)](#fix-examples-in-comments-experimental)
     - [Generating documentation](#generating-documentation)
     - [Language Server Protocol](#language-server-protocol)
@@ -3022,7 +3023,7 @@ The following table shows how each setting is handled.
             <td>-o, --output</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Output file path. The field names the file <code>fix build</code> writes. <code>fix run</code> and <code>fix test</code> build an executable in a temporary place and run it; giving them <code>-o</code> keeps that executable at the path it names, which is how the program a failing test ran is kept for a debugger.</td>
+            <td>Output file path. The field names the file <code>fix build</code> writes. <code>fix run</code> and <code>fix test</code> build an executable in a temporary place and run it; giving them <code>-o</code> keeps that executable at the path it names, which is how the program a failing test ran is kept for a debugger. <code>fix test</code> takes <code>-o</code> where its options select one test (see <a href="#tests">Tests</a>).</td>
         </tr>
         <tr>
             <td>output_type</td>
@@ -3265,11 +3266,67 @@ In the LSP, deprecation warnings are published with `DiagnosticSeverity.WARNING`
 
 ## Tests
 
-When you run `fix test`, it executes `Test::test : IO ()`, and then each Fix example (i.e., each code block marked `fix`) written in the comments (see [Fix examples in comments (Experimental)](#fix-examples-in-comments-experimental)).
-Also, at this time, the source files listed in the `build.test` section of the project file are compiled in addition to the source files listed in the `build` section.
+`fix test` runs the tests of a project, each in a process of its own, and reports whether each of them passed. A test is one of the following, written in a file listed in the `build` or `build.test` section of the project file:
 
-- `fix test --doc` runs the Fix examples alone, and `fix test --no-doc` runs `Test::test` alone.
-- `fix test` exits with a non-zero status if `Test::test` or an example fails.
+- `Test::test : IO ()`.
+- A global value of type `IO ()` a `TEST[...]` pragma names (see [Declaring tests with `TEST` (Experimental)](#declaring-tests-with-test-experimental)).
+- A Fix example, i.e., a code block marked `fix`, written in a comment (see [Fix examples in comments (Experimental)](#fix-examples-in-comments-experimental)).
+
+The tests in dependencies are not run. The source files listed in the `build.test` section are compiled in addition to the source files listed in the `build` section.
+
+A test passes when its program exits with status 0, so a failing `assert_eq`, `undefined` or an index out of range makes it fail. What a test writes to the standard output and the standard error is collected, and shown when the test fails.
+
+`fix test` reports each test on a line of its own as it ends. When every test has ended, it shows what each failed test wrote, the names of the failed tests, and how many tests passed, failed, and were ignored, in all and of each kind:
+
+```
+test Test::test ... ok
+test Lib::parse_empty ... FAILED
+doc test lib.fix:5 ... ok
+doc test lib.fix:23 ... ignored
+
+---- Lib::parse_empty (lib.fix:40) ----
+The program ended with signal: 6 (SIGABRT) (core dumped).
+Assertion failed!: parse("")
+
+failures:
+    Lib::parse_empty
+
+test result: 2 passed, 1 failed, 1 ignored.
+    tests: 1 passed, 1 failed, 0 ignored.
+    doc tests: 1 passed, 0 failed, 1 ignored.
+```
+
+A test is named by the full name of its value (`Test::test`, `Lib::parse_empty`), and a Fix example by the file and the line it begins at (`lib.fix:5`). The heading of a failure shows where a `TEST[...]` test is declared beside its name.
+
+The options of `fix test` select the tests and how they run:
+
+- `--doc` runs the Fix examples alone, and `--no-doc` runs `Test::test` and the values `TEST[...]` pragmas name.
+- `--filter <text>` runs the tests whose names contain `<text>`, such as `fix test --filter Lib::parse_`. Given more than once, it runs the tests whose names contain any of the texts.
+- `--test-threads <n>` runs `<n>` tests at once. The default is the number of CPUs. Tests that write to one file interfere with each other when they run at once: give them files of their own, or run them with `--test-threads 1`.
+- The arguments after `--`, as in `fix test -- arg1 arg2`, are passed to every test.
+- `-o <path>` builds the one test the options select alone, runs it, and keeps its executable at `<path>`, which runs the test without any option. Select the test by `--filter`, as in `fix test --filter Lib::parse_empty -o a.out`.
+
+`fix test` exits with a non-zero status if a test fails, or if the options select no test.
+
+A compile error in a source file stops `fix test` before it runs any test. This includes an error in a value a `TEST[...]` pragma names, since every global value of the source files is type-checked. A Fix example that does not compile fails by itself, and the other tests still run.
+
+### Declaring tests with `TEST` (Experimental)
+
+This feature is experimental, and its specification may change in a later version.
+
+The `TEST[{value_path}];` pragma declares a global value of type `IO ()` as a test:
+
+```
+parse_empty : IO ();
+parse_empty = assert_eq(|_|"", parse(""), []);
+TEST[parse_empty];
+```
+
+`TEST[...]` may be written at the top level of a file and inside `namespace { ... }`. The `value_path` is a path relative to where the pragma is written, as the path of `DEPRECATED[...]` is (see [Deprecation](#deprecation)). The value must be declared with the type `IO ()`. The compiler reports an error, in `fix build` and the language server as well as in `fix test`, where a pragma names no global value, names a value of another type, or names a value another `TEST[...]` already names.
+
+`TEST[{value_path}, ignore];` marks the test as ignored: `fix test` reports it as ignored and does not run it. The value is type-checked as every global value is. Use it for a test that touches the network or that is too slow to run every time.
+
+`Test::test` is a test without a `TEST[...]` pragma naming it.
 
 ### Fix examples in comments (Experimental)
 
@@ -3361,7 +3418,7 @@ Marks after `fix`, separated by spaces, change what `fix test` does with an exam
 | `fix no_run` | Compiles the example (including type checking) without running it. Use it for an example that reads the standard input, touches files or the network, or does not terminate. |
 | `fix ignore` | Does nothing. Use it for a fragment that does not compile on its own. |
 
-`fix test` runs the Fix examples of every comment in the files listed in the `build` and `build.test` sections of the project file. The examples in dependencies are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
+`fix test` runs the Fix examples of every comment in the files listed in the `build` and `build.test` sections of the project file. The examples are built with the same settings as the other tests, so they can use the test dependencies.
 
 ## Generating documentation
 

@@ -1,0 +1,8 @@
+module Main;
+
+old_test : IO ();
+old_test = pure();
+TEST[old_test];
+
+main : IO ();
+main = pure();

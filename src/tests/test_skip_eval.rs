@@ -2,7 +2,9 @@
 //! the program.
 
 use crate::configuration::{Configuration, FixOptimizationLevel};
-use crate::tests::test_util::{assert_succeeded, run_fix, run_source_capture, setup_case_projects};
+use crate::tests::test_util::{
+    assert_succeeded, run_fix, run_kept_test, run_source_capture, setup_case_projects,
+};
 use std::path::Path;
 
 /// The directory holding this module's case projects.
@@ -242,6 +244,14 @@ fn stderr_of_run(project_dir: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stderr).to_string()
 }
 
+/// Runs `fix test` with the options `options` in `project_dir` and returns what the test printed to
+/// stderr, having asserted that the test passed.
+fn stderr_of_test(project_dir: &Path, options: &[&str]) -> String {
+    let output = run_kept_test(project_dir, options);
+    assert_succeeded(&output, "the test `fix test` kept should succeed.");
+    String::from_utf8_lossy(&output.stderr).to_string()
+}
+
 /// The `build` section decides the setting for the program.
 #[test]
 fn test_build_section_skips_the_evaluation_for_the_program() {
@@ -258,7 +268,7 @@ fn test_build_section_skips_the_evaluation_for_the_program() {
 #[test]
 fn test_build_section_keeps_the_evaluation_for_a_test() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_skip_in_build");
-    let stderr = stderr_of_run(&project_dir, &["test"]);
+    let stderr = stderr_of_test(&project_dir, &[]);
     assert!(
         stderr.contains(FROM_EVAL),
         "a test build should keep the evaluation.\nstderr: {}",
@@ -270,7 +280,7 @@ fn test_build_section_keeps_the_evaluation_for_a_test() {
 #[test]
 fn test_test_section_skips_the_evaluation_for_a_test() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_skip_in_test");
-    let stderr = stderr_of_run(&project_dir, &["test"]);
+    let stderr = stderr_of_test(&project_dir, &[]);
     assert!(
         !stderr.contains(FROM_EVAL),
         "the test section should skip the evaluation.\nstderr: {}",
@@ -297,13 +307,13 @@ fn test_test_section_keeps_the_evaluation_for_the_program() {
 #[test]
 fn test_option_skips_the_evaluation_for_a_test() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_skip_in_build");
-    let stderr_without_option = stderr_of_run(&project_dir, &["test"]);
+    let stderr_without_option = stderr_of_test(&project_dir, &[]);
     assert!(
         stderr_without_option.contains(FROM_EVAL),
         "a test build should keep the evaluation.\nstderr: {}",
         stderr_without_option
     );
-    let stderr_with_option = stderr_of_run(&project_dir, &["test", "--skip-eval"]);
+    let stderr_with_option = stderr_of_test(&project_dir, &["--skip-eval"]);
     assert!(
         !stderr_with_option.contains(FROM_EVAL),
         "`--skip-eval` should skip the evaluation, whichever subcommand it is given to.\nstderr: {}",

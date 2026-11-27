@@ -1315,6 +1315,71 @@ pub fn run_fix(project_dir: &Path, args: &[&str]) -> Output {
         .expect("Failed to execute fix")
 }
 
+/// A temporary directory holding a project whose `build` section lists `build_files` and whose
+/// `build.test` section lists `test_files`, each given as its path and its content.
+pub fn project_dir(build_files: &[(&str, &str)], test_files: &[(&str, &str)]) -> TempDir {
+    let dir = TempDir::new().expect("Failed to create temp directory");
+    let list = |files: &[(&str, &str)]| {
+        files
+            .iter()
+            .map(|(path, _)| format!("\"{}\"", path))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let mut project_file = format!(
+        "[general]\nname = \"test-case\"\nversion = \"0.1.0\"\n\n[build]\nfiles = [{}]\n",
+        list(build_files)
+    );
+    if !test_files.is_empty() {
+        project_file += &format!("\n[build.test]\nfiles = [{}]\n", list(test_files));
+    }
+    fs::write(dir.path().join("fixproj.toml"), project_file)
+        .expect("Failed to write the project file");
+    for (path, content) in build_files.iter().chain(test_files) {
+        fs::write(dir.path().join(path), content).expect("Failed to write a source file");
+    }
+    dir
+}
+
+/// Runs `fix test` with `args` in `dir`.
+pub fn fix_test(dir: &TempDir, args: &[&str]) -> Output {
+    fix_command()
+        .arg("test")
+        .args(args)
+        .current_dir(dir.path())
+        .output()
+        .expect("Failed to execute fix test")
+}
+
+/// The standard error of `output`, followed by its standard output, for a failure message.
+pub fn streams(output: &Output) -> String {
+    format!(
+        "stderr:\n{}\nstdout:\n{}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    )
+}
+
+/// Runs `fix test` with the options `args` in `project_dir`, keeping the executable of the one test
+/// they select, and fails the test unless `fix test` passes. Then runs that executable in
+/// `project_dir` and returns what it did.
+///
+/// `fix test` shows nothing of what a passing test writes, so a test reading what the program of a
+/// test build writes reads it from this run.
+pub fn run_kept_test(project_dir: &Path, args: &[&str]) -> Output {
+    let executable = project_dir.join("kept_test.out");
+    let executable_arg = executable.to_str().expect("the path is UTF-8");
+    let fix_args = [&["test", "-o", executable_arg], args].concat();
+    assert_succeeded(
+        &run_fix(project_dir, &fix_args),
+        &format!("`fix {}` should succeed.", fix_args.join(" ")),
+    );
+    Command::new(&executable)
+        .current_dir(project_dir)
+        .output()
+        .expect("Failed to run the executable `fix test` kept")
+}
+
 /// Runs `git` with `args` in `repo_dir`, and fails the test if it fails.
 pub fn run_git(repo_dir: &Path, args: &[&str]) {
     let status = Command::new("git")

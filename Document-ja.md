@@ -100,6 +100,7 @@
     - [レジストリファイル](#レジストリファイル)
     - [非推奨化（Deprecation）](#非推奨化deprecation)
     - [テスト](#テスト)
+        - [`TEST`によるテストの宣言（Experimental）](#testによるテストの宣言experimental)
         - [コメント中のFixの例（Experimental）](#コメント中のfixの例experimental)
     - [ドキュメントの生成](#ドキュメントの生成)
     - [Language Server Protocol](#language-server-protocol)
@@ -3128,7 +3129,7 @@ Fixプログラムをビルドする際の設定は、以下の場所に記述�
             <td>-o, --output</td>
             <td>上書き</td>
             <td>影響しない</td>
-            <td>出力ファイルパス。このフィールドは <code>fix build</code> が書き出すファイルを指します。<code>fix run</code> と <code>fix test</code> は一時的な場所に実行ファイルを作って実行し、<code>-o</code> を与えるとその実行ファイルを指定のパスに残します。テストが見つけた不具合をデバッガで追うときは、こうして残したバイナリを使います。</td>
+            <td>出力ファイルパス。このフィールドは <code>fix build</code> が書き出すファイルを指します。<code>fix run</code> と <code>fix test</code> は一時的な場所に実行ファイルを作って実行し、<code>-o</code> を与えるとその実行ファイルを指定のパスに残します。テストが見つけた不具合をデバッガで追うときは、こうして残したバイナリを使います。<code>fix test</code> に <code>-o</code> を与えられるのは、オプションが選ぶテストが 1 つのときです（<a href="#テスト">テスト</a>を参照）。</td>
         </tr>
         <tr>
             <td>output_type</td>
@@ -3371,11 +3372,67 @@ LSP では非推奨警告は `DiagnosticSeverity.WARNING` と `DiagnosticTag.DEP
 
 ## テスト
 
-`fix test`を実行すると、まず`Test::test : IO ()`が実行され、次にコメント中のFixの例（`fix`と指定したコードブロックのこと）が実行されます（[コメント中のFixの例（Experimental）](#コメント中のfixの例experimental)を参照）。
-また、このときは、プロジェクトファイルの`build`セクションに書かれているソースファイルのリストに加え、`build.test`セクションに書かれているソースファイルもコンパイルされます。
+`fix test`は、プロジェクトのテストを1つずつ別のプロセスで実行し、それぞれが通ったかどうかを報告します。テストは次のどれかで、プロジェクトファイルの`build`セクションか`build.test`セクションに書かれたファイルにあるものです：
 
-- `fix test --doc`とするとFixの例だけが、`fix test --no-doc`とすると`Test::test`だけが実行されます。
-- `Test::test`か例のどれかが失敗すると、`fix test`の終了ステータスは0以外になります。
+- `Test::test : IO ()`。
+- `TEST[...]`プラグマが指す、型が`IO ()`のグローバル値（[`TEST`によるテストの宣言（Experimental）](#testによるテストの宣言experimental)を参照）。
+- コメント中のFixの例、つまり`fix`と指定したコードブロック（[コメント中のFixの例（Experimental）](#コメント中のfixの例experimental)を参照）。
+
+依存プロジェクトのテストは実行されません。また、`fix test`は、`build`セクションに書かれているソースファイルに加え、`build.test`セクションに書かれているソースファイルもコンパイルします。
+
+テストは、そのプログラムが終了ステータス0で終わると通ります。`assert_eq`の失敗、`undefined`、範囲外の添字があればテストは失敗します。テストが標準出力と標準エラーに書いたものは集めておき、テストが失敗したときに表示します。
+
+`fix test`は、テストが終わるたびに1行ずつ報告します。すべてのテストが終わると、失敗したテストが書いたもの、失敗したテストの名前、通ったテスト・失敗したテスト・無視したテストの数（全体の数と種類ごとの数）を表示します：
+
+```
+test Test::test ... ok
+test Lib::parse_empty ... FAILED
+doc test lib.fix:5 ... ok
+doc test lib.fix:23 ... ignored
+
+---- Lib::parse_empty (lib.fix:40) ----
+The program ended with signal: 6 (SIGABRT) (core dumped).
+Assertion failed!: parse("")
+
+failures:
+    Lib::parse_empty
+
+test result: 2 passed, 1 failed, 1 ignored.
+    tests: 1 passed, 1 failed, 0 ignored.
+    doc tests: 1 passed, 0 failed, 1 ignored.
+```
+
+テストの名前は、`Test::test`と`TEST[...]`のテストでは値の完全な名前（`Test::test`、`Lib::parse_empty`）、Fixの例では例が始まるファイルと行（`lib.fix:5`）です。失敗の見出しには、`TEST[...]`のテストを宣言した位置が名前と並んで出ます。
+
+`fix test`のオプションで、実行するテストと実行の仕方を選べます：
+
+- `--doc`とするとFixの例だけが、`--no-doc`とすると`Test::test`と`TEST[...]`のテストだけが実行されます。
+- `--filter <文字列>`とすると、名前にその文字列を含むテストだけが実行されます（例：`fix test --filter Lib::parse_`）。何度も書くと、どれかの文字列を名前に含むテストが実行されます。
+- `--test-threads <n>`とすると、`<n>`個のテストを同時に実行します。既定はCPUの数です。同じファイルに書き込むテスト同士は、同時に実行すると互いを乱します。テストごとに別のファイルを使うか、`--test-threads 1`で実行してください。
+- `fix test -- arg1 arg2`のように`--`の後に書いた引数は、すべてのテストに渡されます。
+- `-o <パス>`とすると、オプションが選ぶ1つのテストだけをビルドして実行し、その実行ファイルを`<パス>`に残します。残った実行ファイルは、オプションなしで実行するとそのテストを実行します。テストは`--filter`で選びます（例：`fix test --filter Lib::parse_empty -o a.out`）。
+
+テストが1つでも失敗するか、オプションが選ぶテストが1つもないと、`fix test`の終了ステータスは0以外になります。
+
+ソースファイルにコンパイルエラーがあると、`fix test`はどのテストも実行せずに止まります。ソースファイルのグローバル値はすべて型検査されるので、`TEST[...]`が指す値のエラーもこれに当たります。コンパイルできないFixの例は、その例だけが失敗し、ほかのテストは実行されます。
+
+### `TEST`によるテストの宣言（Experimental）
+
+この機能は実験的なもので、仕様は今後の版で変わることがあります。
+
+`TEST[{value_path}];`プラグマは、型が`IO ()`のグローバル値をテストとして宣言します：
+
+```
+parse_empty : IO ();
+parse_empty = assert_eq(|_|"", parse(""), []);
+TEST[parse_empty];
+```
+
+`TEST[...]`は、ファイルのトップレベルと`namespace { ... }`の中に書けます。`value_path`は、`DEPRECATED[...]`のパスと同じく、プラグマを書いた場所からの相対パスです（[非推奨化（Deprecation）](#非推奨化deprecation)を参照）。値は型`IO ()`で宣言しなければなりません。プラグマが指すグローバル値がないとき、指す値の型が違うとき、指す値をほかの`TEST[...]`がすでに指しているときは、`fix test`だけでなく`fix build`と言語サーバーでもエラーになります。
+
+`TEST[{value_path}, ignore];`と書くと、テストは無視されます。`fix test`はそのテストを実行せず、無視したテストとして報告します。値は、ほかのグローバル値と同じく型検査されます。ネットワークにアクセスするテストや、毎回実行するには遅すぎるテストに使います。
+
+`Test::test`は、`TEST[...]`で指さなくてもテストになります。
 
 ### コメント中のFixの例（Experimental）
 
@@ -3467,7 +3524,7 @@ main : ::Std::IO () = (
 | `fix no_run` | コンパイル（型検査を含む）だけを行い、実行はしません。標準入力を読む例、ファイルやネットワークにアクセスする例、終了しない例に使います。 |
 | `fix ignore` | 何もしません。単独ではコンパイルできないコード片に使います。 |
 
-`fix test`が実行するのは、プロジェクトファイルの`build`セクションと`build.test`セクションに書かれたファイルのコメントにあるFixの例です。依存プロジェクトの例は実行されません。例は`Test::test`と同じ設定でビルドされるため、テスト用依存関係も使えます。
+`fix test`が実行するのは、プロジェクトファイルの`build`セクションと`build.test`セクションに書かれたファイルのコメントにあるFixの例です。例はほかのテストと同じ設定でビルドされるため、テスト用依存関係も使えます。
 
 ## ドキュメントの生成
 

@@ -3,10 +3,10 @@ use crate::build::cpu_features::{CpuFeatures, HostCpu, ValgrindCpu};
 use crate::constants::{
     DEFAULT_COMPILATION_UNIT_SIZE, MAIN_FUNCTION_NAME, MAIN_MODULE_NAME, MAX_SPLIT_SCALARS,
     OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
-    OPTIMIZATION_LEVEL_NONE, TEST_FUNCTION_NAME, TEST_MODULE_NAME,
+    OPTIMIZATION_LEVEL_NONE,
 };
-use crate::doc_test::ExampleBuild;
 use crate::elaboration::typecheckcache::SharedTypeCheckCache;
+use crate::test_build::TestBuild;
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::ffi::CNumericTypes;
@@ -493,8 +493,8 @@ pub struct Configuration {
     /// configures each project.
     pub project_sources: Vec<ProjectSources>,
     /// The Fix examples of comments the build compiles beside the sources. The value
-    /// `ExampleBuild::entry` names is then the entry point of the program.
-    pub example_build: Option<ExampleBuild>,
+    /// `TestBuild::entry` names is then the entry point of the program.
+    pub test_build: Option<TestBuild>,
     /// Object files given to the build, linked into the program beside the ones compiled from the
     /// sources.
     pub object_files: Vec<PathBuf>,
@@ -680,7 +680,7 @@ impl Configuration {
             extra_source_files: vec![],
             root_source_files: vec![],
             project_sources: vec![],
-            example_build: None,
+            test_build: None,
             object_files: vec![],
             fix_opt_level: env_vars::get_max_opt_level(),
             linked_libraries: vec![],
@@ -1158,7 +1158,7 @@ impl Configuration {
             extra_source_files: _,
             root_source_files: _,
             project_sources: _,
-            example_build: _,
+            test_build: _,
             preliminary_commands: _,
 
             // How the compiler goes about its work, which leaves what it produces alone. How many
@@ -1309,15 +1309,12 @@ impl Configuration {
     }
 
     /// The value of type `IO ()` the entry point of the program runs, which is what
-    /// `elaborate_via_config` instantiates it from: the entry of the Fix examples of a build of
-    /// them, `Test::test` for another test build, and `Main::main` otherwise.
+    /// `elaborate_via_config` instantiates it from: the entry of a build of `fix test`, and
+    /// `Main::main` otherwise.
     pub fn entry_io_value_name(&self) -> FullName {
-        if let Some(example_build) = &self.example_build {
-            example_build.entry()
-        } else if matches!(self.subcommand, SubCommand::Test) {
-            FullName::from_strs(&[TEST_MODULE_NAME], TEST_FUNCTION_NAME)
-        } else {
-            FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME)
+        match &self.test_build {
+            Some(test_build) => test_build.entry(),
+            None => FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME),
         }
     }
 

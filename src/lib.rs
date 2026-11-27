@@ -29,5 +29,6 @@ pub mod rc_ir;
 pub mod return_abi;
 pub mod target_triple;
 pub mod tbaa;
+pub mod test_build;
 pub mod tool;
 pub mod type_size;

@@ -382,7 +382,7 @@ import_item_capital_item = { namespace_item ~ (sep* ~ "::" ~ sep* ~ import_items
 // === Module ===
 module_defn = { "module" ~ sep+ ~ namespace_item ~ sep* ~ semicolon }
 
-global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn | trait_alias_defn | export_statement | deprecated_statement | trait_impl }
+global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn | trait_alias_defn | export_statement | deprecated_statement | test_statement | trait_impl }
 
 global_defns_in_namespace = { "namespace" ~ sep+ ~ namespace ~ sep* ~ "{" ~ (sep* ~ global_defns)* ~ sep* ~ "}" }
 
@@ -440,6 +440,14 @@ export_statement = { export_symbol ~ sep* ~ "[" ~ sep* ~ (fullname | underscore_
 deprecated_symbol = { "DEPRECATED" }
 
 deprecated_statement = { deprecated_symbol ~ sep* ~ "[" ~ sep* ~ (fullname | underscore_capital_value_fullname) ~ sep* ~ "," ~ sep* ~ expr_string_lit ~ sep* ~ "]" ~ sep* ~ semicolon }
+
+// === Test pragma ===
+test_symbol = { "TEST" }
+
+// The mark after the name, such as `ignore`, which the parser checks.
+test_mark = { name }
+
+test_statement = { test_symbol ~ sep* ~ "[" ~ sep* ~ (fullname | underscore_capital_value_fullname) ~ sep* ~ ("," ~ sep* ~ test_mark ~ sep*)? ~ "]" ~ sep* ~ semicolon }
 
 // === Comments ===
 block_comment = _{ "/*"  ~ block_commented_character*  ~ "*/" }

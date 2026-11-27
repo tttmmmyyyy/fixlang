@@ -65,16 +65,17 @@ pub const MAIN_MODULE_NAME: &str = "Main";
 /// The name of the entry point in the object file: the function the C runtime calls once it has set
 /// the process up, which the compiler generates to run the program's `IO` action.
 pub const C_ENTRY_POINT_NAME: &str = "main";
-/// The name of the Fix value `fix test` starts from: `Test::test`, of type `IO ()`.
+/// The name of the value `Test::test`, of type `IO ()`, which `fix test` runs as a test without a
+/// `TEST[...]` pragma naming it.
 pub const TEST_FUNCTION_NAME: &str = "test";
-/// The name of the module whose namespace holds the test entry point `Test::test`.
+/// The name of the module whose namespace holds `Test::test`.
 pub const TEST_MODULE_NAME: &str = "Test";
 /// The name of the module a Fix example of a comment is written as. Its `main : IO ()` is what
 /// `fix test` starts the example from.
 pub const DOC_TEST_MODULE_NAME: &str = "DocTest";
-/// The environment variable that tells a program built from several Fix examples which of them to
-/// run, by its index among them.
-pub const DOC_TEST_EXAMPLE_ENV_VAR: &str = "FIX_DOC_TEST_EXAMPLE";
+/// The environment variable that tells a program built from several tests which of them to run, by
+/// its index among them.
+pub const TEST_INDEX_ENV_VAR: &str = "FIX_TEST_INDEX";
 pub const BOXED_TRAIT_NAME: &str = "Boxed";
 pub const WITH_RETAINED_NAME: &str = "with_retained";
 #[allow(unused)]

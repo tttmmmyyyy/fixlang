@@ -61,30 +61,33 @@ fn assert_printed_the_answer(output: &Output, what_ran: &str) {
 }
 
 /// Every subcommand that builds a program takes `--develop-mode`, and what it builds runs and
-/// answers.
+/// answers. `fix test` shows nothing of what a passing test writes, so the answer of its test is
+/// read from the executable it keeps.
 #[test]
 pub fn test_every_building_subcommand_takes_develop_mode() {
-    for (subcommand, module, entry) in [("run", "Main", "main"), ("test", "Test", "test")] {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let output =
-            run_fix_on_source(subcommand, &source_for(module, entry), temp_dir.path(), &[]);
-        assert_printed_the_answer(&output, &format!("`fix {} --develop-mode`", subcommand));
-    }
-
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let program_path = temp_dir.path().join("program");
-    let output = run_fix_on_source(
-        "build",
-        &source_for("Main", "main"),
-        temp_dir.path(),
-        &["-o", program_path.to_str().unwrap()],
-    );
-    assert_succeeded(&output, "`fix build --develop-mode` should succeed.");
-    let run_output = Command::new(&program_path)
-        .output()
-        .expect("Failed to run the program the build produced");
-    assert_printed_the_answer(
-        &run_output,
-        "the program `fix build --develop-mode` produced",
-    );
+    let output = run_fix_on_source("run", &source_for("Main", "main"), temp_dir.path(), &[]);
+    assert_printed_the_answer(&output, "`fix run --develop-mode`");
+
+    for (subcommand, module, entry) in [("build", "Main", "main"), ("test", "Test", "test")] {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let program_path = temp_dir.path().join("program");
+        let output = run_fix_on_source(
+            subcommand,
+            &source_for(module, entry),
+            temp_dir.path(),
+            &["-o", program_path.to_str().unwrap()],
+        );
+        assert_succeeded(
+            &output,
+            &format!("`fix {} --develop-mode` should succeed.", subcommand),
+        );
+        let run_output = Command::new(&program_path)
+            .output()
+            .expect("Failed to run the program the build produced");
+        assert_printed_the_answer(
+            &run_output,
+            &format!("the program `fix {} --develop-mode` produced", subcommand),
+        );
+    }
 }

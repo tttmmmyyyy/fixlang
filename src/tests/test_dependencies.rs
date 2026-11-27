@@ -175,11 +175,12 @@ mod integration_tests {
             "Test lock file should contain test-dep"
         );
 
-        // Verify the test output shows success
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Verify the test ran and passed
+        let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stdout.contains("PASS"),
-            "Test should pass with correct output"
+            stderr.contains("test Test::test ... ok"),
+            "Test should run and pass\n{}",
+            stderr
         );
     }
 
@@ -347,11 +348,12 @@ mod integration_tests {
             "Test lock file should contain test-dep"
         );
 
-        // Verify test output
-        let stdout = String::from_utf8_lossy(&test_output.stdout);
+        // Verify the test ran and passed
+        let stderr = String::from_utf8_lossy(&test_output.stderr);
         assert!(
-            stdout.contains("PASS"),
-            "Test should pass with correct output"
+            stderr.contains("test Test::test ... ok"),
+            "Test should run and pass\n{}",
+            stderr
         );
     }
 

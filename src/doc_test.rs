@@ -5,21 +5,17 @@
 //! hidden: it is compiled with the `# ` taken off, and left out when a doc comment is shown to a
 //! reader. `fix test` compiles each example as the module `DocTest` and runs its `DocTest::main`.
 //! It compiles the examples of a program together into one program where it can (see
-//! `ExampleBuild`).
+//! `TestBuild`).
 
 use crate::{
-    ast::{
-        name::{FullName, Name},
-        program::Program,
-    },
-    constants::{DOC_TEST_EXAMPLE_ENV_VAR, DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME, STD_NAME},
-    error::{Error, Errors},
+    ast::{name::Name, program::Program},
+    constants::{DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME, STD_NAME},
+    error::Errors,
     hash::md5_hex,
     misc::{save_temporary_source, to_absolute_path, Set},
     parse::{
         parser::{
             comment_ranges, parse_source_module_defn, start_of_code_after_import_statements,
-            ModuleRenaming,
         },
         sourcefile::{line_comment_text, Insertion, LineOrigin, SourceFile, SourceOrigin, Span},
     },
@@ -161,16 +157,6 @@ pub enum ExampleTask {
     Ignore,
 }
 
-impl ExampleTask {
-    /// The source the task compiles, or `None` for a task that compiles nothing.
-    pub fn source(&self) -> Option<&SourceFile> {
-        match self {
-            ExampleTask::Run(source) | ExampleTask::Compile(source) => Some(source),
-            ExampleTask::Ignore => None,
-        }
-    }
-}
-
 impl FixExample {
     /// The place the example is reported at: the file its comment is written in and the line that
     /// opens it.
@@ -178,214 +164,7 @@ impl FixExample {
     /// # Examples
     /// `src/geometry.fix:12`
     pub fn location(&self) -> String {
-        format!(
-            "{}:{}",
-            self.fence.input.reported_path().to_string_lossy(),
-            self.fence.start_line_no()
-        )
-    }
-}
-
-/// The Fix examples a build of `fix test` compiles beside the sources of the program, and the
-/// value the program runs.
-#[derive(Clone)]
-pub struct ExampleBuild {
-    /// The examples, each with the name of the module it is compiled as.
-    examples: Vec<ExampleModule>,
-    /// The source of the module whose `main` runs the example whose index in `examples` the
-    /// environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives, where the build holds several
-    /// examples. A build of one example has none, and runs its `DocTest::main`.
-    dispatcher: Option<SourceFile>,
-}
-
-/// A Fix example as a build compiles it.
-#[derive(Clone)]
-struct ExampleModule {
-    /// The source assembled from the example, which declares the module `DocTest`.
-    source: SourceFile,
-    /// The name the module is compiled as.
-    name: Name,
-}
-
-/// The name of the module whose `main` runs one of the examples a build holds.
-const DISPATCHER_MODULE_NAME: &str = "DocTest.Examples";
-
-impl ExampleBuild {
-    /// The build of the example whose source is `source` alone, compiled as the module `DocTest`.
-    pub fn single(source: SourceFile) -> Self {
-        ExampleBuild {
-            examples: vec![ExampleModule {
-                source,
-                name: DOC_TEST_MODULE_NAME.to_string(),
-            }],
-            dispatcher: None,
-        }
-    }
-
-    /// The build of the examples whose sources are `sources` in one program, which runs the
-    /// example whose index in `sources` the environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives.
-    ///
-    /// Each example is compiled as a module `DocTest.Example<hash>.DocTest`, where `<hash>` is
-    /// taken from the path of its source. The path is decided by where the example stands and what
-    /// it holds, so an example keeps its name as other examples come and go, and the caches keyed
-    /// by the names of what it defines still answer for it. The name ends in `DocTest`, so a path
-    /// the example writes relative, such as `DocTest::helper`, reaches the module as it reaches
-    /// the module `DocTest` (see `NameSpace::is_suffix_of`). The parser renames the module at each
-    /// place the source names it (see `ModuleRenaming`).
-    ///
-    /// # Examples
-    /// An example whose source is at `.fixlang/tmp/src/doc_test.<origin>.<content>.fix` is
-    /// compiled as a module such as `DocTest.Example3f9c0a1b2d4e5f60.DocTest`.
-    pub fn merged(sources: Vec<SourceFile>) -> Result<Self, Errors> {
-        let examples = sources
-            .into_iter()
-            .map(|source| {
-                let hash = md5_hex(&source.file_path.to_string_lossy());
-                ExampleModule {
-                    name: format!("{0}.Example{1}.{0}", DOC_TEST_MODULE_NAME, &hash[..16]),
-                    source,
-                }
-            })
-            .collect::<Vec<_>>();
-        assert!(
-            examples
-                .iter()
-                .map(|example| example.name.as_str())
-                .chain(iter::once(DISPATCHER_MODULE_NAME))
-                .all(is_reserved_module_name),
-            "the modules a build of several examples adds have names reserved for the examples"
-        );
-        let dispatcher =
-            save_temporary_source(&dispatcher_source(&examples), "doc_test_dispatcher")?;
-        Ok(ExampleBuild {
-            examples,
-            dispatcher: Some(dispatcher),
-        })
-    }
-
-    /// Whether the build reports the warning `warning`. A build of one example is made where the
-    /// examples are tested one by one, after the sources were built alone and reported their
-    /// warnings, so it reports only the warnings that lie in its example. A build of several
-    /// examples reports every warning.
-    pub fn reports_warning(&self, warning: &Error) -> bool {
-        if self.dispatcher.is_some() {
-            return true;
-        }
-        warning.srcs.iter().any(|(_, span)| {
-            self.examples
-                .iter()
-                .any(|example| span.input == example.source)
-        })
-    }
-
-    /// The `main` of each example the dispatcher runs. A build of one example has none.
-    ///
-    /// The dispatcher calls each of them as a value of type `IO ()`, which a `main` declared at a
-    /// more general type, such as `[m : Monad] m ()`, also passes. A build checks each of them as it
-    /// checks the entry point (see `Program::check_value_has_type`), so that an example passes or
-    /// fails as it does in a build of its own.
-    pub fn dispatched_mains(&self) -> Vec<FullName> {
-        if self.dispatcher.is_none() {
-            return vec![];
-        }
-        self.examples
-            .iter()
-            .map(|example| FullName::from_strs(&[&example.name], MAIN_FUNCTION_NAME))
-            .collect()
-    }
-
-    /// The build of the program's sources with no example in them, whose entry runs nothing. It is
-    /// the build `merged` gives for no example, so the sources build under the entry and the
-    /// settings they build under with the examples.
-    pub fn without_examples() -> Result<Self, Errors> {
-        Self::merged(vec![])
-    }
-
-    /// The sources the build adds to the program, each with the renaming its module is compiled
-    /// under.
-    pub fn sources(&self) -> Vec<(SourceFile, Option<ModuleRenaming>)> {
-        let examples = self.examples.iter().map(|example| {
-            let renaming = ModuleRenaming {
-                written: DOC_TEST_MODULE_NAME.to_string(),
-                compiled: example.name.clone(),
-            };
-            (example.source.clone(), Some(renaming))
-        });
-        let dispatcher = self.dispatcher.iter().map(|source| (source.clone(), None));
-        examples.chain(dispatcher).collect()
-    }
-
-    /// The value the program runs: `main` of the dispatcher, or `DocTest::main` of the one example.
-    pub fn entry(&self) -> FullName {
-        let module = match self.dispatcher {
-            Some(_) => DISPATCHER_MODULE_NAME,
-            None => DOC_TEST_MODULE_NAME,
-        };
-        FullName::from_strs(&[module], MAIN_FUNCTION_NAME)
-    }
-}
-
-/// The source of the module `DocTest.Examples`, whose `main` runs the example of `examples` whose
-/// index the environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives.
-///
-/// The `main` of each example is read inside a function, so that a run reads only the `main` of
-/// the example it runs: a global value is evaluated when it is first read, and the value of a
-/// `main` can panic before any I/O action of it runs.
-fn dispatcher_source(examples: &[ExampleModule]) -> String {
-    let mains = examples
-        .iter()
-        .map(|example| format!("        |_| ::{}::{}", example.name, MAIN_FUNCTION_NAME))
-        .collect::<Vec<_>>()
-        .join(",\n");
-    format!(
-        r#"module {module};
-
-{main} : IO () = (
-    let value = *"{var}".borrow_c_str_io(|name| FFI_CALL_IO[Ptr fixruntime_getenv(Ptr), name]);
-    let index : I64 = String::unsafe_from_c_str_ptr(value).from_string.as_ok;
-    let examples : Array (() -> IO ()) = [
-{mains}
-    ];
-    let example = examples.@(index);
-    example()
-);
-"#,
-        module = DISPATCHER_MODULE_NAME,
-        main = MAIN_FUNCTION_NAME,
-        var = DOC_TEST_EXAMPLE_ENV_VAR,
-        mains = mains,
-    )
-}
-
-/// Whether `name` is a module name reserved for the Fix examples: `DocTest`, or a name beginning
-/// with `DocTest.`. A build of several examples gives the modules it adds names of this kind.
-///
-/// # Examples
-/// `DocTest` and `DocTest.Examples` are reserved, and `DocTests` and `Lib.DocTest` are not.
-fn is_reserved_module_name(name: &str) -> bool {
-    name == DOC_TEST_MODULE_NAME || name.starts_with(&format!("{}.", DOC_TEST_MODULE_NAME))
-}
-
-/// Reports a module of `program` whose name is reserved for the Fix examples (see
-/// `is_reserved_module_name`). A namespace, a type or a trait named `DocTest` stays free; an
-/// example that refers to one of them by a name beginning with `DocTest` is reported as ambiguous,
-/// with the absolute path that tells them apart.
-pub fn check_doc_test_module_names_are_free(program: &Program) -> Result<(), Errors> {
-    match program
-        .modules
-        .iter()
-        .find(|module| is_reserved_module_name(&module.name))
-    {
-        Some(module) => Err(Errors::from_msg_srcs(
-            format!(
-                "The module name `{}` is reserved for the Fix examples of comments, which \
-                 `fix test` compiles as modules named `{}` or with names beginning with `{}.`. \
-                 Give this module another name.",
-                module.name, DOC_TEST_MODULE_NAME, DOC_TEST_MODULE_NAME
-            ),
-            &[&Some(module.source.clone())],
-        )),
-        None => Ok(()),
+        self.fence.file_and_line()
     }
 }
 

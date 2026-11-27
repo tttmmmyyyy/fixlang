@@ -48,6 +48,7 @@ mod rc_ir;
 mod return_abi;
 mod target_triple;
 mod tbaa;
+mod test_build;
 #[cfg(test)]
 mod tests;
 mod tool;
@@ -60,7 +61,7 @@ use commands::{
     check, clean, deps, docs,
     lsp::server::launch_language_server,
     run,
-    test::{self, TestSelection},
+    test::{self, TestOptions, TestSelection},
 };
 use configuration::{
     BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
@@ -81,7 +82,7 @@ use project_fs::check_dot_fixlang_is_not_symlink;
 use std::{
     fs,
     path::{Path, PathBuf},
-    process,
+    process, thread,
 };
 
 /// The allocator the compiler process itself runs on. A program the compiler builds allocates
@@ -417,7 +418,7 @@ fn run_cli() {
     let test_subc = add_run_and_test_options(
         App::new("test")
             .trailing_var_arg(true)
-            .about("Tests a Fix program. Executes `Test::test : IO ()`, and then the Fix examples (i.e., the code blocks marked `fix`) in the comments of the files listed in the `build` and `build.test` sections of the project file."),
+            .about("Tests a Fix program. Runs each test, in a process of its own: `Test::test : IO ()`, each value a `TEST[...]` pragma names, and each Fix example (i.e., each code block marked `fix`) in the comments, in the files listed in the `build` and `build.test` sections of the project file."),
     )
     .arg(
         Arg::new("doc")
@@ -430,7 +431,23 @@ fn run_cli() {
         Arg::new("no-doc")
             .long("no-doc")
             .takes_value(false)
-            .help("Run `Test::test` alone, leaving the Fix examples in the comments out."),
+            .help("Run `Test::test` and the values `TEST[...]` pragmas name, leaving the Fix examples in the comments out."),
+    )
+    .arg(
+        Arg::new("filter")
+            .long("filter")
+            .takes_value(true)
+            .value_name("TEXT")
+            .multiple_occurrences(true)
+            .help("Run the tests whose names contain TEXT. Given more than once, run the tests whose names contain any of the texts."),
+    )
+    .arg(
+        Arg::new("test-threads")
+            .long("test-threads")
+            .takes_value(true)
+            .value_name("N")
+            .value_parser(value_parser!(u64).range(1..))
+            .help("Run N tests at once. The default is the number of CPUs."),
     );
 
     // "fix deps" subcommand
@@ -935,11 +952,25 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             let selection = if args.contains_id("doc") {
                 TestSelection::DocTests
             } else if args.contains_id("no-doc") {
-                TestSelection::TestFunction
+                TestSelection::Declared
             } else {
                 TestSelection::All
             };
-            test::test_command(create_config(SubCommand::Test, args), selection);
+            let filters = args
+                .get_many::<String>("filter")
+                .unwrap_or_default()
+                .cloned()
+                .collect();
+            let threads = match args.get_one::<u64>("test-threads") {
+                Some(threads) => *threads as usize,
+                None => thread::available_parallelism().map_or(1, |threads| threads.get()),
+            };
+            let options = TestOptions {
+                selection,
+                filters,
+                threads,
+            };
+            test::test_command(create_config(SubCommand::Test, args), options);
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", args)) => {

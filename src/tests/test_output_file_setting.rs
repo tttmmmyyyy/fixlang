@@ -9,7 +9,9 @@
 //! running, which is how these tests read off what a run built.
 
 use crate::configuration::OutputFileType;
-use crate::tests::test_util::{assert_failed, assert_succeeded, run_fix, setup_case_projects};
+use crate::tests::test_util::{
+    assert_failed, assert_succeeded, run_fix, run_kept_test, setup_case_projects,
+};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -146,15 +148,11 @@ fn test_run_builds_an_executable_for_a_project_asking_for_a_library() {
 #[test]
 fn test_test_builds_an_executable_for_a_project_asking_for_a_library() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "dylib_program");
-    let output = run_fix(&project_dir, &["test", "-O", "none"]);
-    assert_succeeded(
-        &output,
-        "`fix test` should run the test suite of a project asking a build for a dynamic library.",
-    );
+    let output = run_kept_test(&project_dir, &["-O", "none"]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains(TEST_OUTPUT),
-        "`fix test` should print what the test suite prints.\nstdout: {}",
+        "the executable `fix test` built should print what the test suite prints.\nstdout: {}",
         stdout,
     );
 }

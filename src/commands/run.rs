@@ -6,7 +6,6 @@ use crate::project_fs::remove_inside_dot_fixlang;
 use rand::{thread_rng, Rng};
 use std::fs;
 use std::io;
-use std::mem;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
@@ -44,12 +43,6 @@ pub fn run(
     })
 }
 
-/// Builds the program as `run` does, without running it. The executable is then moved to the path
-/// `config.out_file_path` names, and removed when the settings name no path.
-pub fn build_executable(config: Configuration) -> Result<(), Errors> {
-    with_temporary_executable(config, |_config, _exec_path| Ok(()))
-}
-
 /// Builds the program as an executable under `RUN_PATH` and hands `use_executable` the settings it
 /// was built with and its path. The executable is then moved to the path `config.out_file_path`
 /// names, and removed when the settings name no path.
@@ -57,51 +50,89 @@ pub fn with_temporary_executable<T>(
     mut config: Configuration,
     use_executable: impl FnOnce(&Configuration, &Path) -> Result<T, Errors>,
 ) -> Result<T, Errors> {
-    // The kind of the output file describes what `fix build` produces, so the settings that name a
-    // dynamic library reach `fix build` alone (`ProjectFile::set_config`, `set_config_from_args`).
-    // A shared object put here would be handed to the operating system as a program to execute.
-    assert!(
-        matches!(config.output_file_type, OutputFileType::Executable),
-        "a run builds an executable, which is what it then runs"
-    );
+    let user_specified_out_path = config.out_file_path.take();
+    let executable = TemporaryExecutable::build(config)?;
+    let result = use_executable(executable.config(), executable.path());
+    if let Some(out_path) = user_specified_out_path {
+        executable.keep_at(&out_path);
+    }
+    result
+}
 
-    fs::create_dir_all(DOT_FIXLANG)
-        .expect(format!("Failed to create \"{}\" directory.", DOT_FIXLANG).as_str());
-    fs::create_dir_all(RUN_PATH)
-        .expect(format!("Failed to create \"{}\" directory.", RUN_PATH).as_str());
+/// An executable built under `RUN_PATH`, which is removed when the value is dropped.
+pub struct TemporaryExecutable {
+    /// The settings the executable was built with, whose output path is `path`.
+    config: Configuration,
+    /// The path of the executable.
+    path: PathBuf,
+    /// Whether the executable was moved away from `path` to stay, which leaves nothing to remove.
+    kept: bool,
+}
 
-    // For parallel execution, use different file name for each execution.
-    let exec_path = PathBuf::from(RUN_PATH).join(format!("a{}.out", thread_rng().gen::<u64>()));
-    let user_specified_out_path = mem::replace(&mut config.out_file_path, Some(exec_path.clone()));
+impl TemporaryExecutable {
+    /// Builds the program `config` describes as an executable under `RUN_PATH`. The output path
+    /// `config` names is replaced by a path of its own, so that builds running at the same time
+    /// write different files.
+    pub fn build(mut config: Configuration) -> Result<Self, Errors> {
+        // The kind of the output file describes what `fix build` produces, so the settings that name
+        // a dynamic library reach `fix build` alone (`ProjectFile::set_config`,
+        // `set_config_from_args`). A shared object put here would be handed to the operating system
+        // as a program to execute.
+        assert!(
+            matches!(config.output_file_type, OutputFileType::Executable),
+            "a run builds an executable, which is what it then runs"
+        );
 
-    config.validate_run_settings()?;
+        fs::create_dir_all(DOT_FIXLANG)
+            .expect(format!("Failed to create \"{}\" directory.", DOT_FIXLANG).as_str());
+        fs::create_dir_all(RUN_PATH)
+            .expect(format!("Failed to create \"{}\" directory.", RUN_PATH).as_str());
 
-    // Build executable file.
-    build(&mut config)?;
-
-    let result = use_executable(&config, &exec_path);
-
-    // Clean up the temporary executable file.
-    match user_specified_out_path {
-        Some(out_path) => {
-            // Move the temporary executable file to the specified output file.
-            if let Err(e) = fs::rename(&exec_path, &out_path) {
-                let _ = remove_inside_dot_fixlang(&exec_path); // Ignore the error.
-                panic_with_msg(&format!(
-                    "Failed to rename \"{}\" to \"{}\": {}",
-                    exec_path.display(),
-                    out_path.display(),
-                    e
-                ));
-            }
-        }
-        None => {
-            // If the output file is not specified, remove the temporary executable file.
-            let _ = remove_inside_dot_fixlang(&exec_path); // Ignore the error.
-        }
+        let path = PathBuf::from(RUN_PATH).join(format!("a{}.out", thread_rng().gen::<u64>()));
+        config.out_file_path = Some(path.clone());
+        config.validate_run_settings()?;
+        // The value is made before the build, so that a build failing after it wrote the file
+        // removes it.
+        let executable = TemporaryExecutable {
+            config,
+            path,
+            kept: false,
+        };
+        build(&executable.config)?;
+        Ok(executable)
     }
 
-    result
+    /// The settings the executable was built with.
+    pub fn config(&self) -> &Configuration {
+        &self.config
+    }
+
+    /// The path of the executable.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Moves the executable to `out_path`, where it stays.
+    pub fn keep_at(mut self, out_path: &Path) {
+        if let Err(e) = fs::rename(&self.path, out_path) {
+            let _ = remove_inside_dot_fixlang(&self.path); // Ignore the error.
+            panic_with_msg(&format!(
+                "Failed to rename \"{}\" to \"{}\": {}",
+                self.path.display(),
+                out_path.display(),
+                e
+            ));
+        }
+        self.kept = true;
+    }
+}
+
+impl Drop for TemporaryExecutable {
+    fn drop(&mut self) {
+        if !self.kept {
+            let _ = remove_inside_dot_fixlang(&self.path); // Ignore the error.
+        }
+    }
 }
 
 /// Builds the program, runs it with the terminal's streams attached, and exits the `fix` process

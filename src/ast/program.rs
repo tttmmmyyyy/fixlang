@@ -1,4 +1,5 @@
 use crate::ast::deprecation::{DeprecationInfo, DeprecationStatement};
+use crate::ast::test_statement::TestStatement;
 use crate::ast::equality::Equality;
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType};
 use crate::ast::expr::{expr_var_typed, Expr, ExprNode, Var};
@@ -528,16 +529,16 @@ pub struct Program {
     pub type_env: TypeEnv,
     /// The traits the program declares, with their aliases and their implementations.
     pub trait_env: TraitEnv,
-    /// The value the built program runs:
-    /// - the instantiation of `Main::main` in run or build mode,
-    /// - the instantiation of `Main::test` in test mode,
-    /// - `None` in library mode.
+    /// The value the built program runs: the instantiation of the value
+    /// `Configuration::entry_io_value_name` names, or `None` in library mode.
     pub entry_io_value: Option<Arc<ExprNode>>,
     /// The `FFI_EXPORT` statements, each naming a Fix value to publish under a C symbol.
     pub export_statements: Vec<ExportStatement>,
     /// `DEPRECATED[...]` pragmas, accumulated at parse time and consumed in
     /// elaboration to set per-symbol `deprecation` fields.
     pub deprecation_statements: Vec<DeprecationStatement>,
+    /// The `TEST[...]` pragmas, each declaring a global value as a test `fix test` runs.
+    pub test_statements: Vec<TestStatement>,
     /// The sizes of the tuples the program uses. The type `Std::Tuple{n}` and the trait
     /// implementations a tuple carries are generated for each size here, so two programs using
     /// different sets of sizes are elaborated with different sources of `Std`.
@@ -728,6 +729,7 @@ impl Program {
             entry_io_value: None,
             export_statements: vec![],
             deprecation_statements: vec![],
+            test_statements: vec![],
             deferred_errors: Errors::empty(),
             typed_modules: TypedModules::default(),
             import_required: Default::default(),
@@ -2601,6 +2603,53 @@ impl Program {
         errors.to_result()
     }
 
+    /// Checks the `TEST[...]` pragmas: each names, by a path relative to where it is written, a
+    /// global value declared at type `IO ()`, and no two of them name one value.
+    pub fn validate_test_statements(&self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+        // The pragma that first names each value.
+        let mut first_pragmas: Map<FullName, Option<Span>> = Map::default();
+        for stmt in &self.test_statements {
+            if stmt.value_name.namespace.is_absolute {
+                errors.append(Errors::from_msg_srcs(
+                    "`TEST` cannot take an absolute path. Use a path relative to where the pragma \
+                     is written."
+                        .to_string(),
+                    &[&stmt.src],
+                ));
+                continue;
+            }
+            if let Some(first_src) = first_pragmas.get(&stmt.value_name) {
+                errors.append(Errors::from_msg_srcs(
+                    format!(
+                        "Multiple `TEST` pragmas name the value `{}`.",
+                        stmt.value_name.to_string()
+                    ),
+                    &[&stmt.src, first_src],
+                ));
+                continue;
+            }
+            first_pragmas.insert(stmt.value_name.clone(), stmt.src.clone());
+            if !self.global_values.contains_key(&stmt.value_name) {
+                errors.append(Errors::from_msg_srcs(
+                    format!(
+                        "`TEST` names `{}`, which is not a global value declared in `{}`.",
+                        stmt.value_name.to_string(),
+                        stmt.origin_namespace.to_string()
+                    ),
+                    &[&stmt.src],
+                ));
+                continue;
+            }
+            errors.eat_err(self.check_value_has_type(
+                &stmt.value_name,
+                &make_io_unit_ty(),
+                &stmt.src,
+            ));
+        }
+        errors.to_result()
+    }
+
     /// Fills in the kind of every type variable the program's declarations leave implicit: those of
     /// the traits and trait aliases, of the trait instances, and of the global values' schemes.
     pub fn set_kinds(&mut self) -> Result<(), Errors> {
@@ -3105,6 +3154,9 @@ impl Program {
         self.deprecation_statements
             .append(&mut other.deprecation_statements);
 
+        // Merge test statements.
+        self.test_statements.append(&mut other.test_statements);
+
         // Merge used_tuple_sizes.
         self.used_tuple_sizes.append(&mut other.used_tuple_sizes);
 
@@ -3257,7 +3309,7 @@ impl Program {
     }
 
     /// The smallest node of the program covering `pos`, searched over the global values, the type
-    /// definitions, the traits, the names written in the `FFI_EXPORT` and `DEPRECATED` pragmas, and
+    /// definitions, the traits, the names written in the `FFI_EXPORT`, `DEPRECATED` and `TEST` pragmas, and
     /// the import statements of the module the position's file declares.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         for (name, gv) in &self.global_values {
@@ -3289,6 +3341,14 @@ impl Program {
             if let Some(span) = &stmt.target_name_src {
                 if span.includes_pos_lsp(pos) {
                     return Some(EndNode::Expr(Var::create(stmt.target_path.clone()), None));
+                }
+            }
+        }
+        // Cursor on the name token of a `TEST[...]` pragma.
+        for stmt in &self.test_statements {
+            if let Some(span) = &stmt.value_name_src {
+                if span.includes_pos_lsp(pos) {
+                    return Some(EndNode::Expr(Var::create(stmt.value_name.clone()), None));
                 }
             }
         }

@@ -13,7 +13,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::TYPED_MODULES_PATH;
-    use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command, run_kept_test};
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process;
@@ -183,11 +183,7 @@ mod integration_tests {
     fn a_test_build_and_a_plain_build_share_the_cache_without_corrupting_it() {
         let (_temp_dir, project_dir) = setup_test_env("test_and_build");
 
-        let test_run = fix_command()
-            .arg("test")
-            .current_dir(&project_dir)
-            .output()
-            .expect("Failed to execute fix test");
+        let test_run = run_kept_test(&project_dir, &[]);
         assert_eq!(
             String::from_utf8_lossy(&test_run.stdout).trim(),
             "(1, 2, 3, 4, 5, 6, 7)",

@@ -6,6 +6,7 @@ pub(crate) struct FixParser;
 
 use crate::ast::{
     deprecation::DeprecationStatement,
+    test_statement::TestStatement,
     equality::Equality,
     export_statement::ExportStatement,
     expr::{
@@ -946,30 +947,12 @@ fn parse_module(
 
     let mut fix_mod = Program::single_module(mod_info);
 
-    let mut type_defns: Vec<TypeDefn> = Vec::new();
-    let mut global_value_decls: Vec<GlobalValueDecl> = vec![];
-    let mut global_value_defns: Vec<GlobalValueDefn> = vec![];
-    let mut trait_infos: Vec<TraitDefn> = vec![];
-    let mut trait_aliases: Vec<TraitAlias> = vec![];
-    let mut trait_impls: Vec<TraitImpl> = vec![];
+    let mut items = ModuleItems::default();
     let mut import_statements: Vec<ImportStatement> = vec![];
-    let mut export_statements: Vec<ExportStatement> = vec![];
-    let mut deprecation_statements: Vec<DeprecationStatement> = vec![];
 
     for pair in pairs {
         match pair.as_rule() {
-            Rule::global_defns => errors.eat_err(parse_global_defns(
-                pair,
-                &mut ctx,
-                &mut global_value_decls,
-                &mut global_value_defns,
-                &mut type_defns,
-                &mut trait_infos,
-                &mut trait_aliases,
-                &mut trait_impls,
-                &mut export_statements,
-                &mut deprecation_statements,
-            )),
+            Rule::global_defns => errors.eat_err(parse_global_defns(pair, &mut ctx, &mut items)),
             Rule::import_statement => {
                 import_statements.push(parse_import_statement(pair, &mut ctx));
             }
@@ -977,13 +960,14 @@ fn parse_module(
         }
     }
 
-    errors.eat_err(fix_mod.add_global_values(global_value_defns, global_value_decls));
-    fix_mod.add_type_defns(type_defns);
-    errors.eat_err(fix_mod.add_traits(trait_infos, trait_impls, trait_aliases));
+    errors.eat_err(fix_mod.add_global_values(items.global_value_defns, items.global_value_decls));
+    fix_mod.add_type_defns(items.type_defns);
+    errors.eat_err(fix_mod.add_traits(items.trait_infos, items.trait_impls, items.trait_aliases));
     errors.eat_err(fix_mod.add_import_statements(import_statements));
     fix_mod.used_tuple_sizes.append(&mut ctx.tuple_sizes);
-    fix_mod.export_statements = replace(&mut export_statements, vec![]);
-    fix_mod.deprecation_statements = replace(&mut deprecation_statements, vec![]);
+    fix_mod.export_statements = items.export_statements;
+    fix_mod.deprecation_statements = items.deprecation_statements;
+    fix_mod.test_statements = items.test_statements;
 
     fix_mod.inject_abs_path_implicit_imports(&ctx.module_name, take(&mut ctx.abs_path_uses));
 
@@ -999,20 +983,27 @@ fn parse_module(
     errors.to_result().map(|_| fix_mod)
 }
 
-/// Parse one `global_defns` node and append the recognised top-level items
-/// (declarations, definitions, type defns, traits, impls, exports,
-/// deprecations) into the matching output vectors.
+/// The items the top level of a module and the namespaces in it hold, in the order the parser
+/// reads them.
+#[derive(Default)]
+struct ModuleItems {
+    global_value_decls: Vec<GlobalValueDecl>,
+    global_value_defns: Vec<GlobalValueDefn>,
+    type_defns: Vec<TypeDefn>,
+    trait_infos: Vec<TraitDefn>,
+    trait_aliases: Vec<TraitAlias>,
+    trait_impls: Vec<TraitImpl>,
+    export_statements: Vec<ExportStatement>,
+    /// The `DEPRECATED[...]` pragmas, including those written in trait bodies.
+    deprecation_statements: Vec<DeprecationStatement>,
+    test_statements: Vec<TestStatement>,
+}
+
+/// Parse one `global_defns` node and add the items it holds to `items`.
 fn parse_global_defns(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-    global_value_decls: &mut Vec<GlobalValueDecl>,
-    global_value_defns: &mut Vec<GlobalValueDefn>,
-    type_defns: &mut Vec<TypeDefn>,
-    trait_infos: &mut Vec<TraitDefn>,
-    trait_aliases: &mut Vec<TraitAlias>,
-    trait_impls: &mut Vec<TraitImpl>,
-    export_statements: &mut Vec<ExportStatement>,
-    deprecation_statements: &mut Vec<DeprecationStatement>,
+    items: &mut ModuleItems,
 ) -> Result<(), Errors> {
     assert_eq!(pair.as_rule(), Rule::global_defns);
     let mut errors = Errors::empty();
@@ -1021,52 +1012,49 @@ fn parse_global_defns(
     for pair in pairs {
         match pair.as_rule() {
             Rule::global_defns_in_namespace => {
-                errors.eat_err(parse_global_defns_in_namespace(
-                    pair,
-                    ctx,
-                    global_value_decls,
-                    global_value_defns,
-                    type_defns,
-                    trait_infos,
-                    trait_aliases,
-                    trait_impls,
-                    export_statements,
-                    deprecation_statements,
-                ));
+                errors.eat_err(parse_global_defns_in_namespace(pair, ctx, items));
             }
             Rule::type_defn => {
-                errors.eat_err_or(parse_type_defn(pair, ctx), |td| type_defns.push(td));
+                errors.eat_err_or(parse_type_defn(pair, ctx), |td| items.type_defns.push(td));
             }
             Rule::global_name_type_sign => {
                 errors.eat_err_or(parse_global_value_decl(pair, ctx), |(gvt, gvd)| {
-                    global_value_decls.push(gvt);
+                    items.global_value_decls.push(gvt);
                     if let Some(gvd) = gvd {
-                        global_value_defns.push(gvd)
+                        items.global_value_defns.push(gvd)
                     }
                 });
             }
             Rule::global_name_defn => {
                 errors.eat_err_or(parse_global_name_defn(pair, ctx), |gvd| {
-                    global_value_defns.push(gvd)
+                    items.global_value_defns.push(gvd)
                 });
             }
             Rule::trait_defn => {
-                errors.eat_err_or(parse_trait_defn(pair, ctx, deprecation_statements), |ti| {
-                    trait_infos.push(ti)
-                });
+                errors.eat_err_or(
+                    parse_trait_defn(pair, ctx, &mut items.deprecation_statements),
+                    |ti| items.trait_infos.push(ti),
+                );
             }
             Rule::trait_alias_defn => {
-                trait_aliases.push(parse_trait_alias(pair, ctx));
+                items.trait_aliases.push(parse_trait_alias(pair, ctx));
             }
             Rule::trait_impl => {
-                errors.eat_err_or(parse_trait_impl(pair, ctx), |ti| trait_impls.push(ti));
+                errors.eat_err_or(parse_trait_impl(pair, ctx), |ti| items.trait_impls.push(ti));
             }
             Rule::export_statement => {
-                export_statements.push(parse_export_statement(pair, ctx));
+                items
+                    .export_statements
+                    .push(parse_export_statement(pair, ctx));
             }
             Rule::deprecated_statement => {
                 errors.eat_err_or(parse_deprecated_statement(pair, ctx), |stmt| {
-                    deprecation_statements.push(stmt);
+                    items.deprecation_statements.push(stmt);
+                });
+            }
+            Rule::test_statement => {
+                errors.eat_err_or(parse_test_statement(pair, ctx), |stmt| {
+                    items.test_statements.push(stmt);
                 });
             }
             _ => unreachable!(),
@@ -1080,14 +1068,7 @@ fn parse_global_defns(
 fn parse_global_defns_in_namespace(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-    global_value_decls: &mut Vec<GlobalValueDecl>,
-    global_value_defns: &mut Vec<GlobalValueDefn>,
-    type_defns: &mut Vec<TypeDefn>,
-    trait_infos: &mut Vec<TraitDefn>,
-    trait_aliases: &mut Vec<TraitAlias>,
-    trait_impls: &mut Vec<TraitImpl>,
-    export_statements: &mut Vec<ExportStatement>,
-    deprecation_statements: &mut Vec<DeprecationStatement>,
+    items: &mut ModuleItems,
 ) -> Result<(), Errors> {
     assert_eq!(pair.as_rule(), Rule::global_defns_in_namespace);
     let src = Span::from_pair(&ctx.source, &pair);
@@ -1105,18 +1086,7 @@ fn parse_global_defns_in_namespace(
     let bak_namespace = ctx.namespace.clone();
     ctx.namespace = ctx.namespace.append(namespace);
     for pair in pairs {
-        parse_global_defns(
-            pair,
-            ctx,
-            global_value_decls,
-            global_value_defns,
-            type_defns,
-            trait_infos,
-            trait_aliases,
-            trait_impls,
-            export_statements,
-            deprecation_statements,
-        )?;
+        parse_global_defns(pair, ctx, items)?;
     }
     ctx.namespace = bak_namespace;
     Ok(())
@@ -1551,6 +1521,42 @@ fn parse_deprecated_statement(
         target_name_src: Some(name_span),
         origin_namespace: ctx.namespace.clone(),
         message,
+        src: Some(span),
+    })
+}
+
+/// The name of the mark that has `fix test` leave a test out, as in `TEST[f, ignore];`.
+const TEST_IGNORE_MARK: &str = "ignore";
+
+/// Parse a `TEST[<path>];` or `TEST[<path>, ignore];` pragma into a `TestStatement`. A mark other
+/// than `ignore` is reported.
+fn parse_test_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TestStatement, Errors> {
+    assert_eq!(pair.as_rule(), Rule::test_statement);
+    let span = Span::from_pair(&ctx.source, &pair);
+    let mut pairs = pair.into_inner();
+    pairs.next().unwrap(); // Skip `TEST`.
+    let (relative_path, name_span) = parse_fullname(pairs.next().unwrap(), ctx);
+    let mut ignore = false;
+    if pairs.peek().unwrap().as_rule() == Rule::test_mark {
+        let mark = pairs.next().unwrap();
+        if mark.as_str() != TEST_IGNORE_MARK {
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "`{}` is not a mark of `TEST`. The mark `TEST` takes is `{}`, which has \
+                     `fix test` report the test as ignored without running it.",
+                    mark.as_str(),
+                    TEST_IGNORE_MARK
+                ),
+                &[&Some(Span::from_pair(&ctx.source, &mark))],
+            ));
+        }
+        ignore = true;
+    }
+    Ok(TestStatement {
+        value_name: relative_path.join_under(&ctx.namespace),
+        value_name_src: Some(name_span),
+        origin_namespace: ctx.namespace.clone(),
+        ignore,
         src: Some(span),
     })
 }
