@@ -18,8 +18,7 @@ Therefore, to achieve maximum effect, it must be applied before global symbol in
 
 */
 
-use std::{collections::HashMap, mem::replace, sync::Arc};
-
+use std::{mem::replace, sync::Arc};
 use crate::{
     ast::{
         expr::expr_var_typed,
@@ -34,9 +33,12 @@ use crate::{
     elaboration::typecheck::TypeCheckContext,
     error::Errors,
     fixstd::builtin::make_tuple_name_abs,
-    misc::info_msg,
+    misc::{info_msg, Map},
 };
 
+/// Replaces the body of each instantiated act-family function whose functor is `Std::Identity`,
+/// `Std::Const C` or `Std::Tuple2 X` with a call to the specialized implementation. An error here
+/// panics in development mode and is otherwise reported as information.
 pub fn run(prg: &mut Program, config: &Configuration) {
     match run_internal(prg, config) {
         Ok(_) => {}
@@ -54,9 +56,10 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     }
 }
 
+/// The work of `run`, returning the errors it meets.
 fn run_internal(prg: &mut Program, config: &Configuration) -> Result<(), Errors> {
     let tc = prg.create_typechecker(config);
-    let mut sims = replace(&mut prg.symbols, HashMap::default());
+    let mut sims = replace(&mut prg.symbols, Map::default());
     for (_name, sym) in &mut sims {
         run_on_symbol(sym, prg, &tc)?;
     }
@@ -64,6 +67,8 @@ fn run_internal(prg: &mut Program, config: &Configuration) -> Result<(), Errors>
     Ok(())
 }
 
+/// Replaces the body of `sym` when it is an instance of `Std::Array::act` or of a struct field's
+/// `act_{field}` at one of the functors this optimization knows.
 fn run_on_symbol(sym: &mut Symbol, prg: &mut Program, tc: &TypeCheckContext) -> Result<(), Errors> {
     if is_builtin_array_act(&sym.generic_name) {
         return run_on_array_act(sym, prg, tc);
@@ -73,6 +78,8 @@ fn run_on_symbol(sym: &mut Symbol, prg: &mut Program, tc: &TypeCheckContext) -> 
     Ok(())
 }
 
+/// Replaces the body of `sym`, an instance of `Std::Array::act`, with the specialized
+/// implementation for its functor, when there is one.
 fn run_on_array_act(
     sym: &mut Symbol,
     prg: &mut Program,
@@ -111,10 +118,13 @@ fn run_on_array_act(
     Ok(())
 }
 
+/// Whether `generic_name` names `Std::Array::act`.
 fn is_builtin_array_act(generic_name: &FullName) -> bool {
     generic_name.is(&[STD_NAME, ARRAY_NAME], BUILTIN_ACT_NAME)
 }
 
+/// Replaces the body of `sym`, an instance of `act_{field}` of the struct `str`, with the
+/// specialized implementation for its functor, when there is one.
 fn run_on_struct_field_act(
     str: &TyCon,
     field: &Name,
@@ -126,17 +136,17 @@ fn run_on_struct_field_act(
     let act_ty = sym.ty.clone(); // (T -> f T) -> U -> f U
 
     let str_namespace = str.name.to_namespace();
-    let opt_func_name = if is_functor_identity(&act_ty.clone()) {
+    let opt_func_name = if is_functor_identity(&act_ty) {
         Some(FullName::new(
             &str_namespace,
             &format!("_{}{}_identity", STRUCT_ACT_SYMBOL, field),
         ))
-    } else if is_functor_const(&act_ty.clone()) {
+    } else if is_functor_const(&act_ty) {
         Some(FullName::new(
             &str_namespace,
             &format!("_{}{}_const", STRUCT_ACT_SYMBOL, field),
         ))
-    } else if is_functor_tuple2(&act_ty.clone()) {
+    } else if is_functor_tuple2(&act_ty) {
         Some(FullName::new(
             &str_namespace,
             &format!("_{}{}_tuple2", STRUCT_ACT_SYMBOL, field),
@@ -155,7 +165,7 @@ fn run_on_struct_field_act(
     Ok(())
 }
 
-// Destructure the act type `(T -> f T) -> U -> f U` into `(T, U, f T, f U)`.
+/// Destructures the act type `(T -> f T) -> U -> f U` into `(T, U, f T, f U)`.
 fn destructure_act_ty(
     lens_ty: &Arc<TypeNode>,
 ) -> (Arc<TypeNode>, Arc<TypeNode>, Arc<TypeNode>, Arc<TypeNode>) {
