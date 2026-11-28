@@ -4,7 +4,7 @@ module Main;
 // round.
 drop_one : Ptr -> IO ();
 drop_one = |ptr| (
-    let value : Destructor I64 = *FFI::boxed_from_retained_ptr(ptr);
+    let value : Destructor I64 = *FFI::unpack_from_thread(ptr);
     FFI_CALL_IO[() wait_at_gate()];;
     // Reading the resource is this thread's last use of the value, so the reference it holds is
     // dropped here, as close behind the gate as the language puts it.
@@ -26,13 +26,13 @@ run_round = |ptr| FFI_CALL_IO[() run_round(Ptr), ptr];
 destructor_run_count : IO CInt;
 destructor_run_count = FFI_CALL_IO[CInt destructor_run_count()];
 
-// Takes `count` references to `value` and returns the pointer they all name, one for each thread to
-// drop.
-retain_many : I64 -> Destructor I64 -> IO Ptr;
-retain_many = |count, value| (
+// Hands `value` over `count` times through `pack_for_thread` and returns the pointer every hand-over
+// names, one reference for each thread to drop. The value is boxed, so each pointer names its object.
+pack_many : I64 -> Destructor I64 -> IO Ptr;
+pack_many = |count, value| (
     loop_m((0, nullptr), |(i, ptr)|
         if i == count { break_m $ ptr };
-        let ptr = *value.FFI::boxed_to_retained_ptr;
+        let ptr = *FFI::pack_for_thread(value);
         continue_m $ (i + 1, ptr)
     )
 );
@@ -46,8 +46,7 @@ one_round = |threads, resource| (
         FFI_CALL_IO[() note_destructor_ran()];;
         pure $ resource
     ));
-    let value = value.mark_threaded;
-    let ptr = *value.retain_many(threads);
+    let ptr = *value.pack_many(threads);
     run_round(ptr)
 );
 

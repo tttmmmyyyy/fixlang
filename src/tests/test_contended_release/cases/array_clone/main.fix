@@ -24,7 +24,7 @@ settings = (
 // of the release.
 worker_write : Ptr -> IO ();
 worker_write = |ptr| (
-    let value : Box (Array (Box I64)) = *FFI::boxed_from_retained_ptr(ptr);
+    let value : Box (Array (Box I64)) = *FFI::unpack_from_thread(ptr);
     let (element_count, _, write) = *settings;
     let arr = value.@value;
 
@@ -53,7 +53,7 @@ FFI_EXPORT[worker_write, fix_worker_write];
 // unique and writes in place, too late and this release is the last one instead.
 worker_drop : Ptr -> IO ();
 worker_drop = |ptr| (
-    let value : Box (Array (Box I64)) = *FFI::boxed_from_retained_ptr(ptr);
+    let value : Box (Array (Box I64)) = *FFI::unpack_from_thread(ptr);
     let (_, delay, _) = *settings;
     FFI_CALL_IO[CInt usleep(CInt), delay.c_int];;
     if value.@value.@size < 0 { undefined("the array should have a size") };
@@ -64,13 +64,13 @@ FFI_EXPORT[worker_drop, fix_worker_drop];
 run_workers : Ptr -> IO ();
 run_workers = |ptr| FFI_CALL_IO[() run_workers(Ptr), ptr];
 
-// Takes `count` references to `value` and returns the pointer they all name, one for each thread to
-// drop.
-retain_many : I64 -> Box (Array (Box I64)) -> IO Ptr;
-retain_many = |count, value| (
+// Hands `value` over `count` times through `pack_for_thread` and returns the pointer every hand-over
+// names, one reference for each thread to drop. The value is boxed, so each pointer names its object.
+pack_many : I64 -> Box (Array (Box I64)) -> IO Ptr;
+pack_many = |count, value| (
     loop_m((0, nullptr), |(i, ptr)|
         if i == count { break_m $ ptr };
-        let ptr = *value.FFI::boxed_to_retained_ptr;
+        let ptr = *FFI::pack_for_thread(value);
         continue_m $ (i + 1, ptr)
     )
 );
@@ -90,11 +90,11 @@ main = (
     // own arguments.
     let args = *get_args;
     let element = Box::make(args.@(0).@size);
-    let value = Box::make(Array::fill(element_count, element)).mark_threaded;
+    let value = Box::make(Array::fill(element_count, element));
 
     // Nothing here holds the value any more: the two threads hold every reference to it, so the
     // last release of the storage comes from one of them.
-    let ptr = *value.retain_many(2);
+    let ptr = *value.pack_many(2);
     run_workers(ptr);;
 
     let unique = *element.is_unique_io;
