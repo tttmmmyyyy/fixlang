@@ -10,13 +10,16 @@ use crate::parse::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-// Statement such as "String : Show" or "a : Eq".
+/// A trait constraint on a type, such as `String : Show` or `a : Eq`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Predicate {
+    /// The trait the type has to implement.
     pub trait_id: TraitId,
+    /// The type the constraint is on.
     pub ty: Arc<TypeNode>,
+    /// The span of the whole constraint in the source, such as `I64 : Describable`.
     pub src: Option<Span>,
-    // Source span of the trait name only (e.g., `Describable` in `I64 : Describable`).
+    /// The span of the trait name alone, such as `Describable` in `I64 : Describable`.
     pub trait_src: Option<Span>,
     /// For a constraint that type checking has to deduce, the use of the global value whose type
     /// requires it. A constraint deduced on the way to another one is required by the same use.
