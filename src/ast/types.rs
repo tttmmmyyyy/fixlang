@@ -1902,13 +1902,14 @@ impl TypeNode {
         renaming.substitute_type(self)
     }
 
-    /// `normalize` written in source syntax.
+    /// This type written in source syntax, with its free type variables renamed `a`, `b`, ... in
+    /// order of first appearance.
     ///
     /// Two types give one string exactly when they differ only in the names and the kinds of their
-    /// type variables: a type wildcard is renamed like any other type variable, so the `_` that
-    /// `to_string` writes for it never stands in this string. This also rests on a program never
-    /// naming a type and an associated type alike, since `T a` would be written the same for both.
-    /// A symbol name is made from this string on that account.
+    /// type variables. A type wildcard is renamed like any other type variable, so this string
+    /// holds no `_`. The property also relies on a program never giving a type and an associated
+    /// type the same name, since `T a` is written the same for both. Symbol names are built from
+    /// this string and rely on the property.
     pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
         self.normalize().to_string()
     }
@@ -1917,7 +1918,7 @@ impl TypeNode {
     /// `_` type wildcard written `_`.
     ///
     /// Two distinct types can give one string: every wildcard is written `_`, and kinds are left
-    /// out. Compare types with `==` rather than by these strings.
+    /// out. To tell types apart, compare them with `==`.
     ///
     /// # Examples
     /// A saturated tuple is written `(a, b)`, a saturated arrow `a -> b`, and an argument that is
@@ -2694,10 +2695,9 @@ impl Scheme {
     /// The scheme written out with its generalized variables renamed `a`, `b`, ... in the order
     /// `gen_vars` lists them, so that the names the source happened to use stay out of the text.
     ///
-    /// The scheme of a declared value holds no type wildcard, so the `_` that `TypeNode::to_string`
-    /// writes for one never stands in this string, and two such schemes give one string only when
-    /// they differ in the names or kinds of their type variables or in the order of their
-    /// constraints. The type checking cache keys an entry by this string (`entity_identity`).
+    /// The scheme of a declared value holds no type wildcard, so this string holds no `_`. Two such
+    /// schemes give one string only when they differ at most in the names and kinds of their type
+    /// variables and in the order of their constraints.
     pub fn to_string_normalize(&self) -> String {
         // Change names of generalized type variables to a, b, ...
         let mut s = Substitution::default();
