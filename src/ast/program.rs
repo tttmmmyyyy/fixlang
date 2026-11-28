@@ -1708,10 +1708,7 @@ impl Program {
             required_ty.to_string()
         );
         let gv = self.find_global_value(value_name, required_src)?;
-        let declared_at_required_ty = gv.scm.predicates.is_empty()
-            && gv.scm.equalities.is_empty()
-            && gv.scm.ty == *required_ty;
-        if !declared_at_required_ty {
+        if gv.scm.has_constraints() || gv.scm.ty != *required_ty {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "The value `{}` should have type `{}`.",

@@ -245,7 +245,7 @@ impl ExportedFunctionType {
         err_msg_prefix: String,
         src: &Option<Span>,
     ) -> Result<ExportedFunctionType, Errors> {
-        if !scm.predicates.is_empty() || !scm.equalities.is_empty() {
+        if scm.has_constraints() {
             return Err(Errors::from_msg_srcs(
                 err_msg_prefix + "the type of an exported value should not have any constraints.",
                 &[src],
