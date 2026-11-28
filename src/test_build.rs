@@ -24,16 +24,27 @@ use std::iter;
 pub struct TestBuild {
     /// The Fix examples, each with the name of the module it is compiled as.
     examples: Vec<ExampleModule>,
-    /// The values of type `IO ()` the program runs, one in each run. The values the sources declare
-    /// as tests come first, in the order they were given, and the `main` of each example follows
-    /// them, in the order of `examples`.
-    entries: Vec<FullName>,
-    /// The source of the module whose `main` runs the entry whose index in `entries` the
-    /// environment variable `TEST_INDEX_ENV_VAR` gives. A build of one test has none, and its one
-    /// entry is the entry point of the program.
-    dispatcher: Option<SourceFile>,
+    /// What the entry point of the program runs.
+    entry: TestEntry,
     /// Whether the build reports the warnings that lie outside its examples.
     reports_source_warnings: bool,
+}
+
+/// What the entry point of a program `fix test` builds runs.
+#[derive(Clone)]
+enum TestEntry {
+    /// One test, the value of type `IO ()` that is the entry point of the program.
+    Alone(FullName),
+    /// Several tests, one in each run, which the module `DocTest.Dispatcher` chooses.
+    Dispatched {
+        /// The values of type `IO ()` the dispatcher runs. The values the sources declare as tests
+        /// come first, in the order they were given, and the `main` of each example follows them,
+        /// in the order of `TestBuild::examples`.
+        values: Vec<FullName>,
+        /// The source of the module whose `main` runs the value whose index in `values` the
+        /// environment variable `TEST_INDEX_ENV_VAR` gives.
+        dispatcher: SourceFile,
+    },
 }
 
 /// A Fix example as a build compiles it.
@@ -91,15 +102,14 @@ impl TestBuild {
                 .all(is_reserved_module_name),
             "the modules a build adds have names reserved for the Fix examples"
         );
-        let entries = tests
+        let values = tests
             .into_iter()
             .chain(examples.iter().map(ExampleModule::main))
             .collect::<Vec<_>>();
-        let dispatcher = save_temporary_source(&dispatcher_source(&entries), "test_dispatcher")?;
+        let dispatcher = save_temporary_source(&dispatcher_source(&values), "test_dispatcher")?;
         Ok(TestBuild {
             examples,
-            entries,
-            dispatcher: Some(dispatcher),
+            entry: TestEntry::Dispatched { values, dispatcher },
             reports_source_warnings: true,
         })
     }
@@ -108,8 +118,7 @@ impl TestBuild {
     pub fn of_value(test: FullName) -> Self {
         TestBuild {
             examples: vec![],
-            entries: vec![test],
-            dispatcher: None,
+            entry: TestEntry::Alone(test),
             reports_source_warnings: true,
         }
     }
@@ -124,9 +133,8 @@ impl TestBuild {
             name: DOC_TEST_MODULE_NAME.to_string(),
         };
         TestBuild {
-            entries: vec![example.main()],
+            entry: TestEntry::Alone(example.main()),
             examples: vec![example],
-            dispatcher: None,
             reports_source_warnings,
         }
     }
@@ -148,9 +156,9 @@ impl TestBuild {
     /// checks the entry point (see `Program::check_value_has_type`), so that a test passes or fails
     /// as it does in a build of its own.
     pub fn dispatched_values(&self) -> &[FullName] {
-        match self.dispatcher {
-            Some(_) => &self.entries,
-            None => &[],
+        match &self.entry {
+            TestEntry::Dispatched { values, .. } => values,
+            TestEntry::Alone(_) => &[],
         }
     }
 
@@ -164,27 +172,32 @@ impl TestBuild {
             };
             (example.source.clone(), Some(renaming))
         });
-        let dispatcher = self.dispatcher.iter().map(|source| (source.clone(), None));
+        let dispatcher = match &self.entry {
+            TestEntry::Dispatched { dispatcher, .. } => Some((dispatcher.clone(), None)),
+            TestEntry::Alone(_) => None,
+        };
         examples.chain(dispatcher).collect()
     }
 
     /// The value the program runs: `main` of the dispatcher, or the one test of the build.
     pub fn entry(&self) -> FullName {
-        match self.dispatcher {
-            Some(_) => FullName::from_strs(&[DISPATCHER_MODULE_NAME], MAIN_FUNCTION_NAME),
-            None => self.entries[0].clone(),
+        match &self.entry {
+            TestEntry::Dispatched { .. } => {
+                FullName::from_strs(&[DISPATCHER_MODULE_NAME], MAIN_FUNCTION_NAME)
+            }
+            TestEntry::Alone(value) => value.clone(),
         }
     }
 }
 
-/// The source of the module `DocTest.Dispatcher`, whose `main` runs the value of `entries` whose
+/// The source of the module `DocTest.Dispatcher`, whose `main` runs the value of `values` whose
 /// index the environment variable `TEST_INDEX_ENV_VAR` gives.
 ///
 /// Each value is read inside a function, so that a run reads only the value it runs: a global value
 /// is evaluated when it is first read, and the evaluation of a value of type `IO ()` can panic
 /// before any I/O action of it runs.
-fn dispatcher_source(entries: &[FullName]) -> String {
-    let entries = entries
+fn dispatcher_source(values: &[FullName]) -> String {
+    let entries = values
         .iter()
         .map(|entry| format!("        |_| ::{}", entry.to_string()))
         .collect::<Vec<_>>()

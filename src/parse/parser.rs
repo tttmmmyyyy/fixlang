@@ -1536,8 +1536,8 @@ fn parse_test_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Test
     let mut pairs = pair.into_inner();
     pairs.next().unwrap(); // Skip `TEST`.
     let (relative_path, name_span) = parse_fullname(pairs.next().unwrap(), ctx);
-    let mut ignore = false;
-    if pairs.peek().unwrap().as_rule() == Rule::test_mark {
+    let ignore = pairs.peek().unwrap().as_rule() == Rule::test_mark;
+    if ignore {
         let mark = pairs.next().unwrap();
         if mark.as_str() != TEST_IGNORE_MARK {
             return Err(Errors::from_msg_srcs(
@@ -1550,7 +1550,6 @@ fn parse_test_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Test
                 &[&Some(Span::from_pair(&ctx.source, &mark))],
             ));
         }
-        ignore = true;
     }
     Ok(TestStatement {
         value_name: relative_path.join_under(&ctx.namespace),

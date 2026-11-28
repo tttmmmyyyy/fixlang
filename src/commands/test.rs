@@ -229,11 +229,12 @@ fn collect_tests(program: &Program, files: &[PathBuf]) -> Result<Vec<TestCase>, 
         .iter()
         .map(|file| to_absolute_path(file))
         .collect::<Result<Set<_>, _>>()?;
+    // The parser gives each `TEST[...]` pragma and each type signature its span.
     let in_files = |span: &Option<Span>| -> Result<bool, Errors> {
-        match span {
-            Some(span) => Ok(absolute_files.contains(&to_absolute_path(&span.input.file_path)?)),
-            None => Ok(false),
-        }
+        let span = span
+            .as_ref()
+            .expect("a pragma or a declaration of a source has a span");
+        Ok(absolute_files.contains(&to_absolute_path(&span.input.file_path)?))
     };
 
     let mut statements = vec![];
@@ -265,6 +266,12 @@ fn collect_tests(program: &Program, files: &[PathBuf]) -> Result<Vec<TestCase>, 
         tests.push(TestCase::of_example(&example));
     }
     Ok(tests)
+}
+
+/// The number of tests `fix test` runs at once where `--test-threads` is not given: the number of
+/// CPUs, or 1 where the system does not tell it.
+pub fn default_test_threads() -> usize {
+    thread::available_parallelism().map_or(1, |threads| threads.get())
 }
 
 /// The error `fix test` reports where `options` select no test.
@@ -311,14 +318,14 @@ pub fn run_tests(
     mut report: impl FnMut(usize, TestOutcome),
 ) -> Result<(), Errors> {
     let mut values = vec![];
+    // Each example by the index of its test, with its source and whether it is run.
     let mut examples = vec![];
     let mut ignored = vec![];
     for (index, test) in tests.iter().enumerate() {
         match &test.task {
             TestTask::RunValue(value) => values.push((index, value.clone())),
-            TestTask::RunExample(source) | TestTask::CompileExample(source) => {
-                examples.push((index, source.clone()))
-            }
+            TestTask::RunExample(source) => examples.push((index, source.clone(), true)),
+            TestTask::CompileExample(source) => examples.push((index, source.clone(), false)),
             TestTask::Ignore => ignored.push(index),
         }
     }
@@ -341,20 +348,24 @@ pub fn run_tests(
 
     let merged = TestBuild::dispatching(
         value_names(),
-        examples.iter().map(|(_, source)| source.clone()).collect(),
+        examples
+            .iter()
+            .map(|(_, source, _)| source.clone())
+            .collect(),
     )?;
     match TemporaryExecutable::build(config_of(merged)) {
         Ok(executable) => {
             executables.push(executable);
             runs.extend(value_runs());
-            for (position, (index, _)) in examples.iter().enumerate() {
-                match tests[*index].task {
-                    TestTask::CompileExample(_) => report(*index, TestOutcome::Passed),
-                    _ => runs.push(Run {
+            for (position, (index, _, run)) in examples.iter().enumerate() {
+                if *run {
+                    runs.push(Run {
                         test: *index,
                         executable: 0,
                         dispatch_index: Some(values.len() + position),
-                    }),
+                    });
+                } else {
+                    report(*index, TestOutcome::Passed);
                 }
             }
         }
@@ -370,12 +381,10 @@ pub fn run_tests(
                      longer than usual.",
                 );
             }
-            for (index, source) in examples {
+            for (index, source, run) in examples {
                 match TemporaryExecutable::build(config_of(TestBuild::of_example(source, false))) {
                     Err(errors) => report(index, TestOutcome::Failed(errors.to_string())),
-                    Ok(_) if matches!(tests[index].task, TestTask::CompileExample(_)) => {
-                        report(index, TestOutcome::Passed)
-                    }
+                    Ok(_) if !run => report(index, TestOutcome::Passed),
                     Ok(executable) => {
                         executables.push(executable);
                         runs.push(Run {
@@ -418,6 +427,7 @@ fn run_in_parallel(
     threads: usize,
     mut report: impl FnMut(usize, TestOutcome),
 ) {
+    assert!(threads > 0, "the tests run on at least one thread");
     // The commands are made here, so that the threads below share the commands alone.
     let commands = runs
         .iter()

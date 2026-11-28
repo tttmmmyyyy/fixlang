@@ -1,7 +1,7 @@
 //! Tests of the Fix examples written in comments: the examples of `Std` itself, and what
 //! `fix test` does with the examples of a project.
 
-use crate::commands::test::{run_tests, TestCase, TestOutcome};
+use crate::commands::test::{default_test_threads, run_tests, TestCase, TestOutcome};
 use crate::configuration::Configuration;
 use crate::doc_test::{collect_examples, examples_in_text, TextLine};
 use crate::error::panic_if_err;
@@ -10,7 +10,6 @@ use crate::parse::sourcefile::{SourceFile, Span};
 use crate::tests::test_util::{fix_command, fix_test, project_dir, streams};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::thread;
 use tempfile::TempDir;
 
 /// The Fix examples of `Std` pass: those of the comments in `std.fix`, and those of the
@@ -41,7 +40,7 @@ fn test_std_doc_examples() {
         .iter()
         .map(TestCase::of_example)
         .collect::<Vec<_>>();
-    let threads = thread::available_parallelism().map_or(1, |threads| threads.get());
+    let threads = default_test_threads();
     let mut failures = vec![];
     let mut tested = 0;
     let result = run_tests(&config, &tests, &[], threads, |index, outcome| match outcome {

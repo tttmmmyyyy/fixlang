@@ -82,7 +82,7 @@ use project_fs::check_dot_fixlang_is_not_symlink;
 use std::{
     fs,
     path::{Path, PathBuf},
-    process, thread,
+    process,
 };
 
 /// The allocator the compiler process itself runs on. A program the compiler builds allocates
@@ -963,7 +963,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
                 .collect();
             let threads = match args.get_one::<u64>("test-threads") {
                 Some(threads) => *threads as usize,
-                None => thread::available_parallelism().map_or(1, |threads| threads.get()),
+                None => test::default_test_threads(),
             };
             let options = TestOptions {
                 selection,

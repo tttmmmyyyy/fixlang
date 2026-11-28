@@ -1343,12 +1343,7 @@ pub fn project_dir(build_files: &[(&str, &str)], test_files: &[(&str, &str)]) ->
 
 /// Runs `fix test` with `args` in `dir`.
 pub fn fix_test(dir: &TempDir, args: &[&str]) -> Output {
-    fix_command()
-        .arg("test")
-        .args(args)
-        .current_dir(dir.path())
-        .output()
-        .expect("Failed to execute fix test")
+    run_fix(dir.path(), &[&["test"], args].concat())
 }
 
 /// The standard error of `output`, followed by its standard output, for a failure message.

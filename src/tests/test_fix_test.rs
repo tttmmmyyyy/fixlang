@@ -1,7 +1,7 @@
 //! Tests of how `fix test` finds, runs and reports its tests: the values the `TEST[...]` pragma
 //! declares, `Test::test`, and the Fix examples of the comments.
 
-use crate::tests::test_util::{fix_command, fix_test, project_dir, streams};
+use crate::tests::test_util::{fix_test, project_dir, run_fix, streams};
 use std::fs;
 use std::process::Command;
 use tempfile::TempDir;
@@ -343,11 +343,7 @@ fn test_tests_of_a_dependency_are_not_run() {
         "module Main;\nimport Dep;\n\npasses : IO ();\npasses = pure();\nTEST[passes];\n",
     )
     .unwrap();
-    let output = fix_command()
-        .arg("test")
-        .current_dir(&main_dir)
-        .output()
-        .expect("Failed to execute fix test");
+    let output = run_fix(&main_dir, &["test"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         output.status.success()
@@ -388,11 +384,7 @@ fn test_malformed_test_pragmas_are_rejected() {
         let main = format!("module Main;\n{}\nmain : IO () = pure();\n", pragma);
         let dir = project_dir(&[("main.fix", &main)], &[]);
         for subcommand in ["build", "test"] {
-            let output = fix_command()
-                .arg(subcommand)
-                .current_dir(dir.path())
-                .output()
-                .expect("Failed to execute fix");
+            let output = run_fix(dir.path(), &[subcommand]);
             assert!(
                 !output.status.success()
                     && String::from_utf8_lossy(&output.stderr).contains(error),
