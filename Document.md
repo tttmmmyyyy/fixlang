@@ -3322,7 +3322,7 @@ parse_empty = assert_eq(|_|"", parse(""), []);
 TEST[parse_empty];
 ```
 
-`TEST[...]` may be written at the top level of a file and inside `namespace { ... }`. The `value_path` is a path relative to where the pragma is written, as the path of `DEPRECATED[...]` is (see [Deprecation](#deprecation)). The value must be declared with the type `IO ()`. The compiler reports an error, in `fix build` and the language server as well as in `fix test`, where a pragma names no global value, names a value of another type, or names a value another `TEST[...]` already names.
+`TEST[...]` may be written at the top level of a file and inside `namespace { ... }`. The `value_path` is a path relative to where the pragma is written, as the path of `DEPRECATED[...]` is (see [Deprecation](#deprecation)). The value must be declared with the type `IO ()`, and one `TEST[...]` alone may name a value.
 
 `TEST[{value_path}, ignore];` marks the test as ignored: `fix test` reports it as ignored and does not run it. The value is type-checked as every global value is. Use it for a test that touches the network or that is too slow to run every time.
 
