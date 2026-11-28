@@ -238,6 +238,31 @@ TEST[second];
     );
 }
 
+/// A test is reported once its process exits, while a process it started holds its output open:
+/// the test starts a shell that writes the file `done` 20 seconds later, and `fix test` reports
+/// the test before the file is written.
+#[test]
+fn test_a_test_is_reported_when_its_process_exits() {
+    let lib = r#"module Lib;
+
+leaves_a_process : IO ();
+leaves_a_process = (
+    let status = *"(sleep 20; touch done) &".borrow_c_str_io(|command| FFI_CALL_IO[CInt system(Ptr), command]);
+    assert_eq(|_|"the shell starts", status, 0.to_CInt)
+);
+TEST[leaves_a_process];
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    assert!(
+        output.status.success()
+            && String::from_utf8_lossy(&output.stderr).contains("test Lib::leaves_a_process ... ok")
+            && !dir.path().join("done").exists(),
+        "the test is reported before the process it started ends\n{}",
+        streams(&output)
+    );
+}
+
 /// `-o` builds the one test the options select, runs it, and keeps its executable, which runs the
 /// test. It is an error where the options select several tests, or one marked `ignore`.
 #[test]

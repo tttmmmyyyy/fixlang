@@ -16,6 +16,7 @@ use std::path::Path;
 use std::process::{self, Command, ExitStatus, Stdio};
 use std::sync::{mpsc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 /// Which kinds of test `fix test` runs, as the options `--doc` and `--no-doc` select.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -497,9 +498,17 @@ fn run_failure(command: Command) -> Option<String> {
     }
 }
 
+/// How long `run_collecting_output` keeps reading the output of a program after it has exited. A
+/// process the program started can hold the pipe open after the program has exited, and what it
+/// writes after this time is left out of the output.
+const OUTPUT_GRACE_PERIOD: Duration = Duration::from_millis(100);
+
 /// Runs `command` with no standard input, and returns how it ended and what it wrote to its
 /// standard output and its standard error. The two are written into one pipe, so what they hold
 /// stands in the order the program wrote it.
+///
+/// The run ends when the program exits. The output is what reached the pipe until the pipe closed,
+/// or until `OUTPUT_GRACE_PERIOD` after the exit where a process the program started keeps it open.
 fn run_collecting_output(mut command: Command) -> io::Result<(ExitStatus, Vec<u8>)> {
     let (mut reader, writer) = io::pipe()?;
     command
@@ -508,11 +517,31 @@ fn run_collecting_output(mut command: Command) -> io::Result<(ExitStatus, Vec<u8
         .stderr(writer);
     let mut child = command.spawn()?;
     // The command holds the write ends it handed the program, and dropping it closes them, so that
-    // the read below ends when the program has closed its own.
+    // the reader below sees the end of the pipe once the processes holding it have closed theirs.
     drop(command);
+    // The reader runs on a thread of its own, so that it can be left behind while a process the
+    // program started holds the pipe open; it ends when that process closes the pipe.
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let mut chunk = [0u8; 4096];
+        loop {
+            let read = reader.read(&mut chunk);
+            let end = matches!(read, Ok(0) | Err(_));
+            if sender.send(read.map(|n| chunk[..n].to_vec())).is_err() || end {
+                break;
+            }
+        }
+    });
+    let status = child.wait()?;
+    let deadline = Instant::now() + OUTPUT_GRACE_PERIOD;
     let mut output = vec![];
-    reader.read_to_end(&mut output)?;
-    Ok((child.wait()?, output))
+    while let Ok(read) = receiver.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+        match read? {
+            chunk if chunk.is_empty() => break,
+            chunk => output.extend(chunk),
+        }
+    }
+    Ok((status, output))
 }
 
 /// Tests the one test of `tests` under `config`, built alone, and keeps the executable it was built
