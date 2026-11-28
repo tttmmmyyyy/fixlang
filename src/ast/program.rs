@@ -15,7 +15,7 @@ use crate::ast::types::{
     TypeNode,
 };
 use crate::configuration::{
-    Configuration, DeprecationMode, OutputFileType, ProjectSources, SubCommand,
+    Configuration, DeprecationMode, OutputFileType, ProjectSources, SubCommand, UserSourceFiles,
 };
 use crate::constants::{
     C_ENTRY_POINT_NAME, DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MARK_THREADED_NAME,
@@ -3492,35 +3492,4 @@ pub enum EndNode {
     /// The type a `_` type wildcard written in a type annotation was inferred to, which hover
     /// displays.
     InferredType(Arc<TypeNode>),
-}
-
-/// The files of the user's own code, `Configuration.root_source_files`, as absolute paths. The
-/// diagnostics about what the user writes are scoped to these files.
-struct UserSourceFiles(Set<PathBuf>);
-
-impl UserSourceFiles {
-    /// The user's files of `config`. A path that fails to canonicalize (a file that no longer
-    /// exists) is dropped: no span can lie in it.
-    fn of(config: &Configuration) -> Self {
-        UserSourceFiles(
-            config
-                .root_source_files
-                .iter()
-                .filter_map(|p| to_absolute_path(p).ok())
-                .collect(),
-        )
-    }
-
-    /// Whether the absolute path `path` is one of the user's files.
-    fn contains_path(&self, path: &PathBuf) -> bool {
-        self.0.contains(path)
-    }
-
-    /// Whether `span` lies in one of the user's files. A span in the source assembled from a Fix
-    /// example lies in the file the example is written in.
-    fn contains_span(&self, span: &Span) -> bool {
-        to_absolute_path(span.input.reported_path())
-            .map(|path| self.contains_path(&path))
-            .unwrap_or(false)
-    }
 }

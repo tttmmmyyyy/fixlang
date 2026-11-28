@@ -1,18 +1,18 @@
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
 use crate::commands::run::TemporaryExecutable;
-use crate::configuration::Configuration;
+use crate::configuration::{Configuration, UserSourceFiles};
 use crate::constants::{TEST_FUNCTION_NAME, TEST_INDEX_ENV_VAR, TEST_MODULE_NAME};
 use crate::doc_test::{collect_examples, ExampleTask, FixExample};
 use crate::elaboration::load_source_files;
 use crate::error::{panic_if_err, Errors};
-use crate::misc::{info_msg, to_absolute_path, Set};
+use crate::misc::info_msg;
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::test_build::{check_doc_test_module_names_are_free, DispatchedTest, TestBuild};
 use colored::Colorize;
 use std::io::{self, Read};
 use std::mem::take;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{self, Command, ExitStatus, Stdio};
 use std::sync::{mpsc, Mutex};
 use std::thread;
@@ -193,7 +193,7 @@ impl TestOutcome {
 /// its executable is kept at that path.
 pub fn test_command(mut config: Configuration, options: TestOptions) {
     let program = panic_if_err(load_source_files(&config));
-    let tests = panic_if_err(collect_tests(&program, &config.root_source_files))
+    let tests = panic_if_err(collect_tests(&program, &config))
         .into_iter()
         .filter(|test| options.selects(test))
         .collect::<Vec<_>>();
@@ -223,29 +223,26 @@ pub fn test_command(mut config: Configuration, options: TestOptions) {
     process::exit(if passed { 0 } else { 1 });
 }
 
-/// The tests of the files `files`, which `program` is loaded from among other files, in the order
+/// The tests of the user's files of `config` (see `UserSourceFiles`), which `program` is loaded from
+/// among other files, in the order
 /// `fix test` shows their failures in: `Test::test`, the values the `TEST[...]` pragmas name, and
 /// the Fix examples of the comments. The tests of each kind are ordered by the file and then by
 /// where they stand in it.
-fn collect_tests(program: &Program, files: &[PathBuf]) -> Result<Vec<TestCase>, Errors> {
-    let absolute_files = files
-        .iter()
-        .map(|file| to_absolute_path(file))
-        .collect::<Result<Set<_>, _>>()?;
+fn collect_tests(program: &Program, config: &Configuration) -> Result<Vec<TestCase>, Errors> {
+    let user_files = UserSourceFiles::of(config);
     // The parser gives each `TEST[...]` pragma and each type signature its span.
-    let in_files = |span: &Option<Span>| -> Result<bool, Errors> {
+    let in_user_files = |span: &Option<Span>| {
         let span = span
             .as_ref()
             .expect("a pragma or a declaration of a source has a span");
-        Ok(absolute_files.contains(&to_absolute_path(&span.input.file_path)?))
+        user_files.contains_span(span)
     };
 
-    let mut statements = vec![];
-    for statement in &program.test_statements {
-        if in_files(&statement.src)? {
-            statements.push(statement);
-        }
-    }
+    let mut statements = program
+        .test_statements
+        .iter()
+        .filter(|statement| in_user_files(&statement.src))
+        .collect::<Vec<_>>();
     statements.sort_by(|lhs, rhs| lhs.src.cmp(&rhs.src));
 
     let mut tests = vec![];
@@ -254,7 +251,7 @@ fn collect_tests(program: &Program, files: &[PathBuf]) -> Result<Vec<TestCase>, 
         let named_by_pragma = statements
             .iter()
             .any(|statement| statement.value_name == test_function);
-        if !named_by_pragma && in_files(&gv.decl_src)? {
+        if !named_by_pragma && in_user_files(&gv.decl_src) {
             tests.push(TestCase::of_value(&test_function, &gv.decl_src, false));
         }
     }
@@ -265,7 +262,7 @@ fn collect_tests(program: &Program, files: &[PathBuf]) -> Result<Vec<TestCase>, 
             statement.ignore,
         ));
     }
-    for example in collect_examples(program, files)? {
+    for example in collect_examples(program, &config.root_source_files)? {
         tests.push(TestCase::of_example(&example));
     }
     Ok(tests)

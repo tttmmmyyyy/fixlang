@@ -12,8 +12,8 @@ use crate::ffi::CNumericTypes;
 use crate::hash::HashSource;
 use crate::metafiles::project_file::{ProjectName, ProjectOrigin};
 use crate::misc::{
-    path_relative_to, platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg,
-    Map, Set,
+    path_relative_to, platform_thread_sanitizer_supported, platform_valgrind_supported,
+    to_absolute_path, warn_msg, Map, Set,
 };
 use crate::parse::sourcefile::Span;
 use crate::preliminary_command::PreliminaryCommand;
@@ -1481,6 +1481,37 @@ impl Configuration {
     /// check that ends the program, these among them.
     pub fn checks_integer_operations(&self) -> bool {
         self.check_integer_operations && self.runtime_check()
+    }
+}
+
+/// The files of the user's own code, `Configuration.root_source_files`, as absolute paths. The
+/// diagnostics about what the user writes are scoped to these files.
+pub struct UserSourceFiles(Set<PathBuf>);
+
+impl UserSourceFiles {
+    /// The user's files of `config`. A path that fails to canonicalize (a file that no longer
+    /// exists) is dropped: no span can lie in it.
+    pub fn of(config: &Configuration) -> Self {
+        UserSourceFiles(
+            config
+                .root_source_files
+                .iter()
+                .filter_map(|p| to_absolute_path(p).ok())
+                .collect(),
+        )
+    }
+
+    /// Whether the absolute path `path` is one of the user's files.
+    pub fn contains_path(&self, path: &PathBuf) -> bool {
+        self.0.contains(path)
+    }
+
+    /// Whether `span` lies in one of the user's files. A span in the source assembled from a Fix
+    /// example lies in the file the example is written in.
+    pub fn contains_span(&self, span: &Span) -> bool {
+        to_absolute_path(span.input.reported_path())
+            .map(|path| self.contains_path(&path))
+            .unwrap_or(false)
     }
 }
 
