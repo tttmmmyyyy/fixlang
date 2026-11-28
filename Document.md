@@ -3304,7 +3304,7 @@ The options of `fix test` select the tests and how they run:
 - `--filter <text>` runs the tests whose names contain `<text>`, such as `fix test --filter Lib::parse_`. Given more than once, it runs the tests whose names contain any of the texts.
 - `--test-threads <n>` runs `<n>` tests at once. The default is the number of CPUs. Tests that write to one file interfere with each other when they run at once: give them files of their own, or run them with `--test-threads 1`.
 - The arguments after `--`, as in `fix test -- arg1 arg2`, are passed to every test.
-- `-o <path>` builds the one test the options select alone, runs it, and keeps its executable at `<path>`, which runs the test without any option. Select the test by `--filter`, as in `fix test --filter Lib::parse_empty -o a.out`.
+- `-o <path>` builds the one test the options select by itself, runs it, and keeps its executable at `<path>`. Started with no options, that executable runs the test. Select the test by `--filter`, as in `fix test --filter Lib::parse_empty -o a.out`.
 
 `fix test` exits with a non-zero status if a test fails, or if the options select no test.
 

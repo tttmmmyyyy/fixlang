@@ -492,8 +492,8 @@ pub struct Configuration {
     /// them, the root project and every dependency alike. `ProjectFile::set_config` adds them as it
     /// configures each project.
     pub project_sources: Vec<ProjectSources>,
-    /// The Fix examples of comments the build compiles beside the sources. The value
-    /// `TestBuild::entry` names is then the entry point of the program.
+    /// The tests a build of `fix test` compiles beside the sources. The value `TestBuild::entry`
+    /// names is then the entry point of the program.
     pub test_build: Option<TestBuild>,
     /// Object files given to the build, linked into the program beside the ones compiled from the
     /// sources.

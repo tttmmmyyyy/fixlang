@@ -198,8 +198,8 @@ TEST[gets_the_argument];
     );
 }
 
-/// Tests run at once: each of two tests waits for the file the other writes, which only a run of the
-/// two at the same time lets both find.
+/// Tests run at once: each of two tests writes a file and waits for the file the other writes, so
+/// both pass only when they run at the same time.
 #[test]
 fn test_tests_run_at_once() {
     let lib = r#"module Lib;
@@ -457,8 +457,8 @@ TEST[fails];
     );
 }
 
-/// A `TEST[...]` pragma names a value in a namespace inside where it is written by a relative path
-/// through that namespace.
+/// A `TEST[...]` pragma names a value of a namespace nested inside the one the pragma is written
+/// in, by a relative path through the nested namespace.
 #[test]
 fn test_pragma_names_a_value_of_an_inner_namespace_by_a_relative_path() {
     let lib = r#"module Lib;

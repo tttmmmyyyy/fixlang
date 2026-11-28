@@ -91,8 +91,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     program.validate_overlapping_instances()?;
 
     // Check that each value a `TEST[...]` pragma names has type `IO ()`. Runs after the namespaces
-    // and the type aliases of the declarations are resolved, which the type it compares is written
-    // in.
+    // and the type aliases in the declarations are resolved, since it compares the declared types.
     program.validate_test_statement_types()?;
 
     // If typechecking is not needed, return here.

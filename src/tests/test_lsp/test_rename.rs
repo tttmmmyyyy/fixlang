@@ -1106,9 +1106,8 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Renaming a global value rewrites the name inside the `TEST[...]` pragma naming it, and the
-    /// name inside the pragma renames the value: the declaration on line 2, the definition on
-    /// line 3 and the pragma on line 4 are each rewritten.
+    /// Renaming a global value, from its declaration or from its name inside the `TEST[...]`
+    /// pragma naming it, rewrites the declaration, the definition and the pragma.
     #[test]
     fn test_rename_test_pragma_name() {
         for (line, col) in [(2, 0), (4, 5)] {

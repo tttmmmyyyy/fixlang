@@ -2644,8 +2644,8 @@ impl Program {
         errors.to_result()
     }
 
-    /// Checks that each value a `TEST[...]` pragma names is declared at type `IO ()`. The names are
-    /// checked first (see `validate_test_statement_names`).
+    /// Checks that each value a `TEST[...]` pragma names is declared at type `IO ()`. Expects the
+    /// names to have passed `validate_test_statement_names`.
     pub fn validate_test_statement_types(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for stmt in &self.test_statements {

@@ -94,6 +94,8 @@ impl TestKind {
 
 /// A test `fix test` can run.
 pub struct TestCase {
+    /// The kind of the test, which decides how its progress line begins and which line of the
+    /// summary counts it.
     kind: TestKind,
     /// The name the test is reported under, which `--filter` is matched against: the full name of
     /// the value a declared test runs, and the place of a Fix example (see `FixExample::location`).
@@ -102,6 +104,7 @@ pub struct TestCase {
     /// `TEST[...]` pragma, or the declaration of `Test::test`. A Fix example is named by its place
     /// and has none.
     declared_at: Option<String>,
+    /// What `fix test` does with the test.
     task: TestTask,
 }
 
@@ -398,7 +401,7 @@ pub fn run_tests(
         }
     }
 
-    // The sources built, so the ignored tests are reported as the tests that run are.
+    // The sources have built, so the ignored tests are reported beside the tests that run.
     for index in ignored {
         report(index, TestOutcome::Ignored);
     }
@@ -514,9 +517,9 @@ fn run_collecting_output(mut command: Command) -> io::Result<(ExitStatus, Vec<u8
 }
 
 /// Tests the one test of `tests` under `config`, built alone, and keeps the executable it was built
-/// into at `out_path`. `report` is handed the index of the test with its outcome. The error
-/// returned is that of `tests` holding several tests, or of the one test being marked `ignore`, or
-/// the compile error of the sources a declared test is built from.
+/// into at `out_path`. `report` is handed the index of the test with its outcome. A Fix example
+/// that fails to compile is reported as a failed test; a declared test whose sources fail to
+/// compile returns the compile error.
 fn test_keeping_executable(
     mut config: Configuration,
     tests: &[TestCase],
@@ -569,6 +572,7 @@ fn test_keeping_executable(
 /// The outcomes of the tests `fix test` runs, which it reports as they are known and sums up once
 /// every test has ended.
 struct Report<'a> {
+    /// The tests, in the order their failures are shown in.
     tests: &'a [TestCase],
     /// The outcome of each test of `tests`, at its index there, once it is known.
     outcomes: Vec<Option<TestOutcome>>,

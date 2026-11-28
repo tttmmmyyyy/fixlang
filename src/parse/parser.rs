@@ -987,15 +987,24 @@ fn parse_module(
 /// reads them.
 #[derive(Default)]
 struct ModuleItems {
+    /// The type signatures of global values, as in `x : I64;`.
     global_value_decls: Vec<GlobalValueDecl>,
+    /// The definitions of global values, as in `x = 1;`, including those written with their type
+    /// signatures, as in `x : I64 = 1;`.
     global_value_defns: Vec<GlobalValueDefn>,
+    /// The definitions of structs, unions and type aliases.
     type_defns: Vec<TypeDefn>,
+    /// The trait definitions, as in `trait a : ToFoo { ... }`.
     trait_infos: Vec<TraitDefn>,
+    /// The trait aliases, as in `trait Foo = Bar + Baz;`.
     trait_aliases: Vec<TraitAlias>,
+    /// The trait implementations, as in `impl I64 : ToFoo { ... }`.
     trait_impls: Vec<TraitImpl>,
+    /// The `FFI_EXPORT[...]` pragmas.
     export_statements: Vec<ExportStatement>,
     /// The `DEPRECATED[...]` pragmas, including those written in trait bodies.
     deprecation_statements: Vec<DeprecationStatement>,
+    /// The `TEST[...]` pragmas.
     test_statements: Vec<TestStatement>,
 }
 
