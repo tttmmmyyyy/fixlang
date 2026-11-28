@@ -309,6 +309,42 @@ fn test_output_option_keeps_the_executable_of_one_test() {
     );
 }
 
+/// `-o` with a Fix example selected reports a compile error of the sources as the error it is, and
+/// stops, as `fix test` does without `-o`; it reports an example that does not compile where the
+/// sources do as a failed test.
+#[test]
+fn test_output_option_tells_a_compile_error_of_the_sources_from_one_of_an_example() {
+    let lib = |value: &str, example: &str| {
+        format!("module Lib;\n\n// ```fix\n// {}\n// ```\nvalue : I64;\nvalue = {};\n", example, value)
+    };
+    let kept = "kept.out";
+
+    let dir = project_dir(&[("lib.fix", &lib("\"one\"", "assert_eq(|_|\"\", value, 1)"))], &[]);
+    let output = fix_test(&dir, &["--filter", "lib.fix:3", "-o", kept]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success()
+            && stderr
+                .matches("Expected `Std::I64`, found `Std::String`.")
+                .count()
+                == 1
+            && !stderr.contains(" ... "),
+        "the error of the sources is reported once, and no test runs\n{}",
+        streams(&output)
+    );
+
+    let dir = project_dir(&[("lib.fix", &lib("1", "assert_eq(|_|\"\", value, \"one\")"))], &[]);
+    let output = fix_test(&dir, &["--filter", "lib.fix:3", "-o", kept]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success()
+            && stderr.contains("doc test lib.fix:3 ... FAILED")
+            && stderr.contains("Expected `Std::I64`, found `Std::String`."),
+        "the example that does not compile fails\n{}",
+        streams(&output)
+    );
+}
+
 /// A compile error in a value a `TEST[...]` pragma names is an error of the sources: it is reported
 /// once, and no test runs.
 #[test]

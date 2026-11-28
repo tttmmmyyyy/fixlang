@@ -545,11 +545,12 @@ fn run_collecting_output(mut command: Command) -> io::Result<(ExitStatus, Vec<u8
 }
 
 /// Tests the one test of `tests` under `config`, built alone, and keeps the executable it was built
-/// into at `out_path`. `report` is handed the index of the test with its outcome. A Fix example
-/// that fails to compile is reported as a failed test; a declared test whose sources fail to
-/// compile returns the compile error.
+/// into at `out_path`. `report` is handed the index of the test with its outcome. Where the build
+/// fails, the error is returned if it is the sources': where the test is a declared test, or where
+/// the sources fail to build without the Fix example too, as `run_tests` tells. A Fix example that
+/// fails to build where the sources build is reported as a failed test.
 fn test_keeping_executable(
-    mut config: Configuration,
+    config: Configuration,
     tests: &[TestCase],
     args: &[String],
     out_path: &Path,
@@ -574,14 +575,20 @@ fn test_keeping_executable(
             )))
         }
     };
-    config.test_build = Some(match built {
+    let config_of = |build: TestBuild| {
+        let mut config = config.clone();
+        config.test_build = Some(build);
+        config
+    };
+    let build = match built {
         BuiltTest::Value(value) => TestBuild::of_value(value.clone()),
         BuiltTest::Example(source) => TestBuild::of_example(source.clone(), true),
-    });
-    let executable = match TemporaryExecutable::build(config) {
+    };
+    let executable = match TemporaryExecutable::build(config_of(build)) {
         Ok(executable) => executable,
         Err(errors) if matches!(built, BuiltTest::Value(_)) => return Err(errors),
         Err(errors) => {
+            TemporaryExecutable::build(config_of(TestBuild::dispatching(vec![])?))?;
             report(0, TestOutcome::Failed(errors.to_string()));
             return Ok(());
         }
