@@ -171,35 +171,13 @@ pub(super) fn find_global_value_references(
     // Walk import statements.
     collect_import_refs(program, target, true, &mut refs);
 
-    // Walk `FFI_EXPORT[...]` pragmas: include the value-name span if the
-    // pragma targets `target`.
-    for stmt in &program.export_statements {
-        if &stmt.value_name == target {
-            if let Some(span) = &stmt.value_name_src {
-                refs.push(span.clone());
-            }
-        }
-    }
-
-    // Walk `DEPRECATED[...]` pragmas: include the target-name span if the
-    // pragma targets `target`.
-    for stmt in &program.deprecation_statements {
-        if &stmt.target_path == target {
-            if let Some(span) = &stmt.target_name_src {
-                refs.push(span.clone());
-            }
-        }
-    }
-
-    // Walk `TEST[...]` pragmas: include the value-name span if the pragma
-    // names `target`.
-    for stmt in &program.test_statements {
-        if &stmt.value_name == target {
-            if let Some(span) = &stmt.value_name_src {
-                refs.push(span.clone());
-            }
-        }
-    }
+    // Walk the pragmas naming `target`.
+    refs.extend(
+        program
+            .pragma_value_names()
+            .filter(|(name, _)| *name == target)
+            .map(|(_, span)| span.clone()),
+    );
 
     refs
 }

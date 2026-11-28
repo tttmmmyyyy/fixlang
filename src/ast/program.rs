@@ -2603,6 +2603,25 @@ impl Program {
         errors.to_result()
     }
 
+    /// The global value each `FFI_EXPORT[...]`, `DEPRECATED[...]` and `TEST[...]` pragma names, with
+    /// the span of the last name of the path the pragma writes. A `DEPRECATED[...]` pragma naming a
+    /// trait member is listed with the name of the member.
+    pub fn pragma_value_names(&self) -> impl Iterator<Item = (&FullName, &Span)> {
+        let exports = self
+            .export_statements
+            .iter()
+            .filter_map(|stmt| Some((&stmt.value_name, stmt.value_name_src.as_ref()?)));
+        let deprecations = self
+            .deprecation_statements
+            .iter()
+            .filter_map(|stmt| Some((&stmt.target_path, stmt.target_name_src.as_ref()?)));
+        let tests = self
+            .test_statements
+            .iter()
+            .filter_map(|stmt| Some((&stmt.value_name, stmt.value_name_src.as_ref()?)));
+        exports.chain(deprecations).chain(tests)
+    }
+
     /// Checks the names the `TEST[...]` pragmas write: each names, by a path relative to where it is
     /// written, a global value of the program, and no two of them name one value.
     pub fn validate_test_statement_names(&self) -> Result<(), Errors> {
@@ -3336,28 +3355,10 @@ impl Program {
         if node.is_some() {
             return node;
         }
-        // Cursor on the name token of an `FFI_EXPORT[...]` pragma.
-        for stmt in &self.export_statements {
-            if let Some(span) = &stmt.value_name_src {
-                if span.includes_pos_lsp(pos) {
-                    return Some(EndNode::Expr(Var::create(stmt.value_name.clone()), None));
-                }
-            }
-        }
-        // Cursor on the name token of a `DEPRECATED[...]` pragma.
-        for stmt in &self.deprecation_statements {
-            if let Some(span) = &stmt.target_name_src {
-                if span.includes_pos_lsp(pos) {
-                    return Some(EndNode::Expr(Var::create(stmt.target_path.clone()), None));
-                }
-            }
-        }
-        // Cursor on the name token of a `TEST[...]` pragma.
-        for stmt in &self.test_statements {
-            if let Some(span) = &stmt.value_name_src {
-                if span.includes_pos_lsp(pos) {
-                    return Some(EndNode::Expr(Var::create(stmt.value_name.clone()), None));
-                }
+        // Cursor on the name token of a pragma.
+        for (name, span) in self.pragma_value_names() {
+            if span.includes_pos_lsp(pos) {
+                return Some(EndNode::Expr(Var::create(name.clone()), None));
             }
         }
         let mod_name = self
