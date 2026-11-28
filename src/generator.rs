@@ -2289,7 +2289,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         Object::from_parts(part_phis, ty, self)
     }
 
-    /// Define (once per module) and call the per-type RC helper `<prefix>_<hash>` for `obj`. The
+    /// Define (once per module) and call the per-type RC helper `<prefix>_<digest>` for `obj`, where `<digest>` is
+    /// `TypeNode::digest` of its type. The
     /// object is passed as its parts rather than as one aggregate (see `lambda_function_type`), so
     /// no aggregate is materialized across the call; `build_body` emits the retain / release / mark
     /// work on the object reassembled from those parts inside the helper.
