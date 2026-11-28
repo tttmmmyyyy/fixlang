@@ -9447,14 +9447,12 @@ impl BuiltinOp for PackForThreadIOSOp {
         let obj = if val.is_box(gc.type_env()) {
             val
         } else {
-            let box_obj = create_obj(
-                make_box_ty(val.ty.clone()),
-                &vec![],
-                None,
+            ObjectFieldType::make_struct(
                 gc,
+                make_box_ty(val.ty.clone()),
+                &[val],
                 Some("box@pack_for_thread_ios"),
-            );
-            box_obj.insert_field_object(gc, BOXED_TYPE_DATA_IDX, &val)
+            )
         };
         gc.mark_threaded(obj.clone());
 
@@ -9466,15 +9464,12 @@ impl BuiltinOp for PackForThreadIOSOp {
             Some("ptr@pack_for_thread_ios"),
         );
         let ptr = ptr.insert_field_object(gc, 0, &obj);
-        let ret = create_obj(
-            ret_ty.clone(),
-            &vec![],
-            None,
+        ObjectFieldType::make_struct(
             gc,
+            ret_ty.clone(),
+            &[ios, ptr],
             Some("ret@pack_for_thread_ios"),
-        );
-        let ret = ret.insert_field_object(gc, 0, &ios);
-        ret.insert_field_object(gc, 1, &ptr)
+        )
     }
 
     fn name(&self) -> String {
@@ -9509,7 +9504,7 @@ pub fn pack_for_thread_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAL_NAME: &str = "val";
     const IOS_NAME: &str = "ios";
-    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let obj_type = type_tyvar_star(TYPE_NAME);
     let ios_type = make_iostate_ty();
     let ret_type = make_tuple_ty(vec![ios_type.clone(), make_ptr_ty()]);
     let scm = Scheme::generalize(
@@ -9552,23 +9547,22 @@ impl BuiltinOp for UnpackFromThreadIOSOp {
         let ptr = ptr.extract_field(gc, 0);
         let value_ty = ret_ty.field_types(gc.type_env())[1].clone();
 
-        let ret = create_obj(
-            ret_ty.clone(),
-            &vec![],
-            None,
+        let value = if value_ty.is_box(gc.type_env()) {
+            Object::new(ptr, value_ty, gc)
+        } else {
+            // The value is retained out of the box, and the box releases the reference it held.
+            let box_obj = Object::new(ptr, make_box_ty(value_ty), gc);
+            let value = ObjectFieldType::move_out_struct_field(gc, &box_obj, 0);
+            gc.retain(value.clone(), RcState::Unknown);
+            gc.release(box_obj, RcState::Unknown);
+            value
+        };
+        ObjectFieldType::make_struct(
             gc,
+            ret_ty.clone(),
+            &[ios, value],
             Some("ret@unpack_from_thread_ios"),
-        );
-        let ret = ret.insert_field_object(gc, 0, &ios);
-        if value_ty.is_box(gc.type_env()) {
-            return ret.insert_field(gc, 1, ptr);
-        }
-        // The value is retained out of the box, and the box releases the reference it held.
-        let box_obj = Object::new(ptr, make_box_ty(value_ty), gc);
-        let value = ObjectFieldType::move_out_struct_field(gc, &box_obj, 0);
-        gc.retain(value.clone(), RcState::Unknown);
-        gc.release(box_obj, RcState::Unknown);
-        ret.insert_field_object(gc, 1, &value)
+        )
     }
 
     fn name(&self) -> String {
@@ -9604,7 +9598,7 @@ pub fn unpack_from_thread_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const PTR_NAME: &str = "ptr";
     const IOS_NAME: &str = "ios";
-    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let obj_type = type_tyvar_star(TYPE_NAME);
     let ptr_type = make_ptr_ty();
     let ios_type = make_iostate_ty();
     let ret_type = make_tuple_ty(vec![ios_type.clone(), obj_type.clone()]);
