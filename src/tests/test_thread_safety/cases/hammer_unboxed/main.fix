@@ -30,8 +30,11 @@ main = (
 
     // One box for all the threads: `pack_for_thread` wraps the unboxed pair in it once, and the
     // function `get_funptr_retain_for_thread` points to takes one more reference for each further
-    // thread.
-    let ptr = *FFI::pack_for_thread((Box::make(n), n));
+    // thread. With `mark` as the argument, the pair goes through `pack_for_thread`. Without it, it
+    // goes through `boxed_to_retained_ptr` of a box of the same layout, which leaves the counts in
+    // single-threaded mode, so the run has a race to report.
+    let pair = (Box::make(n), n);
+    let ptr = *(if args.@size >= 2 { FFI::pack_for_thread(pair) } else { FFI::boxed_to_retained_ptr(Box::make(pair)) });
     let retain = (|_| undefined("") : (Box I64, I64)).FFI::get_funptr_retain_for_thread;
     loop_m(1, |i|
         if i == threads { break_m $ () };
