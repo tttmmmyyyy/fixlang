@@ -291,10 +291,10 @@ fn try_unify_receiver(
 /// were collected does not matter. Two keys are equal exactly when they hold
 /// the same predicates in the same order; two predicates whose hashes collide
 /// keep the order they were collected in, which can only cost a memo hit.
-/// Fresh type-variable names are deterministic across
-/// candidates (each probe starts from a clone of the same template, so
-/// `new_tyvar_name` hands out the same `#aN` names), so candidates that
-/// bind to the same constraints produce equal keys.
+/// Fresh type-variable names are deterministic across candidates (each
+/// probe starts from a clone of the same template, so `new_tyvar_name`
+/// hands out the same `#aN` names), so candidates that bind to the same
+/// constraints produce equal keys.
 fn predicates_key(tc: &TypeCheckContext) -> Vec<Predicate> {
     let mut preds: Vec<Predicate> = tc
         .predicates

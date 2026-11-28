@@ -1181,8 +1181,8 @@ main = println(bad([1, 2], [true]).to_string);
 }
 
 /// An equality constraint is accepted only where its first argument is assumed to implement the
-/// trait the associated type belongs to: assuming another trait of that variable leaves the equality
-/// invalid.
+/// trait the associated type belongs to: assuming that the variable implements another trait leaves
+/// the equality invalid.
 #[test]
 pub fn test_equality_constraint_whose_variable_is_assumed_to_implement_another_trait() {
     let source = r#"
