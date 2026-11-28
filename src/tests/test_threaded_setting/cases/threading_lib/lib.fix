@@ -1,18 +1,18 @@
 module ThreadingLib;
 
-// Puts a value into multi-threaded mode, as a threading library does before handing a value to
-// another thread. The body spans several lines so that a diagnostic about the call has to point at
-// the call alone.
-publish : Box I64 -> Box I64;
+// Gives a pointer through which another thread takes a value, as a threading library does before
+// handing a value over. The body spans several lines so that a diagnostic about the call has to
+// point at the call alone.
+publish : Box I64 -> IO Ptr;
 publish = |value| (
     let contents = value.@value;
     let boxed = Box::make(contents);
-    boxed.mark_threaded
+    FFI::pack_for_thread(boxed)
 );
 
-// Publishes a value of another type, so that `Std::mark_threaded` is instantiated twice.
-publish_array : Array I64 -> Array I64;
-publish_array = |values| values.mark_threaded;
+// Publishes a value of another type, so that `Std::FFI::pack_for_thread` is instantiated twice.
+publish_array : Array I64 -> IO Ptr;
+publish_array = |values| FFI::pack_for_thread(values);
 
 // Needs nothing of multi-threading, so a program that uses only this is built without it.
 double : I64 -> I64;

@@ -10,9 +10,9 @@
 //! the field where the reader already has it.
 //!
 //! Every access the code generator emits reaches memory laid out as a Fix value, which is why each
-//! one names a region. An address the program itself computed becomes such memory through
-//! `Std::FFI::boxed_from_retained_ptr` alone, and that operation requires the address to point at a
-//! value of the type it is read back as.
+//! one names a region. An address the program itself computed becomes such memory only through
+//! `Std::FFI::boxed_from_retained_ptr` and `Std::FFI::unpack_from_thread`, and these operations
+//! require the address to have been made from a value of the type it is read back as.
 
 use inkwell::context::Context;
 use inkwell::values::{InstructionValue, MetadataValue};

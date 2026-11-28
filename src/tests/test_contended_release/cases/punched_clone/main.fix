@@ -15,7 +15,7 @@ settings = (
 // one in the hole.
 worker_plug : Ptr -> IO ();
 worker_plug = |ptr| (
-    let holder : Box (PunchedArray (Box I64)) = *FFI::boxed_from_retained_ptr(ptr);
+    let holder : Box (PunchedArray (Box I64)) = *FFI::unpack_from_thread(ptr);
     let punched = holder.@value;
 
     // The other thread is still holding the value, so this plug finds the storage shared and copies
@@ -34,7 +34,7 @@ FFI_EXPORT[worker_plug, fix_worker_plug];
 // Lets go of the value while the other thread is copying the elements out of the storage.
 worker_drop : Ptr -> IO ();
 worker_drop = |ptr| (
-    let holder : Box (PunchedArray (Box I64)) = *FFI::boxed_from_retained_ptr(ptr);
+    let holder : Box (PunchedArray (Box I64)) = *FFI::unpack_from_thread(ptr);
     let (_, delay) = *settings;
     FFI_CALL_IO[CInt usleep(CInt), delay.c_int];;
     if holder.@value.@_idx < 0 { undefined("the punched array should have a hole") };
@@ -45,13 +45,13 @@ FFI_EXPORT[worker_drop, fix_worker_drop];
 run_workers : Ptr -> IO ();
 run_workers = |ptr| FFI_CALL_IO[() run_workers(Ptr), ptr];
 
-// Takes `count` references to `value` and returns the pointer they all name, one for each thread to
-// drop.
-retain_many : I64 -> Box (PunchedArray (Box I64)) -> IO Ptr;
-retain_many = |count, value| (
+// Hands `value` over `count` times through `pack_for_thread` and returns the pointer every hand-over
+// names, one reference for each thread to drop. The value is boxed, so each pointer names its object.
+pack_many : I64 -> Box (PunchedArray (Box I64)) -> IO Ptr;
+pack_many = |count, value| (
     loop_m((0, nullptr), |(i, ptr)|
         if i == count { break_m $ ptr };
-        let ptr = *value.FFI::boxed_to_retained_ptr;
+        let ptr = *FFI::pack_for_thread(value);
         continue_m $ (i + 1, ptr)
     )
 );
@@ -77,11 +77,11 @@ main = (
     // Moving the element at slot 0 out leaves that slot as the hole. `hole_elem` takes over the
     // reference the slot held, so the storage no longer owns it.
     let (punched, hole_elem) = PunchedArray::_unsafe_punch_bounds_unchecked(0, arr);
-    let value = Box::make(punched).mark_threaded;
+    let value = Box::make(punched);
 
     // Nothing here holds the punched array any more: the two threads hold every reference to it, so
     // the last release of the storage comes from one of them.
-    let ptr = *value.retain_many(2);
+    let ptr = *value.pack_many(2);
     run_workers(ptr);;
 
     // The elements the storage owned are back to this thread's own reference, and the hole's

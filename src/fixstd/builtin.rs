@@ -20,8 +20,8 @@ use crate::ast::{
 use crate::constants::{
     TraverserWorkType, ARRAY_CAP_IDX, ARRAY_NAME, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK,
     ARRAY_STORAGE_IDX, ARRAY_STORAGE_NAME, ARRAY_UNSAFE_EMPTY_NAME, ARROW_NAME, BOOL_NAME,
-    BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX,
-    CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
+    BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, BOX_NAME, CAP_NAME, CLOSURE_CAPTURE_IDX,
+    CLOSURE_FUNPTR_IDX, CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
     DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
     FUNCTOR_NAME, FUNC_ARGS_MAX, FUNC_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
     IDENTITY_NAME, IOSTATE_NAME, IO_NAME, IS_UNIQUE_VALUE_FIELD, LAZY_NAME, PTR_NAME,
@@ -418,6 +418,12 @@ pub const IO_TYPE: BuiltinTypeName = BuiltinTypeName {
 pub const IOSTATE_TYPE: BuiltinTypeName = BuiltinTypeName {
     namespace: &[STD_NAME, IO_NAME],
     name: IOSTATE_NAME,
+};
+
+/// `Std::Box`, the boxed struct wrapping one value.
+pub const BOX_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: BOX_NAME,
 };
 
 /// `Std::Bool`.
@@ -9044,52 +9050,128 @@ pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The builtin operation of `Std::FFI::_boxed_to_retained_ptr_ios`.
+/// The type `Std::Box content`.
+pub fn make_box_ty(content: Arc<TypeNode>) -> Arc<TypeNode> {
+    type_tyapp(type_tycon(&tycon(BOX_TYPE.to_fullname())), content)
+}
+
+/// The kind of retained pointer a value is handed to foreign code as, which decides the object the
+/// pointer names.
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub enum RetainedPtrKind {
+    /// A pointer from `Std::FFI::boxed_to_retained_ptr`, to the object of a value of a boxed type.
+    Boxed,
+    /// A pointer from `Std::FFI::pack_for_thread`, to the value's own object for a boxed type and to
+    /// a `Std::Box` holding the value for an unboxed one. Every object the pointer reaches is in
+    /// multi-threaded mode.
+    PackedForThread,
+}
+
+impl RetainedPtrKind {
+    /// The `Std::Box` type a value of type `value_ty` is wrapped in to make a pointer of this kind, or
+    /// `None` where the pointer names the value's own object.
+    ///
+    /// # Examples
+    /// For `PackedForThread`, `Std::I64` gives `Std::Box Std::I64`, and `Std::Box Std::I64` gives
+    /// `None`.
+    fn wrapper_ty(self, value_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TypeNode>> {
+        if value_ty.is_box(type_env) {
+            return None;
+        }
+        match self {
+            RetainedPtrKind::Boxed => panic!(
+                "a pointer from `boxed_to_retained_ptr` is made from a boxed value, and `{}` is \
+                 unboxed",
+                value_ty.to_string()
+            ),
+            RetainedPtrKind::PackedForThread => Some(make_box_ty(value_ty.clone())),
+        }
+    }
+
+    /// The type of the object a pointer of this kind names, for a value of type `value_ty`.
+    fn pointee_ty(self, value_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Arc<TypeNode> {
+        self.wrapper_ty(value_ty, type_env)
+            .unwrap_or_else(|| value_ty.clone())
+    }
+
+    /// The constraints the type `value_ty` of the value a pointer of this kind is made from is under.
+    fn predicates(self, value_ty: &Arc<TypeNode>) -> Vec<Predicate> {
+        match self {
+            RetainedPtrKind::Boxed => vec![Predicate::make(make_boxed_trait(), value_ty.clone())],
+            RetainedPtrKind::PackedForThread => vec![],
+        }
+    }
+
+    /// The word naming this kind in the names of the ops.
+    fn word(self) -> &'static str {
+        match self {
+            RetainedPtrKind::Boxed => "boxed",
+            RetainedPtrKind::PackedForThread => "packed_for_thread",
+        }
+    }
+}
+
+/// The builtin operation of `Std::FFI::_boxed_to_retained_ptr_ios` and
+/// `Std::FFI::_pack_for_thread_ios`: a retained pointer of the kind `kind` to the value.
+///
+/// For `RetainedPtrKind::PackedForThread`, the operation also puts every object reachable from the
+/// value into multi-threaded mode. The marking and the pointer are made in one operation, so that no
+/// operation on the value can fall between them: one that finds the object uniquely referenced
+/// would put it back into single-threaded mode.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct BoxedToRetainedPtrIOSOp {
+pub struct ToRetainedPtrIOSOp {
+    /// The name the value is bound to in the scope of this body.
     val_name: FullName,
+    /// The name the `IOState` is bound to in the scope of this body.
     ios_name: FullName,
+    /// The kind of pointer made.
+    kind: RetainedPtrKind,
 }
 
 #[typetag::serde]
-impl BuiltinOp for BoxedToRetainedPtrIOSOp {
+impl BuiltinOp for ToRetainedPtrIOSOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argument
-        let obj = gc.get_scoped_obj(&self.val_name);
-        assert!(obj.is_box(gc.type_env()));
+        let val = gc.get_scoped_obj(&self.val_name);
         let ios = gc.get_scoped_obj(&self.ios_name);
 
-        // Create the retained pointer.
+        // The value's reference is the pointer's from here on, so `val` is not released.
+        let obj = match self.kind.wrapper_ty(&val.ty, gc.type_env()) {
+            None => val,
+            Some(box_ty) => {
+                ObjectFieldType::make_struct(gc, box_ty, &[val], Some("box@to_retained_ptr_ios"))
+            }
+        };
+        if let RetainedPtrKind::PackedForThread = self.kind {
+            // `check_multi_threading_requirement` has already reported a program that reaches here
+            // without multi-threading, where the source of the use is still known.
+            assert!(gc.config.threaded);
+            gc.mark_threaded(obj.clone());
+        }
+
         let ptr = create_obj(
             make_ptr_ty(),
             &vec![],
             None,
             gc,
-            Some("ptr@boxed_to_retained_ptr_ios"),
+            Some("ptr@to_retained_ptr_ios"),
         );
         let ptr = ptr.insert_field_object(gc, 0, &obj);
-
-        // Prepare returned object.
-        let ret = create_obj(
-            ret_ty.clone(),
-            &vec![],
-            None,
+        ObjectFieldType::make_struct(
             gc,
-            Some("ret@boxed_to_retained_ptr_ios"),
-        );
-
-        // Insert fields into returned object.
-        let ret = ret.insert_field_object(gc, 0, &ios);
-        let ret = ret.insert_field_object(gc, 1, &ptr);
-
-        ret
-
-        // Since the object should be retained by calling this function, we do not release `obj`.
+            ret_ty.clone(),
+            &[ios, ptr],
+            Some("ret@to_retained_ptr_ios"),
+        )
     }
 
     fn name(&self) -> String {
+        let op = match self.kind {
+            RetainedPtrKind::Boxed => "boxed_to_retained_ptr",
+            RetainedPtrKind::PackedForThread => "pack_for_thread",
+        };
         format!(
-            "boxed_to_retained_ptr({}, {})",
+            "{}({}, {})",
+            op,
             self.val_name.to_string(),
             self.ios_name.to_string()
         )
@@ -9105,6 +9187,7 @@ impl BuiltinOp for BoxedToRetainedPtrIOSOp {
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
+        // The result is the state and a pointer, which hold no boxed leaf.
         ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
@@ -9113,16 +9196,18 @@ impl BuiltinOp for BoxedToRetainedPtrIOSOp {
     }
 }
 
-pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
+/// Expression and scheme of the value `ToRetainedPtrIOSOp` computes for `kind`:
+/// `a -> IOState -> (IOState, Ptr)`, where `a` is required to be boxed for `RetainedPtrKind::Boxed`.
+pub fn to_retained_ptr_ios(kind: RetainedPtrKind) -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAL_NAME: &str = "val";
     const IOS_NAME: &str = "ios";
-    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let obj_type = type_tyvar_star(TYPE_NAME);
     let ios_type = make_iostate_ty();
     let ret_type = make_tuple_ty(vec![ios_type.clone(), make_ptr_ty()]);
     let scm = Scheme::generalize(
         &[],
-        vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
+        kind.predicates(&obj_type),
         vec![],
         type_arrow(
             obj_type.clone(),
@@ -9132,9 +9217,10 @@ pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs_many(
         vec![var_local(VAL_NAME), var_local(IOS_NAME)],
         expr_builtin(
-            Box::new(BoxedToRetainedPtrIOSOp {
+            Box::new(ToRetainedPtrIOSOp {
                 val_name: FullName::local(VAL_NAME),
                 ios_name: FullName::local(IOS_NAME),
+                kind,
             }),
             ret_type,
             None,
@@ -9143,40 +9229,55 @@ pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The builtin operation of `Std::FFI::_boxed_from_retained_ptr_ios`.
+/// The builtin operation of `Std::FFI::_boxed_from_retained_ptr_ios` and
+/// `Std::FFI::_unpack_from_thread_ios`: the value a retained pointer of the kind `kind` was made
+/// from, taking over the reference the pointer holds. A value of an unboxed type is taken out of the
+/// `Std::Box` the pointer names.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct BoxedFromRetainedPtrIOSOp {
+pub struct FromRetainedPtrIOSOp {
+    /// The name the pointer is bound to in the scope of this body.
     ptr_name: FullName,
+    /// The name the `IOState` is bound to in the scope of this body.
     ios_name: FullName,
+    /// The kind of the pointer.
+    kind: RetainedPtrKind,
 }
 
 #[typetag::serde]
-impl BuiltinOp for BoxedFromRetainedPtrIOSOp {
+impl BuiltinOp for FromRetainedPtrIOSOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argument.
         let ptr = gc.get_scoped_obj(&self.ptr_name);
         let ios = gc.get_scoped_obj(&self.ios_name);
         let ptr = ptr.extract_field(gc, 0);
+        let value_ty = ret_ty.field_types(gc.type_env())[1].clone();
 
-        // Prepare returned object.
-        let ret = create_obj(
-            ret_ty.clone(),
-            &vec![],
-            None,
+        let value = match self.kind.wrapper_ty(&value_ty, gc.type_env()) {
+            None => Object::new(ptr, value_ty, gc),
+            Some(box_ty) => {
+                // The value is retained out of the box, and the box releases the reference it held.
+                let box_obj = Object::new(ptr, box_ty, gc);
+                let value = ObjectFieldType::move_out_struct_field(gc, &box_obj, 0);
+                gc.retain(value.clone(), RcState::Unknown);
+                gc.release(box_obj, RcState::Unknown);
+                value
+            }
+        };
+        ObjectFieldType::make_struct(
             gc,
-            Some("ret@boxed_from_retained_ptr_ios"),
-        );
-
-        // Insert fields into returned object.
-        let ret = ret.insert_field_object(gc, 0, &ios);
-        let ret = ret.insert_field(gc, 1, ptr);
-
-        ret
+            ret_ty.clone(),
+            &[ios, value],
+            Some("ret@from_retained_ptr_ios"),
+        )
     }
 
     fn name(&self) -> String {
+        let op = match self.kind {
+            RetainedPtrKind::Boxed => "boxed_from_retained_ptr_ios",
+            RetainedPtrKind::PackedForThread => "unpack_from_thread",
+        };
         format!(
-            "boxed_from_retained_ptr_ios({}, {})",
+            "{}({}, {})",
+            op,
             self.ptr_name.to_string(),
             self.ios_name.to_string()
         )
@@ -9202,17 +9303,20 @@ impl BuiltinOp for BoxedFromRetainedPtrIOSOp {
     }
 }
 
-pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
+/// Expression and scheme of the value `FromRetainedPtrIOSOp` computes for `kind`:
+/// `Ptr -> IOState -> (IOState, a)`, where `a` is required to be boxed for
+/// `RetainedPtrKind::Boxed`.
+pub fn from_retained_ptr_ios(kind: RetainedPtrKind) -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const PTR_NAME: &str = "ptr";
     const IOS_NAME: &str = "ios";
-    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let obj_type = type_tyvar_star(TYPE_NAME);
     let ptr_type = make_ptr_ty();
     let ios_type = make_iostate_ty();
     let ret_type = make_tuple_ty(vec![ios_type.clone(), obj_type.clone()]);
     let scm = Scheme::generalize(
         &[],
-        vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
+        kind.predicates(&obj_type),
         vec![],
         type_arrow(
             ptr_type.clone(),
@@ -9222,9 +9326,10 @@ pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs_many(
         vec![var_local(PTR_NAME), var_local(IOS_NAME)],
         expr_builtin(
-            Box::new(BoxedFromRetainedPtrIOSOp {
+            Box::new(FromRetainedPtrIOSOp {
                 ptr_name: FullName::local(PTR_NAME),
                 ios_name: FullName::local(IOS_NAME),
+                kind,
             }),
             ret_type,
             None,
@@ -9233,66 +9338,96 @@ pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The `Ptr` naming the function that performs one reference-counting operation on the boxed value
-/// `var_name` names, which is the lazy value of a boxed type.
-///
-/// The function takes the object's pointer, does `build_operation` on it, and returns nothing. It is
-/// named `<operation>#<type>` and written once per module: a later request for the same pair reaches
-/// the function already there.
-fn rc_function_of_boxed_value<'c, 'm>(
-    gc: &mut Generator<'c, 'm>,
-    var_name: &FullName,
-    operation: &str,
-    build_operation: impl FnOnce(&mut Generator<'c, 'm>, Object<'c>),
-) -> Object<'c> {
-    let arg = gc.get_scoped_obj_noretain(var_name);
-    let target_ty = arg.ty.get_lambda_dst();
-    assert!(target_ty.is_box(gc.type_env()));
+/// The reference-counting operation a function from `GetRcFunctionPtrOp` performs.
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub enum RcFunctionOperation {
+    /// Decrements the object's reference count, and destroys the object when the count reaches zero.
+    Release,
+    /// Increments the object's reference count.
+    Retain,
+}
 
-    let function_name = format!("{}#{}", operation, arg.ty.to_string_normalize());
-    let func = match gc.module.get_function(&function_name) {
-        Some(func) => func,
-        None => {
-            let function_ty = gc
-                .context
-                .void_type()
-                .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
-            let func = gc
-                .module
-                .add_function(&function_name, function_ty, Some(Linkage::Internal));
-            let bb = gc.context.append_basic_block(func, "entry");
-            let _builder_guard = gc.push_builder();
-            gc.builder().position_at_end(bb);
-
-            let obj_ptr = func.get_nth_param(0).unwrap();
-            let obj = Object::new(obj_ptr, target_ty, gc);
-            build_operation(gc, obj);
-            gc.builder().build_return(None).unwrap();
-
-            func
+impl RcFunctionOperation {
+    /// The word the operation is named by, in the function's name and in the op's.
+    fn word(self) -> &'static str {
+        match self {
+            RcFunctionOperation::Release => "release",
+            RcFunctionOperation::Retain => "retain",
         }
-    };
-    let func_ptr = func.as_global_value().as_pointer_value();
-
-    make_ptr_obj(gc, func_ptr, &format!("ret_val@get_funptr_{}", operation))
+    }
 }
 
-/// The builtin operation of `Std::FFI::get_funptr_release`.
+/// The builtin operation of `Std::FFI::get_funptr_release`, `Std::FFI::get_funptr_retain`,
+/// `Std::FFI::get_funptr_release_for_thread` and `Std::FFI::get_funptr_retain_for_thread`: the
+/// `Ptr` naming a function of type `void (*)(void*)` that performs `operation` on the object a
+/// retained pointer of the kind `kind` names.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct GetReleaseFunctionOfBoxedValueOp {
+pub struct GetRcFunctionPtrOp {
+    /// The name the operand is bound to in the scope of this body: a lazy value whose type is the
+    /// type of the value the pointer was made from.
     var_name: FullName,
+    /// The operation the function performs.
+    operation: RcFunctionOperation,
+    /// The kind of pointer the function takes.
+    kind: RetainedPtrKind,
 }
 
 #[typetag::serde]
-impl BuiltinOp for GetReleaseFunctionOfBoxedValueOp {
+impl BuiltinOp for GetRcFunctionPtrOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        rc_function_of_boxed_value(gc, &self.var_name, "release", |gc, obj| {
-            gc.release(obj, RcState::Unknown);
-        })
+        let arg = gc.get_scoped_obj_noretain(&self.var_name);
+        let target_ty = self
+            .kind
+            .pointee_ty(&arg.ty.get_lambda_dst(), gc.type_env());
+
+        // The function is named by the operation and the type of the object it acts on, and written
+        // once per module: a later request for the same pair reaches the function already there.
+        let function_name = format!(
+            "{}#{}",
+            self.operation.word(),
+            target_ty.to_string_normalize()
+        );
+        let func = match gc.module.get_function(&function_name) {
+            Some(func) => func,
+            None => {
+                let function_ty = gc
+                    .context
+                    .void_type()
+                    .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
+                let func =
+                    gc.module
+                        .add_function(&function_name, function_ty, Some(Linkage::Internal));
+                let bb = gc.context.append_basic_block(func, "entry");
+                let _builder_guard = gc.push_builder();
+                gc.builder().position_at_end(bb);
+
+                let obj_ptr = func.get_nth_param(0).unwrap();
+                let obj = Object::new(obj_ptr, target_ty, gc);
+                match self.operation {
+                    RcFunctionOperation::Release => gc.release(obj, RcState::Unknown),
+                    RcFunctionOperation::Retain => gc.retain(obj, RcState::Unknown),
+                }
+                gc.builder().build_return(None).unwrap();
+
+                func
+            }
+        };
+        let func_ptr = func.as_global_value().as_pointer_value();
+
+        make_ptr_obj(
+            gc,
+            func_ptr,
+            &format!("ret_val@get_funptr_{}", self.operation.word()),
+        )
     }
 
     fn name(&self) -> String {
-        format!("boxed_release_func_ptr({})", self.var_name.to_string())
+        format!(
+            "{}_{}_func_ptr({})",
+            self.kind.word(),
+            self.operation.word(),
+            self.var_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -9317,90 +9452,31 @@ impl BuiltinOp for GetReleaseFunctionOfBoxedValueOp {
     }
 }
 
-pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const TARGET_TY_NAME: &str = "a";
+/// Expression and scheme of the value `GetRcFunctionPtrOp` computes for `operation` and `kind`:
+/// `Lazy a -> Ptr`, where `a` is required to be boxed for `RetainedPtrKind::Boxed`.
+pub fn get_rc_function_ptr(
+    operation: RcFunctionOperation,
+    kind: RetainedPtrKind,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const VALUE_TY_NAME: &str = "a";
     const VAR_NAME: &str = "x";
 
-    let target_type = type_tyvar_star(TARGET_TY_NAME);
-    let arg_type = type_tyapp(make_lazy_ty(), target_type.clone());
+    let value_type = type_tyvar_star(VALUE_TY_NAME);
+    let arg_type = type_tyapp(make_lazy_ty(), value_type.clone());
     let ret_type = make_ptr_ty();
     let scm = Scheme::generalize(
         &[],
-        vec![Predicate::make(make_boxed_trait(), target_type.clone())],
+        kind.predicates(&value_type),
         vec![],
         type_arrow(arg_type.clone(), ret_type.clone()),
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_builtin(
-            Box::new(GetReleaseFunctionOfBoxedValueOp {
+            Box::new(GetRcFunctionPtrOp {
                 var_name: FullName::local(VAR_NAME),
-            }),
-            ret_type,
-            None,
-        ),
-        None,
-    );
-    (expr, scm)
-}
-
-/// The builtin operation of `Std::FFI::get_funptr_retain`.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct GetRetainFunctionOfBoxedValueOp {
-    var_name: FullName,
-}
-
-#[typetag::serde]
-impl BuiltinOp for GetRetainFunctionOfBoxedValueOp {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        rc_function_of_boxed_value(gc, &self.var_name, "retain", |gc, obj| {
-            gc.retain(obj, RcState::Unknown);
-        })
-    }
-
-    fn name(&self) -> String {
-        format!("boxed_retain_func_ptr({})", self.var_name.to_string())
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
-    }
-
-    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
-        i == 0
-    }
-
-    fn result_locality(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> ExtShape {
-        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const TARGET_TYPE_NAME: &str = "a";
-    const VAR_NAME: &str = "x";
-    let target_type = type_tyvar_star(TARGET_TYPE_NAME);
-    let arg_type = type_tyapp(make_lazy_ty(), target_type.clone());
-    let ret_type = make_ptr_ty();
-    let scm = Scheme::generalize(
-        &[],
-        vec![Predicate::make(make_boxed_trait(), target_type.clone())],
-        vec![],
-        type_arrow(arg_type.clone(), ret_type.clone()),
-    );
-    let expr = expr_abs(
-        vec![var_local(VAR_NAME)],
-        expr_builtin(
-            Box::new(GetRetainFunctionOfBoxedValueOp {
-                var_name: FullName::local(VAR_NAME),
+                operation,
+                kind,
             }),
             ret_type,
             None,
@@ -10211,8 +10287,9 @@ impl BuiltinOp for MarkThreadedOp {
         // This op returns the object it was given, yet its result is `Unknown` and its argument is
         // consumed, and it must stay that way. Unique-check elimination drops a check on the strength
         // of a value being uniquely owned, which for a value another thread can reach is only sound
-        // because a threaded value can never be held through a `Fresh` handle: the two ways to make a
-        // value threaded — this op and `boxed_from_retained_ptr` — both hand back a `Unknown` one.
+        // because a threaded value can never be held through a `Fresh` handle: of the ways to make a
+        // value threaded, this op, `boxed_from_retained_ptr` and `unpack_from_thread` hand back an
+        // `Unknown` one, and `pack_for_thread` hands back no handle at all, only a pointer.
         // Declaring the argument a passthrough would break that on both counts, since it also declares
         // the argument unconsumed: the caller would keep a `Fresh` handle to an object it has just
         // published to other threads, and a write through that handle would race.

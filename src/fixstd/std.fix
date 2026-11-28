@@ -969,6 +969,8 @@ namespace Box {
     make = |val| Box { value : val };
 }
 
+DEPRECATED[mark_threaded, "Use `Std::FFI::pack_for_thread` instead."];
+
 // Marker trait for boxed types.
 // 
 // This trait is automatically implemented for all boxed types.
@@ -1057,6 +1059,43 @@ namespace FFI {
     // * `retained_ptr` - The pointer to the value.
     boxed_from_retained_ptr : [a : Boxed] Ptr -> IO a;
     boxed_from_retained_ptr = |ptr| IO::from_runner $ _boxed_from_retained_ptr_ios(ptr);
+
+    // Gets a pointer through which another thread can take the value.
+    //
+    // This function puts the reference counters of all values reachable from the given value into multi-threaded mode, in which they are updated atomically, and returns a retained pointer to the value.
+    // Hand the pointer to a threading library such as pthread, and take the value in the other thread with `unpack_from_thread`.
+    // A value reaches another thread safely only through a pointer this function returns.
+    //
+    // The pointer is never null. For a value of a boxed type, it points to the object of the value.
+    // A value of an unboxed type is wrapped in a `Std::Box`, and the pointer points to the box.
+    // To release or retain the pointer in a foreign language, call the function pointer obtained by `get_funptr_release_for_thread` or `get_funptr_retain_for_thread` on it.
+    //
+    // To send on a value that came from another thread, call this function on it again.
+    //
+    // Building a program that calls this function requires multi-threading to be enabled by the `--threaded` compiler option or by the `threaded` field of the project file of the program being built. A library that calls this function is used by turning multi-threading on there.
+    //
+    // # Parameters
+    //
+    // * `value` - The value to send to another thread.
+    pack_for_thread : a -> IO Ptr;
+    pack_for_thread = |value| IO::from_runner $ _pack_for_thread_ios(value);
+
+    // Takes the value from a pointer that `pack_for_thread` returned.
+    //
+    // The returned value takes over the reference the pointer holds. To take the value from one pointer more than once, retain the pointer first by the function pointer obtained by `get_funptr_retain_for_thread`.
+    //
+    // NOTE:
+    // It is the user's responsibility to ensure that the pointer was returned by `pack_for_thread` for a value of the type of the return value, and undefined behavior will occur if it was not.
+    //
+    // NOTE:
+    // The result of a global value's initializer must not include a boxed value that existed before the initializer started, except the values of other global values.
+    // So, inside an initializer, if the pointer was made before the initializer started, do not put the returned value into the initializer's result. Doing so is undefined behavior.
+    //
+    // # Parameters
+    //
+    // * `ptr` - The pointer `pack_for_thread` returned.
+    unpack_from_thread : Ptr -> IO a;
+    unpack_from_thread = |ptr| IO::from_runner $ _unpack_from_thread_ios(ptr);
 
     // Performs an IO action borrowing a pointer to the data of a boxed value.
     // 

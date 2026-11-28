@@ -3,4 +3,7 @@ module Test;
 import ThreadingLib;
 
 test : IO ();
-test = println(ThreadingLib::publish(Box::make(21)).@value.to_string);
+test = (
+    let value : Box I64 = *FFI::unpack_from_thread(*ThreadingLib::publish(Box::make(21)));
+    println(value.@value.to_string)
+);
