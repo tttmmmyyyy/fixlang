@@ -61,7 +61,7 @@ use commands::{
     check, clean, deps, docs,
     lsp::server::launch_language_server,
     run,
-    test::{self, TestOptions, TestSelection},
+    test::{self, default_test_threads, TestOptions, TestSelection},
 };
 use configuration::{
     BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
@@ -963,7 +963,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
                 .collect();
             let threads = match args.get_one::<u64>("test-threads") {
                 Some(threads) => *threads as usize,
-                None => test::default_test_threads(),
+                None => default_test_threads(),
             };
             let options = TestOptions {
                 selection,
