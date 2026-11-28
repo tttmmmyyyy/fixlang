@@ -1907,8 +1907,8 @@ impl TypeNode {
     /// Two types give one string exactly when they differ only in the names and the kinds of their
     /// type variables: a type wildcard is renamed like any other type variable, so the `_` that
     /// `to_string` writes for it never stands in this string. This also rests on a program never
-    /// naming a type and an associated type alike, since `T a` would be written the same for both. A symbol name and the key of a type
-    /// checking cache are made from this string on that account.
+    /// naming a type and an associated type alike, since `T a` would be written the same for both.
+    /// A symbol name is made from this string on that account.
     pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
         self.normalize().to_string()
     }
@@ -2693,6 +2693,11 @@ impl Scheme {
 
     /// The scheme written out with its generalized variables renamed `a`, `b`, ... in the order
     /// `gen_vars` lists them, so that the names the source happened to use stay out of the text.
+    ///
+    /// The scheme of a declared value holds no type wildcard, so the `_` that `TypeNode::to_string`
+    /// writes for one never stands in this string, and two such schemes give one string only when
+    /// they differ in the names or kinds of their type variables or in the order of their
+    /// constraints. The type checking cache keys an entry by this string (`entity_identity`).
     pub fn to_string_normalize(&self) -> String {
         // Change names of generalized type variables to a, b, ...
         let mut s = Substitution::default();
