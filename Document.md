@@ -3310,6 +3310,8 @@ The options of `fix test` select the tests and how they run:
 
 A compile error in a source file stops `fix test` before it runs any test. This includes an error in a value a `TEST[...]` pragma names, since every global value of the source files is type-checked. A Fix example that does not compile fails by itself, and the other tests still run.
 
+The module name `DocTest`, and the module names beginning with `DocTest.`, are reserved for the modules `fix test` adds to the program to run the tests: `fix test` reports an error if the project or a dependency has a module of such a name.
+
 ### Declaring tests with `TEST` (Experimental)
 
 This feature is experimental, and its specification may change in a later version.
@@ -3389,8 +3391,6 @@ Write an example in the source form to define types or functions:
 // );
 // ```
 ```
-
-The module name `DocTest`, and the module names beginning with `DocTest.`, are reserved for the examples: when `fix test` compiles an example, it reports an error if the project or a dependency has a module of such a name.
 
 A line of an example whose text begins with `# ` after its indentation is hidden: it is compiled with the `# ` removed, and it is not shown in the documentation `fix docs` generates or in the hover of the language server. A line of `#` alone is a hidden empty line. Hidden lines usually hold the module declaration, the imports and the head of `main`, so that the documentation shows the definitions and how to use them. The following example is shown without its lines starting with `#`:
 

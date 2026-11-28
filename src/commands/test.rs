@@ -138,17 +138,6 @@ impl TestCase {
         }
     }
 
-    /// Whether the test compiles a Fix example.
-    fn compiles_an_example(&self) -> bool {
-        matches!(
-            self.task,
-            TestTask::Build {
-                test: BuiltTest::Example(_),
-                ..
-            }
-        )
-    }
-
     /// The test that runs the global value `value`, which the source at `declared_at` declares as
     /// a test, and marks `ignore` where `ignore` is true.
     fn of_value(value: &FullName, declared_at: &Option<Span>, ignore: bool) -> Self {
@@ -209,11 +198,8 @@ pub fn test_command(mut config: Configuration, options: TestOptions) {
     if tests.is_empty() {
         panic_if_err::<()>(Err(no_test_error(&options)));
     }
-    // The examples are compiled as modules whose names are reserved for them (see
-    // `is_reserved_module_name`), so those names are free where an example is compiled.
-    if tests.iter().any(TestCase::compiles_an_example) {
-        panic_if_err(check_doc_test_module_names_are_free(&program));
-    }
+    // The modules a build adds have names reserved for them (see `is_reserved_module_name`).
+    panic_if_err(check_doc_test_module_names_are_free(&program));
 
     let args = take(&mut config.run_program_args);
     let mut report = Report::new(&tests);

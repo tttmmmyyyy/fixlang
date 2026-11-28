@@ -112,7 +112,7 @@ impl TestBuild {
                 .map(|example| example.name.as_str())
                 .chain(iter::once(DISPATCHER_MODULE_NAME))
                 .all(is_reserved_module_name),
-            "the modules a build adds have names reserved for the Fix examples"
+            "the modules a build adds have reserved names"
         );
         let dispatcher = save_temporary_source(&dispatcher_source(&values), "test_dispatcher")?;
         Ok(TestBuild {
@@ -230,8 +230,8 @@ fn dispatcher_source(values: &[FullName]) -> String {
     )
 }
 
-/// Whether `name` is a module name reserved for the Fix examples: `DocTest`, or a name beginning
-/// with `DocTest.`. A build of `fix test` gives the modules it adds names of this kind.
+/// Whether `name` is a module name reserved for the modules a build of `fix test` adds: `DocTest`, or
+/// a name beginning with `DocTest.`.
 ///
 /// # Examples
 /// `DocTest` and `DocTest.Dispatcher` are reserved, and `DocTests` and `Lib.DocTest` are not.
@@ -239,8 +239,8 @@ fn is_reserved_module_name(name: &str) -> bool {
     name == DOC_TEST_MODULE_NAME || name.starts_with(&format!("{}.", DOC_TEST_MODULE_NAME))
 }
 
-/// Reports a module of `program` whose name is reserved for the Fix examples (see
-/// `is_reserved_module_name`). A namespace, a type or a trait named `DocTest` stays free; an
+/// Reports a module of `program` whose name is reserved for the modules a build of `fix test` adds
+/// (see `is_reserved_module_name`). A namespace, a type or a trait named `DocTest` stays free; an
 /// example that refers to one of them by a name beginning with `DocTest` is reported as ambiguous,
 /// with the absolute path that tells them apart.
 pub fn check_doc_test_module_names_are_free(program: &Program) -> Result<(), Errors> {
@@ -251,8 +251,8 @@ pub fn check_doc_test_module_names_are_free(program: &Program) -> Result<(), Err
     {
         Some(module) => Err(Errors::from_msg_srcs(
             format!(
-                "The module name `{}` is reserved for the Fix examples of comments, which \
-                 `fix test` compiles as modules named `{}` or with names beginning with `{}.`. \
+                "The module name `{}` is reserved for the modules `fix test` adds to the program \
+                 to run the tests, which are named `{}` or with names beginning with `{}.`. \
                  Give this module another name.",
                 module.name, DOC_TEST_MODULE_NAME, DOC_TEST_MODULE_NAME
             ),

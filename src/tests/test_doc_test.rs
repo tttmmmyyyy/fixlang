@@ -428,104 +428,59 @@ value = 1;
 }
 
 /// `fix test` rejects a module named `DocTest` or with a name beginning with `DocTest.`, the names
-/// the Fix examples are compiled under, at its declaration. A module whose name ends in `DocTest`
-/// and a namespace, a type or a trait named `DocTest` are accepted, and so is the module `DocTest`
-/// where no example is compiled: under `--no-doc`, and in a project without an example.
+/// of the modules it adds to the program, at its declaration, whichever tests it runs. A module
+/// whose name ends in `DocTest` and a namespace, a type or a trait named `DocTest` are accepted.
 #[test]
 fn test_the_module_name_doc_test_is_reserved() {
     let module = "module DocTest;\nvalue : I64;\nvalue = 1;\n";
-    for reserved in ["DocTest", "DocTest.Examples"] {
-        let dir = project_dir(
-            &[
-                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-                (
-                    "doc_test.fix",
-                    &module.replace("module DocTest;", &format!("module {};", reserved)),
-                ),
-            ],
-            &[],
-        );
-        let output = fix_test(&dir, &[]);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            !output.status.success()
-                && stderr.contains(&format!("The module name `{}` is reserved", reserved))
-                && stderr.contains(&format!("1 | module {};", reserved))
-                && !stderr.contains("doc test"),
-            "the module `{}` is rejected at its declaration before any example runs\n{}",
-            reserved,
-            streams(&output)
-        );
+    let lib_without_examples = r#"module Lib;
+
+passes : IO ();
+passes = pure();
+TEST[passes];
+"#;
+    for reserved in ["DocTest", "DocTest.Dispatcher"] {
+        let reserved_module = module.replace("module DocTest;", &format!("module {};", reserved));
+        for (lib, args) in [
+            (LIB_WITH_PASSING_EXAMPLES, vec![]),
+            (LIB_WITH_PASSING_EXAMPLES, vec!["--no-doc"]),
+            (lib_without_examples, vec![]),
+        ] {
+            let dir = project_dir(
+                &[("lib.fix", lib), ("doc_test.fix", &reserved_module)],
+                &[("test.fix", TEST_ANNOUNCING_ITSELF)],
+            );
+            let output = fix_test(&dir, &args);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                !output.status.success()
+                    && stderr.contains(&format!("The module name `{}` is reserved", reserved))
+                    && stderr.contains(&format!("1 | module {};", reserved))
+                    && !stderr.contains(" ... "),
+                "`fix test {}` rejects the module `{}` at its declaration before any test runs\n{}",
+                args.join(" "),
+                reserved,
+                streams(&output)
+            );
+        }
     }
 
-    let lib_without_examples = "module Lib;\ndouble : I64 -> I64;\ndouble = |x| 2 * x;\n";
-    for (build_files, args) in [
-        (
-            vec![
-                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-                (
-                    "other.fix",
-                    "module Other.DocTest;\nvalue : I64;\nvalue = 1;\n",
-                ),
-            ],
-            vec![],
-        ),
-        (
-            vec![
-                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-                ("other.fix", "module DocTests;\nvalue : I64;\nvalue = 1;\n"),
-            ],
-            vec![],
-        ),
-        (
-            vec![
-                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-                (
-                    "other.fix",
-                    "module Other;\nnamespace DocTest {\n    value : I64;\n    value = 1;\n}\n",
-                ),
-            ],
-            vec![],
-        ),
-        (
-            vec![
-                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-                (
-                    "other.fix",
-                    "module Other;\ntype DocTest = struct { x : I64 };\n",
-                ),
-            ],
-            vec![],
-        ),
-        (
-            vec![
-                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-                (
-                    "other.fix",
-                    "module Other;\ntrait a : DocTest {\n    describe : a -> String;\n}\n",
-                ),
-            ],
-            vec![],
-        ),
-        (
-            vec![
-                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-                ("doc_test.fix", module),
-            ],
-            vec!["--no-doc"],
-        ),
-        (
-            vec![("lib.fix", lib_without_examples), ("doc_test.fix", module)],
-            vec![],
-        ),
+    for other in [
+        "module Other.DocTest;\nvalue : I64;\nvalue = 1;\n",
+        "module DocTests;\nvalue : I64;\nvalue = 1;\n",
+        "module Other;\nnamespace DocTest {\n    value : I64;\n    value = 1;\n}\n",
+        "module Other;\ntype DocTest = struct { x : I64 };\n",
+        "module Other;\ntrait a : DocTest {\n    describe : a -> String;\n}\n",
     ] {
-        let dir = project_dir(&build_files, &[("test.fix", TEST_ANNOUNCING_ITSELF)]);
-        let output = fix_test(&dir, &args);
+        let dir = project_dir(
+            &[("lib.fix", LIB_WITH_PASSING_EXAMPLES), ("other.fix", other)],
+            &[("test.fix", TEST_ANNOUNCING_ITSELF)],
+        );
+        let output = fix_test(&dir, &[]);
         assert!(
             output.status.success(),
-            "`fix test {}` accepts\n{:?}\n{}",
-            args.join(" "),
-            build_files,
+            "`fix test` accepts\n{}\n{}",
+            other,
             streams(&output)
         );
     }
