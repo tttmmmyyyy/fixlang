@@ -9,6 +9,9 @@ pub const IO_NAME: &str = "IO";
 pub const IO_DATA_NAME: &str = "runner";
 /// The `Std` value that puts the values reachable from a value into multi-threaded mode.
 pub const MARK_THREADED_NAME: &str = "mark_threaded";
+/// The `Std::FFI` value that puts the values reachable from a value into multi-threaded mode and
+/// gives a pointer through which another thread takes the value.
+pub const PACK_FOR_THREAD_NAME: &str = "pack_for_thread";
 pub const PTR_NAME: &str = "Ptr";
 pub const U8_NAME: &str = "U8";
 pub const I8_NAME: &str = "I8";
@@ -72,6 +75,8 @@ pub const DOC_TEST_MODULE_NAME: &str = "DocTest";
 /// The environment variable that tells a program built from several Fix examples which of them to
 /// run, by its index among them.
 pub const DOC_TEST_EXAMPLE_ENV_VAR: &str = "FIX_DOC_TEST_EXAMPLE";
+/// The boxed struct `Std::Box` wrapping one value.
+pub const BOX_NAME: &str = "Box";
 pub const BOXED_TRAIT_NAME: &str = "Boxed";
 pub const WITH_RETAINED_NAME: &str = "with_retained";
 #[allow(unused)]

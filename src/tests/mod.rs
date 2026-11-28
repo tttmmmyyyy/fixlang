@@ -84,6 +84,7 @@ mod test_opaque_type;
 mod test_optimization_threads;
 mod test_output_file_setting;
 mod test_output_kept_on_abort;
+mod test_pack_for_thread;
 mod test_pointer_arithmetic;
 mod test_predicate_deduction;
 mod test_preliminary_commands;

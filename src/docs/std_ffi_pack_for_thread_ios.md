@@ -1,0 +1,1 @@
+Internal implementation of `Std::FFI::pack_for_thread`.
