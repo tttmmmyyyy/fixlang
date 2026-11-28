@@ -171,7 +171,7 @@ fn destructure_act_ty(
 
 // Taking type `(T -> f T) -> U -> f U`, check if `f` is `Std::Identity`.
 fn is_functor_identity(lens_ty: &Arc<TypeNode>) -> bool {
-    let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(&lens_ty);
+    let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(lens_ty);
 
     let id_ty = type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IDENTITY_NAME)));
     ft_ty == type_tyapp(id_ty.clone(), t_ty) && fu_ty == type_tyapp(id_ty, u_ty)
@@ -192,7 +192,7 @@ fn is_functor_tuple2(lens_ty: &Arc<TypeNode>) -> bool {
 // Taking type `(T -> f T) -> U -> f U`, check if `f` is `g C` for the type constructor `g` and some
 // type `C`, the same `C` in `f T` and in `f U`.
 fn is_functor_applied_once(lens_ty: &Arc<TypeNode>, g: &Arc<TypeNode>) -> bool {
-    let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(&lens_ty);
+    let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(lens_ty);
     match (
         functor_argument(&ft_ty, &t_ty, g),
         functor_argument(&fu_ty, &u_ty, g),
