@@ -1272,8 +1272,7 @@ impl TypeNode {
             ));
         }
         walk_path.push((normal_form, self.clone()));
-        let resolved =
-            self.resolve_type_aliases_after_cycle_check(env, walk_path, entry_type_src);
+        let resolved = self.resolve_type_aliases_after_cycle_check(env, walk_path, entry_type_src);
         walk_path.pop();
         resolved
     }
@@ -1343,9 +1342,10 @@ impl TypeNode {
                     entry_type_src,
                 )?)),
             Type::AssocTy(_, args) => {
-                let args = collect_results(args.iter().map(|arg| {
-                    arg.resolve_type_aliases_internal(env, walk_path, entry_type_src)
-                }))?;
+                let args =
+                    collect_results(args.iter().map(|arg| {
+                        arg.resolve_type_aliases_internal(env, walk_path, entry_type_src)
+                    }))?;
                 Ok(self.set_assocty_args(args))
             }
         }
@@ -1907,7 +1907,7 @@ impl TypeNode {
     ///
     /// Two types give one string exactly when they differ only in the names and the kinds of their
     /// type variables. A type wildcard is renamed like any other type variable, so this string
-    /// holds no `_`. The property also relies on a program never giving a type and an associated
+    /// holds no `_` written for a wildcard. The property also relies on a program never giving a type and an associated
     /// type the same name, since `T a` is written the same for both. Symbol names are built from
     /// this string and rely on the property.
     pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
@@ -2695,9 +2695,9 @@ impl Scheme {
     /// The scheme written out with its generalized variables renamed `a`, `b`, ... in the order
     /// `gen_vars` lists them, so that the names the source happened to use stay out of the text.
     ///
-    /// The scheme of a declared value holds no type wildcard, so this string holds no `_`. Two such
-    /// schemes give one string only when they differ at most in the names and kinds of their type
-    /// variables and in the order of their constraints.
+    /// The scheme of a declared value holds no type wildcard, so this string holds no `_` written for
+    /// a wildcard. Two such schemes give one string only when they differ at most in the names and
+    /// kinds of their type variables and in the order and repetition of their constraints.
     pub fn to_string_normalize(&self) -> String {
         // Change names of generalized type variables to a, b, ...
         let mut s = Substitution::default();
