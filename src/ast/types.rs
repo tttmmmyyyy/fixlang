@@ -2041,7 +2041,7 @@ impl TypeNode {
     }
 
     /// A digest of this type together with `capture`, short enough to embed in a symbol name. Two
-    /// types with the same normalized form and the same captures have the same digest.
+    /// types with the same normal form (`normalize`) and the same captures have the same digest.
     ///
     /// # Arguments
     /// * `capture` — the captured types of a dynamic object, which distinguish two dynamic objects
@@ -2065,7 +2065,7 @@ impl TypeNode {
     }
 
     /// A digest of this type, short enough to embed in a symbol name. Two types with the same
-    /// normalized form have the same digest.
+    /// normal form (`normalize`) have the same digest.
     pub fn digest(self: &Arc<TypeNode>) -> String {
         let type_string = self.to_string_normalize();
         format!("{:x}", md5::compute(type_string))
