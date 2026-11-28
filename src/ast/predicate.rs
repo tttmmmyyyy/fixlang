@@ -29,8 +29,8 @@ pub struct Predicate {
 }
 
 impl PartialEq for Predicate {
-    /// Compares the trait and the type, which are what decide which constraint this is; where the
-    /// constraint was written and which use required it stay out of the comparison.
+    /// Compares `trait_id` and `ty`. The spans and `required_by` take no part, so two copies of one
+    /// constraint, written or required at different places, compare equal.
     fn eq(&self, other: &Self) -> bool {
         self.trait_id == other.trait_id && self.ty == other.ty
     }

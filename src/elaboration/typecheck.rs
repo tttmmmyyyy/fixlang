@@ -3559,9 +3559,9 @@ fn short_span_snippet(span: &Span) -> Option<String> {
 /// begun and has yet to end, and `settled` the ones whose deduction ended.
 #[derive(Default)]
 struct PredicateDeduction {
-    /// The predicates whose deduction the current one is inside, outermost first, each with the
-    /// form it was asked for in, before the associated types in it were reduced. The asked form is
-    /// what tells one deduction from another here.
+    /// The predicates whose deduction the current one is inside, outermost first. Each entry holds
+    /// the predicate with its associated types reduced, and the predicate as it was asked for,
+    /// before that reduction. The asked form is what tells one deduction from another here.
     path: Vec<(Predicate, Predicate)>,
     /// The asked form of each predicate on `path`. Meeting one of these again is meeting a
     /// predicate whose deduction needs itself.

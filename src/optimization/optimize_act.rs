@@ -169,7 +169,7 @@ fn destructure_act_ty(
     (t_ty, u_ty, ft_ty, fu_ty)
 }
 
-// Taking type `(T -> f T) -> U -> f U`, check if `f` is `Std::Identity`.
+/// Whether `f` in the act type `lens_ty`, `(T -> f T) -> U -> f U`, is `Std::Identity`.
 fn is_functor_identity(lens_ty: &Arc<TypeNode>) -> bool {
     let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(lens_ty);
 
@@ -177,20 +177,25 @@ fn is_functor_identity(lens_ty: &Arc<TypeNode>) -> bool {
     ft_ty == type_tyapp(id_ty.clone(), t_ty) && fu_ty == type_tyapp(id_ty, u_ty)
 }
 
-// Taking type `(T -> f T) -> U -> f U`, check if `f` is `Std::Const C` for some `C`.
+/// Whether `f` in the act type `lens_ty`, `(T -> f T) -> U -> f U`, is `Std::Const C` for some
+/// type `C`.
 fn is_functor_const(lens_ty: &Arc<TypeNode>) -> bool {
     let const_ty = type_tycon(&tycon(FullName::from_strs(&[STD_NAME], CONST_NAME)));
     is_functor_applied_once(lens_ty, &const_ty)
 }
 
-// Taking type `(T -> f T) -> U -> f U`, check if `f` is `Std::Tuple2 X` for some `X`.
+/// Whether `f` in the act type `lens_ty`, `(T -> f T) -> U -> f U`, is `Std::Tuple2 X` for some
+/// type `X`.
 fn is_functor_tuple2(lens_ty: &Arc<TypeNode>) -> bool {
     let tuple2_ty = type_tycon(&tycon(make_tuple_name_abs(2)));
     is_functor_applied_once(lens_ty, &tuple2_ty)
 }
 
-// Taking type `(T -> f T) -> U -> f U`, check if `f` is `g C` for the type constructor `g` and some
-// type `C`, the same `C` in `f T` and in `f U`.
+/// Whether `f` in the act type `lens_ty`, `(T -> f T) -> U -> f U`, is `g C` for some type `C`.
+/// `f T` and `f U` have to carry the same `C`.
+///
+/// # Arguments
+/// * `g` — a type constructor that takes two arguments, such as `Std::Const`.
 fn is_functor_applied_once(lens_ty: &Arc<TypeNode>, g: &Arc<TypeNode>) -> bool {
     let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(lens_ty);
     match (
@@ -202,7 +207,10 @@ fn is_functor_applied_once(lens_ty: &Arc<TypeNode>, g: &Arc<TypeNode>) -> bool {
     }
 }
 
-// The type `C` if `ty` is `g C arg_ty`.
+/// The type `C` if `ty` is `g C arg_ty`.
+///
+/// # Examples
+/// With `g` = `Std::Const`, `ty` = `Const I64 Bool` and `arg_ty` = `Bool`, returns `I64`.
 fn functor_argument<'t>(
     ty: &'t Arc<TypeNode>,
     arg_ty: &Arc<TypeNode>,
