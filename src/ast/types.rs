@@ -1263,7 +1263,7 @@ impl TypeNode {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Circular type aliasing is found in `{}`.",
-                    first_met.to_string_as_written()
+                    first_met.to_string()
                 ),
                 &[entry_type_src],
             ));
@@ -1296,7 +1296,7 @@ impl TypeNode {
                         format!(
                             "Cannot resolve type alias `{}` in `{}` because it is not fully applied.",
                             tc.to_string(),
-                            self.to_string_as_written()
+                            self.to_string()
                         ),
                         &[toplevel_ty.get_source()],
                     ));
@@ -1591,10 +1591,10 @@ impl TypeNode {
             Errors::from_msg_srcs(
                 format!(
                     "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
-                    application.to_string_as_written(),
-                    fun.to_string_as_written(),
+                    application.to_string(),
+                    fun.to_string(),
                     fun_kind.to_string(),
-                    arg.to_string_as_written(),
+                    arg.to_string(),
                     arg_kind.to_string()
                 ),
                 &[application.get_source()],
@@ -1627,7 +1627,7 @@ impl TypeNode {
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "Kind mismatch in `{}`. Expected `{}`, found `{}`.",
-                                self.to_string_as_written(),
+                                self.to_string(),
                                 expected.to_string(),
                                 found.to_string()
                             ),
@@ -1885,52 +1885,27 @@ impl TypeNode {
     /// of appearance, so that two types differing only in the names of their variables are written
     /// alike.
     pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
-        let mut next_tyvar_no = 0;
-        self.to_string_with_tyvars_renamed(|_| {
-            let new_name = number_to_varname(next_tyvar_no);
-            next_tyvar_no += 1;
-            Some(new_name)
-        })
-    }
-
-    /// This type as a diagnostic quotes it: written in source syntax under the names its own type
-    /// variables carry, with each `_` type wildcard written `_`.
-    ///
-    /// Every wildcard prints as `_`, so two distinct types can give one string. Where a string has
-    /// to tell types apart, use `to_string`.
-    ///
-    /// # Examples
-    /// The annotation `Array _ _` is quoted `Std::Array _ _`.
-    pub fn to_string_as_written(self: &Arc<TypeNode>) -> String {
-        self.to_string_with_tyvars_renamed(|tv| {
-            is_type_wildcard_tyvar(&tv.name).then(|| "_".to_string())
-        })
-    }
-
-    /// This type written by `to_string`, with each free type variable renamed to the name
-    /// `new_name` gives it, or kept where `new_name` gives none. `new_name` sees each variable
-    /// once, in order of first appearance.
-    fn to_string_with_tyvars_renamed(
-        self: &Arc<TypeNode>,
-        mut new_name: impl FnMut(&TyVar) -> Option<Name>,
-    ) -> String {
         let mut renaming = Substitution::default();
-        for tv in self.free_vars_vec() {
-            if let Some(name) = new_name(&tv) {
-                let merge_ok =
-                    renaming.merge(&Substitution::single(&tv.name, type_tyvar(&name, &tv.kind)));
-                assert!(merge_ok, "`{}` is renamed twice", tv.name);
-            }
+        for (no, tv) in self.free_vars_vec().iter().enumerate() {
+            let merge_ok = renaming.merge(&Substitution::single(
+                &tv.name,
+                type_tyvar(&number_to_varname(no), &tv.kind),
+            ));
+            assert!(merge_ok, "`{}` is renamed twice", tv.name);
         }
         renaming.substitute_type(self).to_string()
     }
 
-    /// This type written in source syntax, under the names its own type variables carry. Two
-    /// distinct types give two distinct strings.
+    /// This type written in source syntax, under the names its own type variables carry, with each
+    /// `_` type wildcard written `_`.
+    ///
+    /// Two distinct types can give one string: every wildcard is written `_`, and kinds are left
+    /// out. Compare types with `==` rather than by these strings.
     ///
     /// # Examples
     /// A saturated tuple is written `(a, b)`, a saturated arrow `a -> b`, and an argument that is
-    /// itself an application stands in parentheses, as in `Array (Option a)`.
+    /// itself an application stands in parentheses, as in `Array (Option a)`. The annotation
+    /// `Array _ _` is written `Std::Array _ _`.
     pub fn to_string(self: &Arc<TypeNode>) -> String {
         /// Whether `arg`, standing as the argument of an application, is written in parentheses.
         fn should_braced_as_arg(arg: &Arc<TypeNode>) -> bool {
@@ -1951,6 +1926,7 @@ impl TypeNode {
         }
 
         match &self.ty {
+            Type::TyVar(v) if is_type_wildcard_tyvar(&v.name) => "_".to_string(),
             Type::TyVar(v) => v.name.clone(),
             Type::TyApp(fun, arg) => {
                 let tycon = self.toplevel_tycon();
@@ -3164,20 +3140,15 @@ mod tests {
         assert_eq!(set.len(), 2);
     }
 
-    /// Two distinct types holding type wildcards are written as two distinct strings by
-    /// `to_string`, and both are quoted alike by `to_string_as_written`.
+    /// Each type wildcard is written `_`, whichever wildcard it is: `(#typewildcard0,
+    /// #typewildcard1)` and `(#typewildcard0, #typewildcard0)` are both written `(_, _)`.
     #[test]
-    fn test_to_string_tells_apart_types_that_differ_in_their_wildcards() {
+    fn test_to_string_writes_each_type_wildcard_as_an_underscore() {
         let wildcard = |n: u32| type_tyvar_star(&format!("{}{}", TYPE_WILDCARD_VAR_PREFIX, n));
         let two_wildcards = make_tuple_ty(vec![wildcard(0), wildcard(1)]);
         let one_wildcard_twice = make_tuple_ty(vec![wildcard(0), wildcard(0)]);
 
-        assert_ne!(
-            two_wildcards.to_string(),
-            one_wildcard_twice.to_string(),
-            "`(#typewildcard0, #typewildcard1)` and `(#typewildcard0, #typewildcard0)` were written alike"
-        );
-        assert_eq!(two_wildcards.to_string_as_written(), "(_, _)");
-        assert_eq!(one_wildcard_twice.to_string_as_written(), "(_, _)");
+        assert_eq!(two_wildcards.to_string(), "(_, _)");
+        assert_eq!(one_wildcard_twice.to_string(), "(_, _)");
     }
 }
