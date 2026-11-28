@@ -2300,7 +2300,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         call_name: &str,
         build_body: impl FnOnce(&mut Self, Object<'c>),
     ) {
-        let func_name = format!("{}_{}", prefix, obj.ty.hash());
+        let func_name = format!("{}_{}", prefix, obj.ty.digest());
         let func = if let Some(func) = self.module.get_function(&func_name) {
             func
         } else {

@@ -42,7 +42,7 @@ impl Hash for Predicate {
     /// Hashes the trait and the type, agreeing with the equality of `PartialEq`.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.trait_id.hash(state);
-        Hash::hash(&self.ty, state);
+        self.ty.hash(state);
     }
 }
 

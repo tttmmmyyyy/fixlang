@@ -2072,7 +2072,7 @@ impl TypeNode {
 
     /// A digest of this type, short enough to embed in a symbol name. Two types with the same
     /// normalized form hash alike.
-    pub fn hash(self: &Arc<TypeNode>) -> String {
+    pub fn digest(self: &Arc<TypeNode>) -> String {
         let type_string = self.to_string_normalize();
         format!("{:x}", md5::compute(type_string))
     }
