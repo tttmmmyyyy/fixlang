@@ -37,14 +37,22 @@ enum TestEntry {
     Alone(FullName),
     /// Several tests, one in each run, which the module `DocTest.Dispatcher` chooses.
     Dispatched {
-        /// The values of type `IO ()` the dispatcher runs. The values the sources declare as tests
-        /// come first, in the order they were given, and the `main` of each example follows them,
-        /// in the order of `TestBuild::examples`.
+        /// The values of type `IO ()` the dispatcher runs, one for each test, in the order the
+        /// tests were given: a value the sources declare, or the `main` of an example.
         values: Vec<FullName>,
         /// The source of the module whose `main` runs the value whose index in `values` the
         /// environment variable `TEST_INDEX_ENV_VAR` gives.
         dispatcher: SourceFile,
     },
+}
+
+/// A test a build of several tests runs.
+#[derive(Clone)]
+pub enum DispatchedTest {
+    /// A value of type `IO ()` the sources declare as a test.
+    Value(FullName),
+    /// The Fix example whose source is this.
+    Example(SourceFile),
 }
 
 /// A Fix example as a build compiles it.
@@ -67,10 +75,8 @@ impl ExampleModule {
 const DISPATCHER_MODULE_NAME: &str = "DocTest.Dispatcher";
 
 impl TestBuild {
-    /// The build of the tests `tests` the sources declare and of the Fix examples whose sources are
-    /// `examples`, in one program. A run of it runs the test whose index the environment variable
-    /// `TEST_INDEX_ENV_VAR` gives: the index of a test of `tests` is its position there, and the
-    /// index of an example is the number of `tests` added to its position in `examples`.
+    /// The build of the tests `tests` in one program. A run of it runs the test whose position in
+    /// `tests` the environment variable `TEST_INDEX_ENV_VAR` gives.
     ///
     /// Each example is compiled as a module `DocTest.Example<hash>.DocTest`, where `<hash>` is
     /// taken from the path of its source. The path is decided by where the example stands and what
@@ -83,17 +89,23 @@ impl TestBuild {
     /// # Examples
     /// An example whose source is at `.fixlang/tmp/src/doc_test.<origin>.<content>.fix` is
     /// compiled as a module such as `DocTest.Example3f9c0a1b2d4e5f60.DocTest`.
-    pub fn dispatching(tests: Vec<FullName>, examples: Vec<SourceFile>) -> Result<Self, Errors> {
-        let examples = examples
-            .into_iter()
-            .map(|source| {
-                let hash = md5_hex(&source.file_path.to_string_lossy());
-                ExampleModule {
-                    name: format!("{0}.Example{1}.{0}", DOC_TEST_MODULE_NAME, &hash[..16]),
-                    source,
+    pub fn dispatching(tests: Vec<DispatchedTest>) -> Result<Self, Errors> {
+        let mut examples = vec![];
+        let mut values = vec![];
+        for test in tests {
+            match test {
+                DispatchedTest::Value(value) => values.push(value),
+                DispatchedTest::Example(source) => {
+                    let hash = md5_hex(&source.file_path.to_string_lossy());
+                    let example = ExampleModule {
+                        name: format!("{0}.Example{1}.{0}", DOC_TEST_MODULE_NAME, &hash[..16]),
+                        source,
+                    };
+                    values.push(example.main());
+                    examples.push(example);
                 }
-            })
-            .collect::<Vec<_>>();
+            }
+        }
         assert!(
             examples
                 .iter()
@@ -102,10 +114,6 @@ impl TestBuild {
                 .all(is_reserved_module_name),
             "the modules a build adds have names reserved for the Fix examples"
         );
-        let values = tests
-            .into_iter()
-            .chain(examples.iter().map(ExampleModule::main))
-            .collect::<Vec<_>>();
         let dispatcher = save_temporary_source(&dispatcher_source(&values), "test_dispatcher")?;
         Ok(TestBuild {
             examples,

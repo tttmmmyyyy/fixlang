@@ -8,7 +8,7 @@ use crate::elaboration::load_source_files;
 use crate::error::{panic_if_err, Errors};
 use crate::misc::{info_msg, to_absolute_path, Set};
 use crate::parse::sourcefile::{SourceFile, Span};
-use crate::test_build::{check_doc_test_module_names_are_free, TestBuild};
+use crate::test_build::{check_doc_test_module_names_are_free, DispatchedTest, TestBuild};
 use colored::Colorize;
 use std::io::{self, Read};
 use std::mem::take;
@@ -320,15 +320,20 @@ pub fn run_tests(
     threads: usize,
     mut report: impl FnMut(usize, TestOutcome),
 ) -> Result<(), Errors> {
-    let mut values = vec![];
-    // Each example by the index of its test, with its source and whether it is run.
-    let mut examples = vec![];
+    // Each test to build by its index, with whether it is run.
+    let mut built = vec![];
     let mut ignored = vec![];
     for (index, test) in tests.iter().enumerate() {
         match &test.task {
-            TestTask::RunValue(value) => values.push((index, value.clone())),
-            TestTask::RunExample(source) => examples.push((index, source.clone(), true)),
-            TestTask::CompileExample(source) => examples.push((index, source.clone(), false)),
+            TestTask::RunValue(value) => {
+                built.push((index, DispatchedTest::Value(value.clone()), true))
+            }
+            TestTask::RunExample(source) => {
+                built.push((index, DispatchedTest::Example(source.clone()), true))
+            }
+            TestTask::CompileExample(source) => {
+                built.push((index, DispatchedTest::Example(source.clone()), false))
+            }
             TestTask::Ignore => ignored.push(index),
         }
     }
@@ -337,46 +342,38 @@ pub fn run_tests(
         config.test_build = Some(build);
         config
     };
-    let value_names = || values.iter().map(|(_, value)| value.clone()).collect();
-    // The runs of the values, each by its position in `values`, from the first executable.
-    let value_runs = || {
-        values.iter().enumerate().map(|(position, (index, _))| Run {
-            test: *index,
-            executable: 0,
-            dispatch_index: Some(position),
-        })
-    };
     let mut executables = vec![];
     let mut runs = vec![];
-
-    let merged = TestBuild::dispatching(
-        value_names(),
-        examples
-            .iter()
-            .map(|(_, source, _)| source.clone())
-            .collect(),
-    )?;
-    match TemporaryExecutable::build(config_of(merged)) {
-        Ok(executable) => {
-            executables.push(executable);
-            runs.extend(value_runs());
-            for (position, (index, _, to_run)) in examples.iter().enumerate() {
-                if *to_run {
-                    runs.push(Run {
-                        test: *index,
-                        executable: 0,
-                        dispatch_index: Some(values.len() + position),
-                    });
-                } else {
-                    report(*index, TestOutcome::Passed);
-                }
+    // Builds the tests `tests` in one program, and adds the runs of those to run by it.
+    let mut build_dispatching = |tests: Vec<(usize, DispatchedTest, bool)>| -> Result<(), Errors> {
+        let build =
+            TestBuild::dispatching(tests.iter().map(|(_, test, _)| test.clone()).collect())?;
+        executables.push(TemporaryExecutable::build(config_of(build))?);
+        for (dispatch_index, (index, _, to_run)) in tests.into_iter().enumerate() {
+            if to_run {
+                runs.push(Run {
+                    test: index,
+                    executable: executables.len() - 1,
+                    dispatch_index: Some(dispatch_index),
+                });
+            } else {
+                report(index, TestOutcome::Passed);
             }
         }
-        Err(errors) if examples.is_empty() => return Err(errors),
+        Ok(())
+    };
+
+    let has_examples = built
+        .iter()
+        .any(|(_, test, _)| matches!(test, DispatchedTest::Example(_)));
+    match build_dispatching(built.clone()) {
+        Ok(()) => {}
+        Err(errors) if !has_examples => return Err(errors),
         Err(_) => {
-            let without_examples = TestBuild::dispatching(value_names(), vec![])?;
-            executables.push(TemporaryExecutable::build(config_of(without_examples))?);
-            runs.extend(value_runs());
+            let (values, examples): (Vec<_>, Vec<_>) = built
+                .into_iter()
+                .partition(|(_, test, _)| matches!(test, DispatchedTest::Value(_)));
+            build_dispatching(values)?;
             if examples.len() > 1 {
                 info_msg(
                     "One of the Fix examples (i.e., the code blocks marked `fix` in the comments) \
@@ -384,7 +381,10 @@ pub fn run_tests(
                      longer than usual.",
                 );
             }
-            for (index, source, to_run) in examples {
+            for (index, example, to_run) in examples {
+                let DispatchedTest::Example(source) = example else {
+                    unreachable!("the tests left after the values are the examples")
+                };
                 match TemporaryExecutable::build(config_of(TestBuild::of_example(source, false))) {
                     Err(errors) => report(index, TestOutcome::Failed(errors.to_string())),
                     Ok(_) if !to_run => report(index, TestOutcome::Passed),
