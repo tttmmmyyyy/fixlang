@@ -199,7 +199,7 @@ impl TestBuild {
 fn dispatcher_source(values: &[FullName]) -> String {
     let entries = values
         .iter()
-        .map(|entry| format!("        |_| ::{}", entry.to_string()))
+        .map(|value| format!("        |_| ::{}", value.to_string()))
         .collect::<Vec<_>>()
         .join(",\n");
     format!(

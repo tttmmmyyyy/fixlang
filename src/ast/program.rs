@@ -2607,8 +2607,8 @@ impl Program {
     /// written, a global value of the program, and no two of them name one value.
     pub fn validate_test_statement_names(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        // The pragma that first names each value.
-        let mut first_pragmas: Map<FullName, Option<Span>> = Map::default();
+        // The span of the pragma that first names each value.
+        let mut first_pragma_srcs: Map<FullName, Option<Span>> = Map::default();
         for stmt in &self.test_statements {
             if stmt.value_name.namespace.is_absolute {
                 errors.append(Errors::from_msg_srcs(
@@ -2619,7 +2619,7 @@ impl Program {
                 ));
                 continue;
             }
-            if let Some(first_src) = first_pragmas.get(&stmt.value_name) {
+            if let Some(first_src) = first_pragma_srcs.get(&stmt.value_name) {
                 errors.append(Errors::from_msg_srcs(
                     format!(
                         "Multiple `TEST` pragmas name the value `{}`.",
@@ -2629,7 +2629,7 @@ impl Program {
                 ));
                 continue;
             }
-            first_pragmas.insert(stmt.value_name.clone(), stmt.src.clone());
+            first_pragma_srcs.insert(stmt.value_name.clone(), stmt.src.clone());
             if !self.global_values.contains_key(&stmt.value_name) {
                 errors.append(Errors::from_msg_srcs(
                     format!(

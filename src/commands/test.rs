@@ -357,8 +357,8 @@ pub fn run_tests(
         Ok(executable) => {
             executables.push(executable);
             runs.extend(value_runs());
-            for (position, (index, _, run)) in examples.iter().enumerate() {
-                if *run {
+            for (position, (index, _, to_run)) in examples.iter().enumerate() {
+                if *to_run {
                     runs.push(Run {
                         test: *index,
                         executable: 0,
@@ -371,8 +371,8 @@ pub fn run_tests(
         }
         Err(errors) if examples.is_empty() => return Err(errors),
         Err(_) => {
-            let sources = TestBuild::dispatching(value_names(), vec![])?;
-            executables.push(TemporaryExecutable::build(config_of(sources))?);
+            let without_examples = TestBuild::dispatching(value_names(), vec![])?;
+            executables.push(TemporaryExecutable::build(config_of(without_examples))?);
             runs.extend(value_runs());
             if examples.len() > 1 {
                 info_msg(
@@ -381,10 +381,10 @@ pub fn run_tests(
                      longer than usual.",
                 );
             }
-            for (index, source, run) in examples {
+            for (index, source, to_run) in examples {
                 match TemporaryExecutable::build(config_of(TestBuild::of_example(source, false))) {
                     Err(errors) => report(index, TestOutcome::Failed(errors.to_string())),
-                    Ok(_) if !run => report(index, TestOutcome::Passed),
+                    Ok(_) if !to_run => report(index, TestOutcome::Passed),
                     Ok(executable) => {
                         executables.push(executable);
                         runs.push(Run {
@@ -444,7 +444,7 @@ fn run_in_parallel(
             let sender = sender.clone();
             let commands = &commands;
             scope.spawn(move || loop {
-                let Some((test, command)) = commands.lock().unwrap().next() else {
+                let Some((index, command)) = commands.lock().unwrap().next() else {
                     break;
                 };
                 let failure = match command {
@@ -452,14 +452,14 @@ fn run_in_parallel(
                     Err(failure) => Some(failure),
                 };
                 sender
-                    .send((test, TestOutcome::of_failure(failure)))
+                    .send((index, TestOutcome::of_failure(failure)))
                     .expect("the outcomes are received until every run has ended");
             });
         }
         // The loop below ends once every thread has dropped its sender.
         drop(sender);
-        for (test, outcome) in receiver {
-            report(test, outcome);
+        for (index, outcome) in receiver {
+            report(index, outcome);
         }
     });
 }
