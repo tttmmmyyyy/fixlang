@@ -26,37 +26,26 @@ use std::process::{self, Output, Stdio};
 /// The outer result reports what went wrong while building the program, and the inner one what
 /// went wrong while starting the built executable.
 pub fn run(
-    config: Configuration,
+    mut config: Configuration,
     inherit_streams: bool,
 ) -> Result<Result<Output, io::Error>, Errors> {
-    with_temporary_executable(config, |config, exec_path| {
-        let mut com = config.program_run_command(exec_path)?;
-        for arg in &config.run_program_args {
-            com.arg(arg);
-        }
-        if inherit_streams {
-            com.stdout(Stdio::inherit())
-                .stdin(Stdio::inherit())
-                .stderr(Stdio::inherit());
-        }
-        Ok(com.output())
-    })
-}
-
-/// Builds the program as an executable under `RUN_PATH` and hands `use_executable` the settings it
-/// was built with and its path. The executable is then moved to the path `config.out_file_path`
-/// names, and removed when the settings name no path.
-pub fn with_temporary_executable<T>(
-    mut config: Configuration,
-    use_executable: impl FnOnce(&Configuration, &Path) -> Result<T, Errors>,
-) -> Result<T, Errors> {
     let user_specified_out_path = config.out_file_path.take();
     let executable = TemporaryExecutable::build(config)?;
-    let result = use_executable(executable.config(), executable.path());
+    let config = executable.config();
+    let mut com = config.program_run_command(executable.path())?;
+    for arg in &config.run_program_args {
+        com.arg(arg);
+    }
+    if inherit_streams {
+        com.stdout(Stdio::inherit())
+            .stdin(Stdio::inherit())
+            .stderr(Stdio::inherit());
+    }
+    let output = com.output();
     if let Some(out_path) = user_specified_out_path {
         executable.keep_at(&out_path);
     }
-    result
+    Ok(output)
 }
 
 /// An executable built under `RUN_PATH`, which is removed when the value is dropped.
