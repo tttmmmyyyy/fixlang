@@ -2795,10 +2795,11 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// A marked object owns only marked objects because a write in place is the only way it gains
     /// a child, and such a write reaches a marked object through `build_branch_by_is_unique`: a
     /// global object leaves that check as shared and is cloned, and a threaded one is returned to
-    /// the local state there. That check stays in place for a value made threaded, since
-    /// `Std::mark_threaded` hands the value back with an `Unknown` provenance and unique-check
-    /// elimination drops a check only on a value it knows to be uniquely owned (see
-    /// `MarkThreadedOp::result_prov`).
+    /// the local state there. That check stays in place for a value made threaded, since no handle
+    /// to a threaded value is uniquely owned as far as unique-check elimination knows, and it drops
+    /// a check only on such a value: `Std::mark_threaded` and `Std::FFI::unpack_from_thread` hand
+    /// the value back with an `Unknown` provenance, and `Std::FFI::pack_for_thread` hands back only
+    /// a pointer (see `MarkThreadedOp::result_prov`).
     fn build_mark_boxed_with(
         &mut self,
         obj: &Object<'c>,

@@ -157,8 +157,9 @@ fn optimize_rc_program(
     validate(&prog, "after specialize");
     prune(&mut prog, "after dce following specialize");
     // Locality inference rests on nothing moving a live object out of the local state, which a
-    // threaded build breaks: `mark_threaded` marks an object every existing binding to it still
-    // reaches. A threaded build keeps the runtime dispatch everywhere.
+    // threaded build breaks: `Std::FFI::pack_for_thread` and `Std::mark_threaded` mark an object
+    // every existing binding to it still reaches. A threaded build keeps the runtime dispatch
+    // everywhere.
     if !config.threaded {
         prog = locality::specialize(&prog, type_env);
         validate(&prog, "after locality");
