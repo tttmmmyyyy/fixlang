@@ -1854,10 +1854,10 @@ impl Program {
         ty: &Arc<TypeNode>,
     ) -> Result<FullName, Errors> {
         let ty = ty.resolve_type_aliases(&self.type_env())?;
-        let hash = ty.digest();
+        let digest = ty.digest();
         let mut name = name.clone();
         name.name += INSTANCIATED_NAME_SEPARATOR;
-        name.name += &hash;
+        name.name += &digest;
         Ok(name)
     }
 
