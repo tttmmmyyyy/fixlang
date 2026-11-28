@@ -46,9 +46,9 @@ enum TestEntry {
     },
 }
 
-/// A test a build of several tests runs.
+/// A test `fix test` builds: a value the sources declare as a test, or a Fix example.
 #[derive(Clone)]
-pub enum DispatchedTest {
+pub enum BuiltTest {
     /// A value of type `IO ()` the sources declare as a test.
     Value(FullName),
     /// The Fix example whose source is this.
@@ -89,13 +89,13 @@ impl TestBuild {
     /// # Examples
     /// An example whose source is at `.fixlang/tmp/src/doc_test.<origin>.<content>.fix` is
     /// compiled as a module such as `DocTest.Example3f9c0a1b2d4e5f60.DocTest`.
-    pub fn dispatching(tests: Vec<DispatchedTest>) -> Result<Self, Errors> {
+    pub fn dispatching(tests: Vec<BuiltTest>) -> Result<Self, Errors> {
         let mut examples = vec![];
         let mut values = vec![];
         for test in tests {
             match test {
-                DispatchedTest::Value(value) => values.push(value),
-                DispatchedTest::Example(source) => {
+                BuiltTest::Value(value) => values.push(value),
+                BuiltTest::Example(source) => {
                     let hash = md5_hex(&source.file_path.to_string_lossy());
                     let example = ExampleModule {
                         name: format!("{0}.Example{1}.{0}", DOC_TEST_MODULE_NAME, &hash[..16]),

@@ -7,8 +7,8 @@ use crate::doc_test::{collect_examples, ExampleTask, FixExample};
 use crate::elaboration::load_source_files;
 use crate::error::{panic_if_err, Errors};
 use crate::misc::info_msg;
-use crate::parse::sourcefile::{SourceFile, Span};
-use crate::test_build::{check_doc_test_module_names_are_free, DispatchedTest, TestBuild};
+use crate::parse::sourcefile::Span;
+use crate::test_build::{check_doc_test_module_names_are_free, BuiltTest, TestBuild};
 use colored::Colorize;
 use std::io::{self, Read};
 use std::mem::take;
@@ -110,12 +110,9 @@ pub struct TestCase {
 
 /// What `fix test` does with a test.
 enum TestTask {
-    /// Runs the global value of type `IO ()` the sources declare as a test.
-    RunValue(FullName),
-    /// Compiles the Fix example whose source this is and runs it.
-    RunExample(SourceFile),
-    /// Compiles the Fix example whose source this is, which is what the mark `no_run` asks for.
-    CompileExample(SourceFile),
+    /// Builds the test `test`, and runs it where `run` is true. A Fix example marked `no_run` is
+    /// built and not run.
+    Build { test: BuiltTest, run: bool },
     /// Nothing, which is what the mark `ignore` asks for.
     Ignore,
 }
@@ -128,8 +125,14 @@ impl TestCase {
             name: example.location(),
             declared_at: None,
             task: match &example.task {
-                ExampleTask::Run(source) => TestTask::RunExample(source.clone()),
-                ExampleTask::Compile(source) => TestTask::CompileExample(source.clone()),
+                ExampleTask::Run(source) => TestTask::Build {
+                    test: BuiltTest::Example(source.clone()),
+                    run: true,
+                },
+                ExampleTask::Compile(source) => TestTask::Build {
+                    test: BuiltTest::Example(source.clone()),
+                    run: false,
+                },
                 ExampleTask::Ignore => TestTask::Ignore,
             },
         }
@@ -139,7 +142,10 @@ impl TestCase {
     fn compiles_an_example(&self) -> bool {
         matches!(
             self.task,
-            TestTask::RunExample(_) | TestTask::CompileExample(_)
+            TestTask::Build {
+                test: BuiltTest::Example(_),
+                ..
+            }
         )
     }
 
@@ -152,7 +158,10 @@ impl TestCase {
             declared_at: declared_at.as_ref().map(Span::file_and_line),
             task: match ignore {
                 true => TestTask::Ignore,
-                false => TestTask::RunValue(value.clone()),
+                false => TestTask::Build {
+                    test: BuiltTest::Value(value.clone()),
+                    run: true,
+                },
             },
         }
     }
@@ -322,15 +331,7 @@ pub fn run_tests(
     let mut ignored = vec![];
     for (index, test) in tests.iter().enumerate() {
         match &test.task {
-            TestTask::RunValue(value) => {
-                built.push((index, DispatchedTest::Value(value.clone()), true))
-            }
-            TestTask::RunExample(source) => {
-                built.push((index, DispatchedTest::Example(source.clone()), true))
-            }
-            TestTask::CompileExample(source) => {
-                built.push((index, DispatchedTest::Example(source.clone()), false))
-            }
+            TestTask::Build { test, run } => built.push((index, test.clone(), *run)),
             TestTask::Ignore => ignored.push(index),
         }
     }
@@ -342,7 +343,7 @@ pub fn run_tests(
     let mut executables = vec![];
     let mut runs = vec![];
     // Builds the tests `tests` in one program, and adds the runs of those to run by it.
-    let mut build_dispatching = |tests: Vec<(usize, DispatchedTest, bool)>| -> Result<(), Errors> {
+    let mut build_dispatching = |tests: Vec<(usize, BuiltTest, bool)>| -> Result<(), Errors> {
         let build =
             TestBuild::dispatching(tests.iter().map(|(_, test, _)| test.clone()).collect())?;
         executables.push(TemporaryExecutable::build(config_of(build))?);
@@ -362,14 +363,14 @@ pub fn run_tests(
 
     let has_examples = built
         .iter()
-        .any(|(_, test, _)| matches!(test, DispatchedTest::Example(_)));
+        .any(|(_, test, _)| matches!(test, BuiltTest::Example(_)));
     match build_dispatching(built.clone()) {
         Ok(()) => {}
         Err(errors) if !has_examples => return Err(errors),
         Err(_) => {
             let (values, examples): (Vec<_>, Vec<_>) = built
                 .into_iter()
-                .partition(|(_, test, _)| matches!(test, DispatchedTest::Value(_)));
+                .partition(|(_, test, _)| matches!(test, BuiltTest::Value(_)));
             build_dispatching(values)?;
             if examples.len() > 1 {
                 info_msg(
@@ -379,7 +380,7 @@ pub fn run_tests(
                 );
             }
             for (index, example, to_run) in examples {
-                let DispatchedTest::Example(source) = example else {
+                let BuiltTest::Example(source) = example else {
                     unreachable!("the tests left after the values are the examples")
                 };
                 match TemporaryExecutable::build(config_of(TestBuild::of_example(source, false))) {
@@ -531,11 +532,8 @@ fn test_keeping_executable(
             out_path.display()
         )));
     };
-    config.test_build = Some(match &test.task {
-        TestTask::RunValue(value) => TestBuild::of_value(value.clone()),
-        TestTask::RunExample(source) | TestTask::CompileExample(source) => {
-            TestBuild::of_example(source.clone(), true)
-        }
+    let (built, to_run) = match &test.task {
+        TestTask::Build { test, run } => (test, *run),
         TestTask::Ignore => {
             return Err(Errors::from_msg(format!(
                 "`-o` keeps the executable of the test it builds, and the test `{}` is marked \
@@ -543,18 +541,22 @@ fn test_keeping_executable(
                 test.name
             )))
         }
+    };
+    config.test_build = Some(match built {
+        BuiltTest::Value(value) => TestBuild::of_value(value.clone()),
+        BuiltTest::Example(source) => TestBuild::of_example(source.clone(), true),
     });
     let executable = match TemporaryExecutable::build(config) {
         Ok(executable) => executable,
-        Err(errors) if matches!(test.task, TestTask::RunValue(_)) => return Err(errors),
+        Err(errors) if matches!(built, BuiltTest::Value(_)) => return Err(errors),
         Err(errors) => {
             report(0, TestOutcome::Failed(errors.to_string()));
             return Ok(());
         }
     };
-    let outcome = match test.task {
-        TestTask::CompileExample(_) => TestOutcome::Passed,
-        _ => TestOutcome::of_failure(match run_command(&executable, None, args) {
+    let outcome = match to_run {
+        false => TestOutcome::Passed,
+        true => TestOutcome::of_failure(match run_command(&executable, None, args) {
             Ok(command) => run_failure(command),
             Err(errors) => Some(errors.to_string()),
         }),
