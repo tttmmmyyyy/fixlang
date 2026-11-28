@@ -269,9 +269,9 @@ fn collect_tests(program: &Program, config: &Configuration) -> Result<Vec<TestCa
 }
 
 /// The number of tests `fix test` runs at once where `--test-threads` is not given: the number of
-/// CPUs, or 1 where the system does not tell it.
+/// CPUs, as the compiler counts them for its own worker threads.
 pub fn default_test_threads() -> usize {
-    thread::available_parallelism().map_or(1, |threads| threads.get())
+    num_cpus::get()
 }
 
 /// The error `fix test` reports where `options` select no test.
