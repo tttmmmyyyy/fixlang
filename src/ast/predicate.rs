@@ -47,11 +47,13 @@ impl Hash for Predicate {
 }
 
 impl Predicate {
+    /// Appends to `buf` the type variables standing in the constrained type, in order of
+    /// appearance.
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         self.ty.free_vars_to_vec(buf);
     }
 
-    // Check if this predicate is on an opaque type variable (name starts with '?').
+    /// Whether the constrained type is an opaque type variable, one whose name starts with `?`.
     pub fn on_opaque_tyvar(&self) -> bool {
         if let Type::TyVar(tv) = &self.ty.ty {
             is_opaque_tyvar(&tv.name)
@@ -60,7 +62,7 @@ impl Predicate {
         }
     }
 
-    // Check if this predicate is on a specific type variable.
+    /// Whether the constrained type is the type variable `tyvar_name`.
     pub fn on_tyvar(&self, tyvar_name: &str) -> bool {
         if let Type::TyVar(tv) = &self.ty.ty {
             tv.name == tyvar_name
@@ -69,7 +71,7 @@ impl Predicate {
         }
     }
 
-    // Convert all global FullNames to absolute paths.
+    /// This constraint with every global name in the trait and in the type made absolute.
     pub fn global_to_absolute(&self) -> Predicate {
         Predicate {
             trait_id: self.trait_id.global_to_absolute(),
@@ -80,10 +82,12 @@ impl Predicate {
         }
     }
 
+    /// Records `source` as where the whole constraint is written.
     pub fn set_source(&mut self, source: Span) {
         self.src = Some(source);
     }
 
+    /// The constraint that `ty` implements `trait_id`, written nowhere and required by no use.
     pub fn make(trait_id: TraitId, ty: Arc<TypeNode>) -> Self {
         Predicate {
             trait_id,
@@ -94,12 +98,15 @@ impl Predicate {
         }
     }
 
+    /// Gives the trait and every name in the type their full names, read in the context `ctx`
+    /// carries.
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.trait_id.resolve_namespace(ctx, &self.src)?;
         self.ty = self.ty.resolve_namespace(ctx)?;
         Ok(())
     }
 
+    /// Replaces each type alias in the type by the type it stands for.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.ty = self.ty.resolve_type_aliases(type_env)?;
         Ok(())
@@ -111,10 +118,12 @@ impl Predicate {
         format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
     }
 
+    /// Gives each type variable in the type the kind `scope` assigns it.
     pub fn set_kinds(&mut self, scope: &KindScope) {
         self.ty = self.ty.set_kinds(scope);
     }
 
+    /// Reports a constraint whose type has another kind than the trait asks for.
     pub fn check_kinds(&self, kind_env: &KindEnv) -> Result<(), Errors> {
         let expected = &kind_env.traits_and_aliases[&self.trait_id];
         let found = self.ty.kind(kind_env)?;
@@ -132,7 +141,8 @@ impl Predicate {
         Ok(())
     }
 
-    // If the trait used in this predicate is a trait alias, resolve it to a set of predicates that are not using trait aliases.
+    /// The constraints this one stands for: itself when its trait is a trait, and, when its trait is
+    /// a trait alias, one constraint for each trait the alias reaches through the aliases it names.
     pub fn resolve_trait_aliases(&self, aliases: &TraitAliasEnv) -> Result<Vec<Predicate>, Errors> {
         if !aliases.is_alias(&self.trait_id) {
             return Ok(vec![self.clone()]);
@@ -147,7 +157,7 @@ impl Predicate {
         Ok(res)
     }
 
-    // Find the minimum expression node which includes the specified source code position.
+    /// The smallest node of this constraint covering `pos`: a node of the type, or else the trait.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         if self.src.is_none() {
             return None;
