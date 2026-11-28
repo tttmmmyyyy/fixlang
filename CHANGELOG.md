@@ -16,7 +16,7 @@
 
 #### Tool
 
-- #1078: `fix test` runs `Test::test`, the tests `TEST[...]` declares and the Fix examples alike: each in a process of its own, several at once, with a line reporting it as it ends. What a test writes is shown, after every test has ended, only when it fails, and the counts of the tests now cover `Test::test`. `fix test` fails when the options select no test, and accepts `-o` only when they select one test, whose executable `-o` keeps.
+- #1078: `fix test` runs `Test::test`, the tests `TEST[...]` declares and the Fix examples alike: each in a process of its own, several at once, with a line reporting it as it ends. What a test writes is shown, after every test has ended, only when it fails, and the counts of the tests now cover `Test::test`. `fix test` fails when the options select no test, and accepts `-o` only when they select one test, whose executable `-o` keeps. A module named `DocTest` or with a name beginning with `DocTest.` is now rejected whichever tests run.
 - #1028: In the language server, hover and go to definition on the parentheses or a comma of a tuple, or on `()`, now answer nothing. Hover there used to show `Std::Tuple2` or `()`.
 
 ### Fixed
