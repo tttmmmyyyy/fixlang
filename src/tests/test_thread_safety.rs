@@ -92,9 +92,11 @@ fn skip_unless_thread_sanitizer_available(test_name: &str) -> bool {
     false
 }
 
-/// Builds the `hammer` program at `opt_level` and asks ThreadSanitizer about both of its runs.
-fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
-    let (_temp_dir, project_dir) = setup_test_env(HAMMER_PROJECT);
+/// Builds the program in the case `project` at `opt_level` and asks ThreadSanitizer about both of its
+/// runs: with `MARK_ARGUMENT` the program hands its value to the threads through
+/// `Std::FFI::pack_for_thread`, and without it through `Std::FFI::boxed_to_retained_ptr`.
+fn assert_shared_reference_counting_is_race_free(project: &str, opt_level: &str) {
+    let (_temp_dir, project_dir) = setup_test_env(project);
 
     // The program the language asks for: every thread reaches the value through
     // `Std::FFI::pack_for_thread`, so the counts are updated atomically and nothing races.
@@ -137,7 +139,7 @@ fn test_shared_reference_counting_is_race_free_unoptimized() {
     if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }
-    assert_shared_reference_counting_is_race_free("none");
+    assert_shared_reference_counting_is_race_free(HAMMER_PROJECT, "none");
 }
 
 /// Verifies that the same sharing stays race-free at `-O max`, where the optimizations that elide a
@@ -149,7 +151,7 @@ fn test_shared_reference_counting_is_race_free_optimized() {
     if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }
-    assert_shared_reference_counting_is_race_free("max");
+    assert_shared_reference_counting_is_race_free(HAMMER_PROJECT, "max");
 }
 
 /// The project that shares one box holding an unboxed pair with eight threads.
@@ -197,6 +199,30 @@ fn test_shared_unboxed_value_is_race_free_optimized() {
         return;
     }
     assert_shared_unboxed_value_is_race_free("max");
+}
+
+/// The project that shares a pair of a closure capturing an array and an optional box with eight
+/// threads.
+const HAMMER_CLOSURE_PROJECT: &str = "hammer_closure";
+
+/// Verifies that the values a closure captures and the payload of an unboxed union, handed to eight
+/// threads inside one value through `Std::FFI::pack_for_thread`, are counted without a race in a
+/// build with the optimizations off.
+#[test]
+fn test_shared_closure_and_union_are_race_free_unoptimized() {
+    if !skip_unless_thread_sanitizer_available(function_name!()) {
+        return;
+    }
+    assert_shared_reference_counting_is_race_free(HAMMER_CLOSURE_PROJECT, "none");
+}
+
+/// Verifies that the same sharing stays race-free at `-O max`.
+#[test]
+fn test_shared_closure_and_union_are_race_free_optimized() {
+    if !skip_unless_thread_sanitizer_available(function_name!()) {
+        return;
+    }
+    assert_shared_reference_counting_is_race_free(HAMMER_CLOSURE_PROJECT, "max");
 }
 
 /// Verifies that a build asking for the instrumentation carries it even after the same program was
