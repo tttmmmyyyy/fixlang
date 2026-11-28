@@ -6,7 +6,7 @@
 
 #### Std
 
-- #430: `Std::FFI::pack_for_thread` puts a value of any type into multi-threaded mode and returns a pointer to it for another thread, and `Std::FFI::unpack_from_thread` takes the value back from the pointer; `Std::FFI::get_funptr_release_for_thread` and `Std::FFI::get_funptr_retain_for_thread` give the functions that release and retain the pointer from a foreign language. `Std::mark_threaded` is deprecated: use `Std::FFI::pack_for_thread`, which leaves no step between the marking and the pointer where the value can return to single-threaded mode.
+- #430, #1091: `Std::FFI::pack_for_thread` puts a value of any type into multi-threaded mode and returns a pointer to it for another thread, and `Std::FFI::unpack_from_thread` takes the value back from the pointer; `Std::FFI::get_funptr_release_for_thread` and `Std::FFI::get_funptr_retain_for_thread` give the functions that release and retain the pointer from a foreign language. `Std::mark_threaded` is deprecated: use `Std::FFI::pack_for_thread`, which leaves no step between the marking and the pointer where the value can return to single-threaded mode.
 
 ### Changed
 
