@@ -36,6 +36,7 @@ use crate::constants::TYPED_MODULES_PATH;
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::elaboration::typecheckcache::EntityIdentity;
 use crate::error::Errors;
+use crate::hash::md5_hex;
 use crate::misc::{consume_on_compiler_threads, warn_msg, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::project_fs::{
@@ -137,7 +138,7 @@ fn module_file_prefix(module: &Name) -> String {
         .take(READABLE_NAME_LENGTH)
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect();
-    format!("{}_{:x}_", readable, md5::compute(module))
+    format!("{}_{}_", readable, md5_hex(module))
 }
 
 /// The name of the file holding the bodies of `module` checked under `module_hash`, its

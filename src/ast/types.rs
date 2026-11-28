@@ -24,6 +24,7 @@ use crate::fixstd::builtin::{
     U8_TYPE,
 };
 use crate::generator::Generator;
+use crate::hash::md5_hex;
 use crate::misc::{collect_results, number_to_varname, Map, Set};
 use crate::object::{ty_to_object_ty, ObjectType};
 use crate::parse::sourcefile::{SourcePos, Span};
@@ -2067,14 +2068,14 @@ impl TypeNode {
         if capture.len() > 0 {
             key += "]";
         }
-        format!("{:x}", md5::compute(key))
+        md5_hex(&key)
     }
 
     /// A digest of this type, short enough to embed in a symbol name. Two types with the same
     /// normalized form have the same digest.
     pub fn digest(self: &Arc<TypeNode>) -> String {
         let type_string = self.to_string_normalize();
-        format!("{:x}", md5::compute(type_string))
+        md5_hex(&type_string)
     }
 
     /// The trait constraints this type has to meet to be well-formed: each associated type
