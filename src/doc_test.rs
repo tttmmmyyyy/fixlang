@@ -14,9 +14,7 @@ use crate::{
     hash::md5_hex,
     misc::{save_temporary_source, to_absolute_path, Set},
     parse::{
-        parser::{
-            comment_ranges, parse_source_module_defn, start_of_code_after_import_statements,
-        },
+        parser::{comment_ranges, parse_source_module_defn, start_of_code_after_import_statements},
         sourcefile::{line_comment_text, Insertion, LineOrigin, SourceFile, SourceOrigin, Span},
     },
 };

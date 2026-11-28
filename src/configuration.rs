@@ -6,7 +6,6 @@ use crate::constants::{
     OPTIMIZATION_LEVEL_NONE,
 };
 use crate::elaboration::typecheckcache::SharedTypeCheckCache;
-use crate::test_build::TestBuild;
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::ffi::CNumericTypes;
@@ -19,6 +18,7 @@ use crate::misc::{
 use crate::parse::sourcefile::Span;
 use crate::preliminary_command::PreliminaryCommand;
 use crate::target_triple::build_target_triple;
+use crate::test_build::TestBuild;
 use build_time::build_time_utc;
 use inkwell::OptimizationLevel;
 use std::fmt;

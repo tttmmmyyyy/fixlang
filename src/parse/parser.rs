@@ -6,7 +6,6 @@ pub(crate) struct FixParser;
 
 use crate::ast::{
     deprecation::DeprecationStatement,
-    test_statement::TestStatement,
     equality::Equality,
     export_statement::ExportStatement,
     expr::{
@@ -21,6 +20,7 @@ use crate::ast::{
     program::{GlobalValueDecl, GlobalValueDefn, ModuleInfo, Program},
     qual_pred::QualPred,
     qual_type::QualType,
+    test_statement::TestStatement,
     traits::{
         AssocTypeDefn, AssocTypeImpl, KindSignature, TraitAlias, TraitDefn, TraitId, TraitImpl,
         TraitMember,

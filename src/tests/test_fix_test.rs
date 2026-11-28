@@ -71,9 +71,7 @@ fn test_declared_tests_run_and_are_reported_one_by_one() {
         "the test marked `ignore` does not run\n{}",
         streams(&output)
     );
-    let last_progress_line = stderr
-        .rfind(" ... ")
-        .expect("`fix test` reports the tests");
+    let last_progress_line = stderr.rfind(" ... ").expect("`fix test` reports the tests");
     assert!(
         stderr.find("---- ").unwrap() > last_progress_line,
         "the failure is shown after every test has ended\n{}",
@@ -251,8 +249,7 @@ fn test_output_option_keeps_the_executable_of_one_test() {
     let output = fix_test(&dir, &["--filter", "double_is_even", "-o", kept_arg]);
     assert!(
         output.status.success()
-            && String::from_utf8_lossy(&output.stderr)
-                .contains("test Lib::double_is_even ... ok"),
+            && String::from_utf8_lossy(&output.stderr).contains("test Lib::double_is_even ... ok"),
         "the selected test runs and passes\n{}",
         streams(&output)
     );
@@ -281,7 +278,10 @@ fn test_output_option_keeps_the_executable_of_one_test() {
         "`-o` with an ignored test is an error\n{}",
         streams(&output)
     );
-    assert!(!kept.exists(), "no executable is kept where no test is built");
+    assert!(
+        !kept.exists(),
+        "no executable is kept where no test is built"
+    );
 }
 
 /// A compile error in a value a `TEST[...]` pragma names is an error of the sources: it is reported
@@ -386,8 +386,7 @@ fn test_malformed_test_pragmas_are_rejected() {
         for subcommand in ["build", "test"] {
             let output = run_fix(dir.path(), &[subcommand]);
             assert!(
-                !output.status.success()
-                    && String::from_utf8_lossy(&output.stderr).contains(error),
+                !output.status.success() && String::from_utf8_lossy(&output.stderr).contains(error),
                 "`fix {}` rejects\n{}\nwith `{}`\n{}",
                 subcommand,
                 pragma,

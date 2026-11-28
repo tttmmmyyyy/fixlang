@@ -474,9 +474,7 @@ fn run_command(
     dispatch_index: Option<usize>,
     args: &[String],
 ) -> Result<Command, Errors> {
-    let mut command = executable
-        .config()
-        .program_run_command(executable.path())?;
+    let mut command = executable.config().program_run_command(executable.path())?;
     command.args(args);
     if let Some(index) = dispatch_index {
         command.env(TEST_INDEX_ENV_VAR, index.to_string());

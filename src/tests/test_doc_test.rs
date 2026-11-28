@@ -43,14 +43,20 @@ fn test_std_doc_examples() {
     let threads = default_test_threads();
     let mut failures = vec![];
     let mut tested = 0;
-    let result = run_tests(&config, &tests, &[], threads, |index, outcome| match outcome {
-        TestOutcome::Ignored => {}
-        TestOutcome::Passed => tested += 1,
-        TestOutcome::Failed(failure) => {
-            tested += 1;
-            failures.push(format!("{}:\n{}", examples[index].location(), failure));
-        }
-    });
+    let result = run_tests(
+        &config,
+        &tests,
+        &[],
+        threads,
+        |index, outcome| match outcome {
+            TestOutcome::Ignored => {}
+            TestOutcome::Passed => tested += 1,
+            TestOutcome::Failed(failure) => {
+                tested += 1;
+                failures.push(format!("{}:\n{}", examples[index].location(), failure));
+            }
+        },
+    );
     panic_if_err(result);
     assert!(
         tested > 0,
