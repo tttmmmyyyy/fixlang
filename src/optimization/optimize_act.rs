@@ -199,8 +199,8 @@ fn is_functor_tuple2(lens_ty: &Arc<TypeNode>) -> bool {
 fn is_functor_applied_once(lens_ty: &Arc<TypeNode>, g: &Arc<TypeNode>) -> bool {
     let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(lens_ty);
     match (
-        functor_argument(&ft_ty, &t_ty, g),
-        functor_argument(&fu_ty, &u_ty, g),
+        functor_fixed_argument(&ft_ty, &t_ty, g),
+        functor_fixed_argument(&fu_ty, &u_ty, g),
     ) {
         (Some(ft_c), Some(fu_c)) => ft_c == fu_c,
         _ => false,
@@ -211,7 +211,7 @@ fn is_functor_applied_once(lens_ty: &Arc<TypeNode>, g: &Arc<TypeNode>) -> bool {
 ///
 /// # Examples
 /// With `g` = `Std::Const`, `ty` = `Const I64 Bool` and `arg_ty` = `Bool`, returns `I64`.
-fn functor_argument<'t>(
+fn functor_fixed_argument<'t>(
     ty: &'t Arc<TypeNode>,
     arg_ty: &Arc<TypeNode>,
     g: &Arc<TypeNode>,

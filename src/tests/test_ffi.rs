@@ -681,7 +681,7 @@ pub fn test_export_non_ascii_first_character_fails() {
 /// A value whose type has a type variable and no constraint is refused for the type variable,
 /// whatever the variable is named.
 #[test]
-pub fn test_export_of_a_type_variable_not_named_a_is_refused_for_the_variable() {
+pub fn test_export_of_a_value_whose_type_has_a_variable_not_named_a_is_refused_for_the_variable() {
     let source = r##"
         module Main;
 
