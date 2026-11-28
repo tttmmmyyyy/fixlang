@@ -456,6 +456,36 @@ TEST[fails];
     );
 }
 
+/// The values the `TEST[...]` pragmas name are ordered by the paths of their files, whatever order
+/// the project file lists the files in, and within a file by where their pragmas are written.
+#[test]
+fn test_declared_tests_are_ordered_by_the_path_of_the_file_and_then_by_the_position() {
+    let a = r#"module Zeta;
+
+zz : IO ();
+zz = assert_eq(|_|"Zeta::zz fails", 1, 2);
+TEST[zz];
+
+aa : IO ();
+aa = assert_eq(|_|"Zeta::aa fails", 1, 2);
+TEST[aa];
+"#;
+    let b = r#"module Alpha;
+
+fails : IO ();
+fails = assert_eq(|_|"Alpha::fails fails", 1, 2);
+TEST[fails];
+"#;
+    let dir = project_dir(&[("b.fix", b), ("a.fix", a)], &[]);
+    let output = fix_test(&dir, &[]);
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("failures:\n    Zeta::zz\n    Zeta::aa\n    Alpha::fails\n"),
+        "the failures of a.fix come first, in the order of their pragmas\n{}",
+        streams(&output)
+    );
+}
+
 /// A `TEST[...]` pragma names a value of a namespace nested inside the one the pragma is written
 /// in, by a relative path through the nested namespace.
 #[test]
