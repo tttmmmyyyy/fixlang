@@ -1906,7 +1906,8 @@ impl TypeNode {
     ///
     /// Two types give one string exactly when they differ only in the names and the kinds of their
     /// type variables: a type wildcard is renamed like any other type variable, so the `_` that
-    /// `to_string` writes for it never stands in this string. A symbol name and the key of a type
+    /// `to_string` writes for it never stands in this string. This also rests on a program never
+    /// naming a type and an associated type alike, since `T a` would be written the same for both. A symbol name and the key of a type
     /// checking cache are made from this string on that account.
     pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
         self.normalize().to_string()
