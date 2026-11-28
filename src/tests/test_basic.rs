@@ -16050,3 +16050,20 @@ pub fn test_a_global_builtin_function_named_through_an_alias_as_an_operand() {
         "#;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// `main` has type `IO ()`. A `main` declared at another type, or at a type more general than
+/// `IO ()`, is rejected.
+#[test]
+pub fn test_main_of_a_type_other_than_io_unit_fails() {
+    for main_decl in [
+        "main : I64;\nmain = 0;",
+        "main : [m : Monad] m ();\nmain = pure();",
+    ] {
+        let source = format!("module Main;\n\n{}\n", main_decl);
+        test_source_fail(
+            &source,
+            Configuration::develop_mode(),
+            "The value `Main::main` should have type `Std::IO ()`.",
+        );
+    }
+}

@@ -567,7 +567,7 @@ impl ExprNode {
     ) -> Arc<ExprNode> {
         let then_ty = then.type_.as_ref().unwrap().clone();
         let else_ty = else_.type_.as_ref().unwrap().clone();
-        assert_eq!(then_ty.to_string(), else_ty.to_string());
+        assert_eq!(then_ty, else_ty);
         self.set_if_then_else(then, else_).set_type(then_ty)
     }
 
@@ -630,7 +630,7 @@ impl ExprNode {
             .collect::<Vec<_>>();
         if vals_tys.len() > 0 {
             let ty = vals_tys[0].clone();
-            assert!(vals_tys.iter().all(|t| t.to_string() == ty.to_string()));
+            assert!(vals_tys.iter().all(|t| *t == ty));
         }
         self.set_match_pat_vals(pat_vals)
             .set_type(vals_tys[0].clone())
@@ -1522,7 +1522,7 @@ impl Expr {
                 .stringify()
                 .brace_if_multiline()
                 .append_to_last_line(" : ")
-                .append_to_last_line(&t.to_string_as_written()),
+                .append_to_last_line(&t.to_string()),
             Expr::MakeStruct(tc, fields) => {
                 let mut field_lines: Vec<Text> = vec![];
                 for (name, _, expr) in fields {
@@ -1713,7 +1713,7 @@ pub fn expr_if_typed(
 ) -> Arc<ExprNode> {
     let then_ty = then_expr.type_.as_ref().unwrap().clone();
     let else_ty = else_expr.type_.as_ref().unwrap().clone();
-    assert_eq!(then_ty.to_string(), else_ty.to_string());
+    assert_eq!(then_ty, else_ty);
     expr_if(cond, then_expr, else_expr, None).set_type(then_ty)
 }
 
@@ -1744,7 +1744,7 @@ pub fn expr_match_typed(
         .collect::<Vec<_>>();
     if vals_tys.len() > 0 {
         let ty = vals_tys[0].clone();
-        assert!(vals_tys.iter().all(|t| t.to_string() == ty.to_string()));
+        assert!(vals_tys.iter().all(|t| *t == ty));
     }
     expr_match(cond, cases, None).set_type(vals_tys[0].clone())
 }

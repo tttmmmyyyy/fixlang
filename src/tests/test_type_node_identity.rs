@@ -11,7 +11,7 @@ use std::sync::Arc;
 /// The hash a map would take of this type.
 fn hash_of(ty: &Arc<TypeNode>) -> u64 {
     let mut hasher = DefaultHasher::new();
-    Hash::hash(&**ty, &mut hasher);
+    ty.hash(&mut hasher);
     hasher.finish()
 }
 

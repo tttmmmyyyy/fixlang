@@ -456,7 +456,7 @@ impl Substitution {
                     }
                 }
                 if fixed_tyvars.iter().any(|tv| tv.name == v1.name) {
-                    if ty1.to_string() == ty2.to_string() {
+                    if ty1 == ty2 {
                         return Ok(Some(Self::default()));
                     } else {
                         return Ok(None);
@@ -2757,12 +2757,12 @@ impl TypeCheckContext {
         // deductions, which costs a turn of the deduction before a circle through an associated
         // type closes on a spelling it has already met. The depth bound below is what ends a
         // deduction that keeps finding new spellings.
-        let pred_str = pred.to_string();
-        if deduction.settled.contains(&pred_str) {
+        let asked = pred.clone();
+        if deduction.settled.contains(&asked) {
             return Ok(());
         }
-        if deduction.on_path.contains(&pred_str) {
-            return Err(UnificationErr::Circular(deduction.way_round(&pred_str)).into());
+        if deduction.on_path.contains(&asked) {
+            return Err(UnificationErr::Circular(deduction.way_round(&asked)).into());
         }
         pred.ty = self.substitute_and_reduce_type(&pred.ty)?;
         // An instance whose context asks for what it gives, on a larger type, never asks twice for
@@ -2803,14 +2803,8 @@ impl TypeCheckContext {
                         ctx_pred
                     })
                     .collect();
-                self.reduce_instance_context(
-                    &pred,
-                    &pred_str,
-                    context,
-                    irreducible_preds,
-                    deduction,
-                )?;
-                deduction.settled.insert(pred_str);
+                self.reduce_instance_context(&pred, &asked, context, irreducible_preds, deduction)?;
+                deduction.settled.insert(asked);
                 return Ok(());
             } else if !unifiable {
                 // If match fails, then we cannot reduce the predicate at now.
@@ -2824,21 +2818,24 @@ impl TypeCheckContext {
             return Err(UnificationErr::Unsatisfiable(pred).into());
         }
         irreducible_preds.push(pred);
-        deduction.settled.insert(pred_str);
+        deduction.settled.insert(asked);
         return Ok(());
     }
 
     /// Deduce the constraints the instance that gives `pred` asks for, with `pred` on the deduction
     /// while they are deduced, so that a deduction coming back to `pred` is seen for what it is.
+    ///
+    /// # Arguments
+    /// * `asked` — `pred` as it was asked for, before the associated types in it were reduced.
     fn reduce_instance_context(
         &mut self,
         pred: &Predicate,
-        pred_str: &str,
+        asked: &Predicate,
         context: Vec<Predicate>,
         irreducible_preds: &mut Vec<Predicate>,
         deduction: &mut PredicateDeduction,
     ) -> Result<(), UnifOrOtherErr> {
-        deduction.enter(pred, pred_str);
+        deduction.enter(pred, asked);
         let deduced = context
             .into_iter()
             .try_for_each(|ctx_pred| self.reduce_predicate(ctx_pred, irreducible_preds, deduction));
@@ -3562,44 +3559,44 @@ fn short_span_snippet(span: &Span) -> Option<String> {
 /// begun and has yet to end, and `settled` the ones whose deduction ended.
 #[derive(Default)]
 struct PredicateDeduction {
-    /// The predicates whose deduction the current one is inside, outermost first, each with its
-    /// printed form. The printed form is what tells one predicate from another here, and it is kept
-    /// so that the way out costs no more printing than the way in did.
-    path: Vec<(Predicate, String)>,
-    /// The printed form of each predicate on `path`. Meeting one of these again is meeting a
+    /// The predicates whose deduction the current one is inside, outermost first. Each entry holds
+    /// the predicate with its associated types reduced, and the predicate as it was asked for,
+    /// before that reduction. The asked form is what tells one deduction from another here.
+    path: Vec<(Predicate, Predicate)>,
+    /// The asked form of each predicate on `path`. Meeting one of these again is meeting a
     /// predicate whose deduction needs itself.
-    on_path: Set<String>,
-    /// The printed form of each predicate whose deduction ended. Recorded on the way out, so that a
+    on_path: Set<Predicate>,
+    /// The asked form of each predicate whose deduction ended. Recorded on the way out, so that a
     /// predicate the deduction is still inside is not taken for one already deduced. It keeps a
     /// predicate that several instance contexts ask for from being deduced once for each of them.
-    settled: Set<String>,
+    settled: Set<Predicate>,
 }
 
 impl PredicateDeduction {
-    /// Record that the deduction of `pred`, whose printed form is `pred_str`, has begun.
-    fn enter(&mut self, pred: &Predicate, pred_str: &str) {
-        self.on_path.insert(pred_str.to_string());
-        self.path.push((pred.clone(), pred_str.to_string()));
+    /// Record that the deduction of `pred`, asked for as `asked`, has begun.
+    fn enter(&mut self, pred: &Predicate, asked: &Predicate) {
+        self.on_path.insert(asked.clone());
+        self.path.push((pred.clone(), asked.clone()));
     }
 
     /// Record that the deduction entered last has ended.
     fn leave(&mut self) {
-        let (_pred, pred_str) = self
+        let (_pred, asked) = self
             .path
             .pop()
             .expect("a deduction ends only after it has begun");
-        self.on_path.remove(&pred_str);
+        self.on_path.remove(&asked);
     }
 
-    /// The way from the predicate printed as `pred_str` round to it again, that predicate at both
+    /// The way from the predicate asked for as `asked` round to it again, that predicate at both
     /// ends.
-    fn way_round(&self, pred_str: &str) -> Vec<Predicate> {
+    fn way_round(&self, asked: &Predicate) -> Vec<Predicate> {
         let start = self
             .path
             .iter()
-            .position(|(_ancestor, ancestor_str)| ancestor_str == pred_str)
+            .position(|(_ancestor, ancestor_asked)| ancestor_asked == asked)
             .expect("the caller found the predicate among the deductions it is inside");
-        let (repeated, _repeated_str) = &self.path[start];
+        let (repeated, _repeated_asked) = &self.path[start];
         self.way_from(start, repeated)
     }
 
@@ -3612,7 +3609,7 @@ impl PredicateDeduction {
     fn way_from(&self, start: usize, last: &Predicate) -> Vec<Predicate> {
         self.path[start..]
             .iter()
-            .map(|(ancestor, _ancestor_str)| ancestor.clone())
+            .map(|(ancestor, _ancestor_asked)| ancestor.clone())
             .chain([last.clone()])
             .collect()
     }

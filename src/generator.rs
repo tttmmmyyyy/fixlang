@@ -650,14 +650,14 @@ pub struct Generator<'c, 'm> {
     /// The constant `#ArrayStorage` emitted for each array of elements a literal asks for, keyed by
     /// its name, with the elements it holds, so that literals of equal elements name one storage.
     global_array_storages: Map<String, (ArrayValue<'c>, PointerValue<'c>)>,
-    /// Debug type built for each Fix type, keyed by the type's canonical string, so a type is
-    /// described once and shared across every reference to it.
-    di_type_cache: Map<String, DIType<'c>>,
+    /// Debug type built for each Fix type, so a type is described once and shared across every
+    /// reference to it.
+    di_type_cache: Map<Arc<TypeNode>, DIType<'c>>,
     /// Placeholder node for each Fix type whose debug type is mid-construction. A reference to the
     /// type reached while building it (as a recursive type refers to itself) resolves to the
     /// placeholder, which is replaced by the finished type once construction completes. Without it,
     /// describing a recursive type would recurse forever.
-    di_type_placeholders: Map<String, DIDerivedType<'c>>,
+    di_type_placeholders: Map<Arc<TypeNode>, DIDerivedType<'c>>,
     /// The LLVM struct each Fix type is laid out as. Laying a type out walks every type it is built
     /// from, so a type reached from many places -- a field type repeated across a struct, a struct
     /// nested several levels deep -- would otherwise be laid out once per path that reaches it.
@@ -2289,10 +2289,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         Object::from_parts(part_phis, ty, self)
     }
 
-    /// Define (once per module) and call the per-type RC helper `<prefix>_<hash>` for `obj`. The
-    /// object is passed as its parts rather than as one aggregate (see `lambda_function_type`), so
-    /// no aggregate is materialized across the call; `build_body` emits the retain / release / mark
-    /// work on the object reassembled from those parts inside the helper.
+    /// Define (once per module) and call the per-type RC helper `<prefix>_<digest>` for `obj`,
+    /// where `<digest>` is `TypeNode::digest` of its type. The object is passed as its parts rather
+    /// than as one aggregate (see `lambda_function_type`), so no aggregate is materialized across
+    /// the call; `build_body` emits the retain / release / mark work on the object reassembled from
+    /// those parts inside the helper.
     fn emit_rc_helper_call(
         &mut self,
         obj: Object<'c>,
@@ -2300,7 +2301,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         call_name: &str,
         build_body: impl FnOnce(&mut Self, Object<'c>),
     ) {
-        let func_name = format!("{}_{}", prefix, obj.ty.hash());
+        let func_name = format!("{}_{}", prefix, obj.ty.digest());
         let func = if let Some(func) = self.module.get_function(&func_name) {
             func
         } else {
@@ -3388,27 +3389,27 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// Return the debug type identified by `key`, building it with `build` only on the first
-    /// request and caching the result. A recursive type refers to itself, so `build` may ask for
-    /// the same `key` again before it returns; that inner request resolves to a placeholder node
-    /// which this method replaces with the finished type once `build` completes, breaking what
-    /// would otherwise be unbounded recursion.
+    /// Return the debug type describing `ty`, building it with `build` only on the first request
+    /// and caching the result. A recursive type refers to itself, so `build` may ask for the same
+    /// `ty` again before it returns; that inner request resolves to a placeholder node which this
+    /// method replaces with the finished type once `build` completes, breaking what would otherwise
+    /// be unbounded recursion.
     pub fn get_or_build_di_type(
         &mut self,
-        key: String,
+        ty: &Arc<TypeNode>,
         build: impl FnOnce(&mut Self) -> DIType<'c>,
     ) -> DIType<'c> {
-        if let Some(cached) = self.di_type_cache.get(&key) {
+        if let Some(cached) = self.di_type_cache.get(ty) {
             return *cached;
         }
-        if let Some(placeholder) = self.di_type_placeholders.get(&key) {
+        if let Some(placeholder) = self.di_type_placeholders.get(ty) {
             return placeholder.as_type();
         }
         let placeholder = unsafe {
             self.get_di_builder()
                 .create_placeholder_derived_type(self.context)
         };
-        self.di_type_placeholders.insert(key.clone(), placeholder);
+        self.di_type_placeholders.insert(ty.clone(), placeholder);
         let real = build(self);
         // inkwell's safe `replace_placeholder_derived_type` only accepts a derived type as the
         // replacement, but a struct's debug type is a composite type, so replace through the C API
@@ -3416,8 +3417,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         unsafe {
             LLVMMetadataReplaceAllUsesWith(placeholder.as_mut_ptr(), real.as_mut_ptr());
         }
-        self.di_type_placeholders.remove(&key);
-        self.di_type_cache.insert(key, real);
+        self.di_type_placeholders.remove(ty);
+        self.di_type_cache.insert(ty.clone(), real);
         real
     }
 

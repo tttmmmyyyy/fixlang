@@ -1154,6 +1154,90 @@ main = println(bad([1, 2]).to_string);
     test_source_fail(source, Configuration::develop_mode(), "is not assumed");
 }
 
+/// An equality constraint is accepted only where its first argument is assumed to implement the
+/// trait: assuming the trait of another type variable leaves the equality invalid.
+#[test]
+pub fn test_equality_constraint_whose_trait_is_assumed_of_another_variable() {
+    let source = r#"
+module Main;
+
+trait c : Coll {
+    type Ele c;
+    first : c -> Ele c;
+}
+
+impl Array a : Coll {
+    type Ele (Array a) = a;
+    first = |xs| xs.@(0);
+}
+
+bad : [d : Coll, Ele c = I64] c -> d -> I64;
+bad = |_, _| 0;
+
+main : IO ();
+main = println(bad([1, 2], [true]).to_string);
+    "#;
+    test_source_fail(source, Configuration::develop_mode(), "is not assumed");
+}
+
+/// An equality constraint is accepted only where its first argument is assumed to implement the
+/// trait the associated type belongs to: assuming that the variable implements another trait leaves
+/// the equality invalid.
+#[test]
+pub fn test_equality_constraint_whose_variable_is_assumed_to_implement_another_trait() {
+    let source = r#"
+module Main;
+
+trait c : Coll {
+    type Ele c;
+    first : c -> Ele c;
+}
+
+impl Array a : Coll {
+    type Ele (Array a) = a;
+    first = |xs| xs.@(0);
+}
+
+bad : [c : ToString, Ele c = I64] c -> I64;
+bad = |_| 0;
+
+main : IO ();
+main = println(bad([1, 2]).to_string);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "because `c : Main::Coll` is not assumed",
+    );
+}
+
+/// The definition of an associated type in a trait takes the trait's type variable as its first
+/// argument; a definition naming another type variable there is rejected.
+#[test]
+pub fn test_associated_type_defined_on_another_type_variable() {
+    let source = r#"
+module Main;
+
+trait c : Coll {
+    type Ele d;
+    first : c -> Ele c;
+}
+
+impl Array a : Coll {
+    type Ele (Array a) = a;
+    first = |xs| xs.@(0);
+}
+
+main : IO ();
+main = println([1, 2].first.to_string);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "The definition of an associated type should be in the form",
+    );
+}
+
 /// Two equality constraints on one associated type application are rejected, which is what leaves
 /// the reduction of a type by the assumed equalities a single answer.
 #[test]

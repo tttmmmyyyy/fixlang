@@ -8,6 +8,7 @@ use crate::elaboration::typecheck::InstantiationSite;
 use crate::error::Errors;
 use crate::parse::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 /// A trait constraint on a type, such as `String : Show` or `a : Eq`.
@@ -25,6 +26,24 @@ pub struct Predicate {
     /// requires it. A constraint deduced on the way to another one is required by the same use.
     #[serde(skip)]
     pub required_by: Option<Arc<InstantiationSite>>,
+}
+
+impl PartialEq for Predicate {
+    /// Compares `trait_id` and `ty`. The spans and `required_by` take no part, so two copies of one
+    /// constraint, written or required at different places, compare equal.
+    fn eq(&self, other: &Self) -> bool {
+        self.trait_id == other.trait_id && self.ty == other.ty
+    }
+}
+
+impl Eq for Predicate {}
+
+impl Hash for Predicate {
+    /// Hashes the trait and the type, agreeing with the equality of `PartialEq`.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.trait_id.hash(state);
+        self.ty.hash(state);
+    }
 }
 
 impl Predicate {
