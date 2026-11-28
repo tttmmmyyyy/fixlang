@@ -155,6 +155,27 @@ pub fn test_pack_for_thread_requires_multi_threading() {
     );
 }
 
+/// `Std::FFI::_pack_for_thread_ios`, which `pack_for_thread` is written with, asks for
+/// multi-threading when a program calls it directly, as `pack_for_thread` does.
+#[test]
+pub fn test_a_direct_call_of_pack_for_thread_ios_requires_multi_threading() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            let ptr = *IO::from_runner(FFI::_pack_for_thread_ios([1, 2, 3]));
+            let got : Array I64 = *FFI::unpack_from_thread(ptr);
+            println(got.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Std::FFI::_pack_for_thread_ios` requires multi-threading",
+    );
+}
+
 /// The deprecated `Std::mark_threaded` requires multi-threading, as `pack_for_thread` does.
 #[test]
 pub fn test_mark_threaded_requires_multi_threading() {

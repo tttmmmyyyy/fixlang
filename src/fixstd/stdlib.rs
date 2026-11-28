@@ -16,8 +16,8 @@ use crate::{
         C_UNSIGNED_INT_NAME, C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME,
         C_UNSIGNED_SHORT_NAME, DESTRUCTOR_NAME, F32_NAME, F64_NAME, FFI_NAME, HOLE_NAME, I16_NAME,
         I32_NAME, I64_NAME, I8_NAME, INSTANCIATED_NAME_SEPARATOR, IOSTATE_NAME, IO_NAME,
-        MARK_THREADED_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, TUPLE_NAME, U16_NAME, U32_NAME,
-        U64_NAME, U8_NAME, WITH_RETAINED_NAME,
+        MARK_THREADED_NAME, PACK_FOR_THREAD_IOS_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
+        TUPLE_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME, WITH_RETAINED_NAME,
     },
     error::Errors,
     fixstd::builtin::{
@@ -28,25 +28,25 @@ use crate::{
         array_is_storage_unique_function, array_mutate_elements_ios_internal, array_punch,
         array_set_capacity_bounds_unchecked, array_truncate_bounds_unchecked, array_unsafe_empty,
         array_unsafe_get_bounds_unchecked, bit_cast_function, bitwise_operation_function,
-        borrow_boxed_function, boxed_from_retained_ptr_ios, boxed_to_retained_ptr_ios,
-        boxed_trait_instance, cast_between_float_function, cast_between_integral_function,
-        cast_float_to_int_function, cast_int_to_float_function, destructor_make,
-        divide_trait_instance_float, divide_trait_instance_int, eq_trait_instance_float,
-        eq_trait_instance_int, eq_trait_instance_ptr, fix, floating_types, get_get_boxed_ptr,
-        get_mutate_boxed_ios_internal, get_ptr_array, get_rc_function_ptr, grow_size_array,
-        hole_function, infinity_value, integral_types, is_unique_function,
-        less_than_or_equal_to_trait_instance_float, less_than_or_equal_to_trait_instance_int,
-        less_than_trait_instance_float, less_than_trait_instance_int, make_bool_ty,
-        make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_floating_ty, make_integral_ty,
-        make_iostate_unsafe_create, make_numeric_ty, make_ptr_ty, make_u32_ty, make_u64_ty,
-        mark_threaded_function, multiply_trait_instance_float, multiply_trait_instance_int,
-        negate_trait_instance_float, negate_trait_instance_int, not_trait_instance_bool,
-        number_from_bytes_function, number_to_bytes_function, offset_from_function,
-        pack_for_thread_ios, punched_array_plug, quiet_nan_value, remainder_trait_instance_int,
-        set_array, shift_function, subtract_trait_instance_float, subtract_trait_instance_int,
-        swap_array, swap_bounds_unchecked_array, unary_bit_function, undefined_internal_function,
-        unpack_from_thread_ios, unsafe_set_bounds_unchecked_array, with_retained_function,
-        BitOperationType, RcFunctionOperation, RcFunctionPointee, UnaryBitOperation,
+        borrow_boxed_function, boxed_trait_instance, cast_between_float_function,
+        cast_between_integral_function, cast_float_to_int_function, cast_int_to_float_function,
+        destructor_make, divide_trait_instance_float, divide_trait_instance_int,
+        eq_trait_instance_float, eq_trait_instance_int, eq_trait_instance_ptr, fix, floating_types,
+        from_retained_ptr_ios, get_get_boxed_ptr, get_mutate_boxed_ios_internal, get_ptr_array,
+        get_rc_function_ptr, grow_size_array, hole_function, infinity_value, integral_types,
+        is_unique_function, less_than_or_equal_to_trait_instance_float,
+        less_than_or_equal_to_trait_instance_int, less_than_trait_instance_float,
+        less_than_trait_instance_int, make_bool_ty, make_dynamic_object_ty, make_f32_ty,
+        make_f64_ty, make_floating_ty, make_integral_ty, make_iostate_unsafe_create,
+        make_numeric_ty, make_ptr_ty, make_u32_ty, make_u64_ty, mark_threaded_function,
+        multiply_trait_instance_float, multiply_trait_instance_int, negate_trait_instance_float,
+        negate_trait_instance_int, not_trait_instance_bool, number_from_bytes_function,
+        number_to_bytes_function, offset_from_function, punched_array_plug, quiet_nan_value,
+        remainder_trait_instance_int, set_array, shift_function, subtract_trait_instance_float,
+        subtract_trait_instance_int, swap_array, swap_bounds_unchecked_array, to_retained_ptr_ios,
+        unary_bit_function, undefined_internal_function, unsafe_set_bounds_unchecked_array,
+        with_retained_function, BitOperationType, RcFunctionOperation, RetainedPtrKind,
+        UnaryBitOperation,
     },
     misc::{make_map, upper_camel_to_lower_snake, Map},
     parse::parser::parse_and_save_to_temporary_file,
@@ -686,63 +686,65 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     ));
 
     // FFI
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "_boxed_to_retained_ptr_ios"),
-        boxed_to_retained_ptr_ios(),
-        None,
-        None,
-        Some(include_str!("../docs/std_ffi_boxed_to_retained_ptr_ios.md").to_string()),
-    ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "_boxed_from_retained_ptr_ios"),
-        boxed_from_retained_ptr_ios(),
-        None,
-        None,
-        Some(include_str!("../docs/std_ffi_boxed_from_retained_ptr_ios.md").to_string()),
-    ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "_pack_for_thread_ios"),
-        pack_for_thread_ios(),
-        None,
-        None,
-        Some(include_str!("../docs/std_ffi_pack_for_thread_ios.md").to_string()),
-    ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "_unpack_from_thread_ios"),
-        unpack_from_thread_ios(),
-        None,
-        None,
-        Some(include_str!("../docs/std_ffi_unpack_from_thread_ios.md").to_string()),
-    ));
-    for (name, operation, pointee, doc) in [
+    for (name, value, doc) in [
+        (
+            "_boxed_to_retained_ptr_ios",
+            to_retained_ptr_ios(RetainedPtrKind::Boxed),
+            include_str!("../docs/std_ffi_boxed_to_retained_ptr_ios.md"),
+        ),
+        (
+            "_boxed_from_retained_ptr_ios",
+            from_retained_ptr_ios(RetainedPtrKind::Boxed),
+            include_str!("../docs/std_ffi_boxed_from_retained_ptr_ios.md"),
+        ),
+        (
+            PACK_FOR_THREAD_IOS_NAME,
+            to_retained_ptr_ios(RetainedPtrKind::PackedForThread),
+            include_str!("../docs/std_ffi_pack_for_thread_ios.md"),
+        ),
+        (
+            "_unpack_from_thread_ios",
+            from_retained_ptr_ios(RetainedPtrKind::PackedForThread),
+            include_str!("../docs/std_ffi_unpack_from_thread_ios.md"),
+        ),
+    ] {
+        errors.eat_err(fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, FFI_NAME], name),
+            value,
+            None,
+            None,
+            Some(doc.to_string()),
+        ));
+    }
+    for (name, operation, kind, doc) in [
         (
             "get_funptr_release",
             RcFunctionOperation::Release,
-            RcFunctionPointee::Boxed,
+            RetainedPtrKind::Boxed,
             include_str!("../docs/std_ffi_get_funptr_release.md"),
         ),
         (
             "get_funptr_retain",
             RcFunctionOperation::Retain,
-            RcFunctionPointee::Boxed,
+            RetainedPtrKind::Boxed,
             include_str!("../docs/std_ffi_get_funptr_retain.md"),
         ),
         (
             "get_funptr_release_for_thread",
             RcFunctionOperation::Release,
-            RcFunctionPointee::PackedForThread,
+            RetainedPtrKind::PackedForThread,
             include_str!("../docs/std_ffi_get_funptr_release_for_thread.md"),
         ),
         (
             "get_funptr_retain_for_thread",
             RcFunctionOperation::Retain,
-            RcFunctionPointee::PackedForThread,
+            RetainedPtrKind::PackedForThread,
             include_str!("../docs/std_ffi_get_funptr_retain_for_thread.md"),
         ),
     ] {
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, FFI_NAME], name),
-            get_rc_function_ptr(operation, pointee),
+            get_rc_function_ptr(operation, kind),
             None,
             None,
             Some(doc.to_string()),

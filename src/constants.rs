@@ -12,6 +12,8 @@ pub const MARK_THREADED_NAME: &str = "mark_threaded";
 /// The `Std::FFI` value that puts the values reachable from a value into multi-threaded mode and
 /// gives a pointer through which another thread takes the value.
 pub const PACK_FOR_THREAD_NAME: &str = "pack_for_thread";
+/// The `Std::FFI` value `Std::FFI::pack_for_thread` is written with.
+pub const PACK_FOR_THREAD_IOS_NAME: &str = "_pack_for_thread_ios";
 pub const PTR_NAME: &str = "Ptr";
 pub const U8_NAME: &str = "U8";
 pub const I8_NAME: &str = "I8";

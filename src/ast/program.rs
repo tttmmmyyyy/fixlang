@@ -18,10 +18,11 @@ use crate::configuration::{
 };
 use crate::constants::{
     C_ENTRY_POINT_NAME, DOT_FIXLANG, FFI_NAME, INSTANCIATED_NAME_SEPARATOR, MARK_THREADED_NAME,
-    MAX_UNION_VARIANTS, PACK_FOR_THREAD_NAME, STD_NAME, STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL,
-    STRUCT_MODIFIER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
-    STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_SIZE_BASE,
-    UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
+    MAX_UNION_VARIANTS, PACK_FOR_THREAD_IOS_NAME, PACK_FOR_THREAD_NAME, STD_NAME,
+    STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL,
+    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
+    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_SIZE_BASE, UNION_AS_SYMBOL, UNION_IS_SYMBOL,
+    UNION_MOD_SYMBOL,
 };
 use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
@@ -2174,7 +2175,8 @@ impl Program {
     }
 
     /// Reports the calls of `Std::mark_threaded` and `Std::FFI::pack_for_thread` this program makes
-    /// when multi-threading is off.
+    /// when multi-threading is off, and the calls of `Std::FFI::_pack_for_thread_ios`, which
+    /// `Std::FFI::pack_for_thread` is written with, made from anywhere else.
     ///
     /// Multi-threading is what gives an object a mode to be put into, so these functions have
     /// nothing to work with without it. The setting belongs to the program being built, so a library
@@ -2188,19 +2190,28 @@ impl Program {
         if config.threaded {
             return Ok(());
         }
-        let mut errors = Errors::empty();
-        for name in [
+        let names = [
             FullName::from_strs(&[STD_NAME], MARK_THREADED_NAME),
             FullName::from_strs(&[STD_NAME, FFI_NAME], PACK_FOR_THREAD_NAME),
-        ] {
-            errors.append(self.uses_requiring_multi_threading(&name));
+            FullName::from_strs(&[STD_NAME, FFI_NAME], PACK_FOR_THREAD_IOS_NAME),
+        ];
+        let mut errors = Errors::empty();
+        for name in &names {
+            errors.append(self.report_calls_requiring_multi_threading(name, &names));
         }
         errors.to_result()
     }
 
     /// The error that names every call of the generic value `name` this program reaches and says that
     /// `name` requires multi-threading; empty where the program reaches no call.
-    fn uses_requiring_multi_threading(&self, name: &FullName) -> Errors {
+    ///
+    /// A call made in the body of one of `requiring` is left out: the call of that function is the
+    /// one reported.
+    fn report_calls_requiring_multi_threading(
+        &self,
+        name: &FullName,
+        requiring: &[FullName],
+    ) -> Errors {
         // A generic value is instantiated once per type it is used at, and every instance answers to
         // the name it was written as.
         let instances = self
@@ -2214,6 +2225,9 @@ impl Program {
         }
         let mut uses: Vec<(&FullName, Option<Span>)> = vec![];
         for symbol in self.symbols.values() {
+            if requiring.contains(&symbol.generic_name) {
+                continue;
+            }
             let expr = symbol.expr.as_ref().unwrap();
             expr.walk_var_uses(&mut |var, src| {
                 if instances.contains(&var.name) {
