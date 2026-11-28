@@ -3087,7 +3087,9 @@ pub struct OpaqueTyConResolution {
 
 #[cfg(test)]
 mod tests {
-    use super::{kind_arrow, kind_star, make_tyvar, type_tyapp, type_tyvar_star, TypeNode};
+    use super::{
+        kind_arrow, kind_star, make_tyvar, type_func, type_tyapp, type_tyvar_star, TypeNode,
+    };
     use crate::constants::TYPE_WILDCARD_VAR_PREFIX;
     use crate::fixstd::builtin::{make_array_ty, make_i64_ty, make_tuple_ty};
     use crate::misc::Set;
@@ -3172,5 +3174,40 @@ mod tests {
 
         assert_eq!(two_wildcards.to_string(), "(_, _)");
         assert_eq!(one_wildcard_twice.to_string(), "(_, _)");
+    }
+
+    /// `normalize` renames the free type variables `a`, `b`, ... in order of first appearance, so
+    /// two types differing only in the names of their variables have one normal form, and two
+    /// types differing in which positions share a variable have two.
+    #[test]
+    fn test_normalize_identifies_types_differing_only_in_the_names_of_their_variables() {
+        let tv = type_tyvar_star;
+        let x_array_y_x = type_func(vec![tv("x"), type_tyapp(make_array_ty(), tv("y"))], tv("x"));
+        let a_array_b_a = type_func(vec![tv("a"), type_tyapp(make_array_ty(), tv("b"))], tv("a"));
+        let p_array_q_q = type_func(vec![tv("p"), type_tyapp(make_array_ty(), tv("q"))], tv("q"));
+
+        assert!(
+            x_array_y_x.normalize() == a_array_b_a,
+            "`x -> Array y -> x` normalized to `{}`",
+            x_array_y_x.normalize().to_string()
+        );
+        assert!(
+            x_array_y_x.normalize() != p_array_q_q.normalize(),
+            "`x -> Array y -> x` and `p -> Array q -> q` have one normal form"
+        );
+    }
+
+    /// `to_string_normalize` renames a type wildcard like any other type variable, so
+    /// `(#typewildcard0, #typewildcard1)` and `(#typewildcard0, #typewildcard0)` give two strings.
+    #[test]
+    fn test_to_string_normalize_tells_apart_types_that_differ_in_their_wildcards() {
+        let wildcard = |n: u32| type_tyvar_star(&format!("{}{}", TYPE_WILDCARD_VAR_PREFIX, n));
+        let two_wildcards = make_tuple_ty(vec![wildcard(0), wildcard(1)]);
+        let one_wildcard_twice = make_tuple_ty(vec![wildcard(0), wildcard(0)]);
+
+        assert_ne!(
+            two_wildcards.to_string_normalize(),
+            one_wildcard_twice.to_string_normalize()
+        );
     }
 }
