@@ -174,86 +174,45 @@ fn is_functor_identity(lens_ty: &Arc<TypeNode>) -> bool {
     let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(&lens_ty);
 
     let id_ty = type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IDENTITY_NAME)));
-    let id_t_ty = type_tyapp(id_ty.clone(), t_ty);
-    let id_u_ty = type_tyapp(id_ty, u_ty);
-
-    ft_ty.to_string() == id_t_ty.to_string() && fu_ty.to_string() == id_u_ty.to_string()
+    ft_ty == type_tyapp(id_ty.clone(), t_ty) && fu_ty == type_tyapp(id_ty, u_ty)
 }
 
 // Taking type `(T -> f T) -> U -> f U`, check if `f` is `Std::Const C` for some `C`.
 fn is_functor_const(lens_ty: &Arc<TypeNode>) -> bool {
-    let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(&lens_ty);
-
     let const_ty = type_tycon(&tycon(FullName::from_strs(&[STD_NAME], CONST_NAME)));
-
-    // Try to extract C from ft_ty (which should be Const C T)
-    // ft_ty has the form: (Const C) T = TyApp(TyApp(Const, C), T)
-    let TyApp(ft_const_c, t) = &ft_ty.ty else {
-        return false;
-    };
-    if t.to_string() != t_ty.to_string() {
-        return false;
-    }
-    let TyApp(ft_const_base, ft_c) = &ft_const_c.ty else {
-        return false;
-    };
-    if ft_const_base.to_string() != const_ty.to_string() {
-        return false;
-    }
-
-    // Try to extract C from fu_ty (which should be Const C U)
-    let TyApp(fu_const_c, u) = &fu_ty.ty else {
-        return false;
-    };
-    if u.to_string() != u_ty.to_string() {
-        return false;
-    }
-    let TyApp(fu_const_base, fu_c) = &fu_const_c.ty else {
-        return false;
-    };
-    if fu_const_base.to_string() != const_ty.to_string() {
-        return false;
-    }
-
-    // Check if both have the same C
-    ft_c.to_string() == fu_c.to_string()
+    is_functor_applied_once(lens_ty, &const_ty)
 }
 
 // Taking type `(T -> f T) -> U -> f U`, check if `f` is `Std::Tuple2 X` for some `X`.
 fn is_functor_tuple2(lens_ty: &Arc<TypeNode>) -> bool {
-    let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(&lens_ty);
-
     let tuple2_ty = type_tycon(&tycon(make_tuple_name_abs(2)));
+    is_functor_applied_once(lens_ty, &tuple2_ty)
+}
 
-    // Try to extract X from ft_ty (which should be Tuple2 X T)
-    // ft_ty has the form: (Tuple2 X) T = TyApp(TyApp(Tuple2, X), T)
-    let TyApp(ft_tuple2_x, t) = &ft_ty.ty else {
-        return false;
-    };
-    if t.to_string() != t_ty.to_string() {
-        return false;
+// Taking type `(T -> f T) -> U -> f U`, check if `f` is `g C` for the type constructor `g` and some
+// type `C`, the same `C` in `f T` and in `f U`.
+fn is_functor_applied_once(lens_ty: &Arc<TypeNode>, g: &Arc<TypeNode>) -> bool {
+    let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(&lens_ty);
+    match (
+        functor_argument(&ft_ty, &t_ty, g),
+        functor_argument(&fu_ty, &u_ty, g),
+    ) {
+        (Some(ft_c), Some(fu_c)) => ft_c == fu_c,
+        _ => false,
     }
-    let TyApp(ft_tuple2_base, ft_x) = &ft_tuple2_x.ty else {
-        return false;
-    };
-    if ft_tuple2_base.to_string() != tuple2_ty.to_string() {
-        return false;
-    }
+}
 
-    // Try to extract X from fu_ty (which should be Tuple2 X U)
-    let TyApp(fu_tuple2_x, u) = &fu_ty.ty else {
-        return false;
+// The type `C` if `ty` is `g C arg_ty`.
+fn functor_argument<'t>(
+    ty: &'t Arc<TypeNode>,
+    arg_ty: &Arc<TypeNode>,
+    g: &Arc<TypeNode>,
+) -> Option<&'t Arc<TypeNode>> {
+    let TyApp(g_c, arg) = &ty.ty else {
+        return None;
     };
-    if u.to_string() != u_ty.to_string() {
-        return false;
-    }
-    let TyApp(fu_tuple2_base, fu_x) = &fu_tuple2_x.ty else {
-        return false;
+    let TyApp(g_base, c) = &g_c.ty else {
+        return None;
     };
-    if fu_tuple2_base.to_string() != tuple2_ty.to_string() {
-        return false;
-    }
-
-    // Check if both have the same X
-    ft_x.to_string() == fu_x.to_string()
+    (arg == arg_ty && g_base == g).then_some(c)
 }

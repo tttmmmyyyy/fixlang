@@ -677,6 +677,47 @@ pub fn test_export_non_ascii_first_character_fails() {
     );
 }
 
+/// A value whose type has a type variable and no constraint is refused for the type variable,
+/// whatever the variable is named.
+#[test]
+pub fn test_export_of_a_type_variable_not_named_a_is_refused_for_the_variable() {
+    let source = r##"
+        module Main;
+
+        identity : x -> x;
+        identity = |v| v;
+        FFI_EXPORT[identity, identity];
+
+        main : IO ();
+        main = pure();
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "the type of an exported value should not contain any type variables.",
+    );
+}
+
+/// A value whose type has a trait constraint is refused for the constraint.
+#[test]
+pub fn test_export_of_a_constrained_value_is_refused_for_the_constraint() {
+    let source = r##"
+        module Main;
+
+        describe : [a : ToString] a -> CInt;
+        describe = |v| v.to_string.get_size.to_CInt;
+        FFI_EXPORT[describe, describe];
+
+        main : IO ();
+        main = pure();
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "the type of an exported value should not have any constraints.",
+    );
+}
+
 /// A module holds one function under a name, so an export of a name the compiler writes a body under
 /// is a second definition of one symbol and one of the two loses the name. Both kinds: the entry
 /// point, and a name of the Fix runtime, whether the compiler writes its body into the module or

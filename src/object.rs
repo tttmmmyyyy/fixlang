@@ -2614,11 +2614,10 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
     }
 }
 
-/// The debug type describing `ty`'s in-memory layout, caching each type by name so recursive types
+/// The debug type describing `ty`'s in-memory layout, caching each type so recursive types
 /// terminate.
 pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
-    let key = ty.to_string();
-    gc.get_or_build_di_type(key, |gc| ty_to_debug_struct_ty_body(ty, gc))
+    gc.get_or_build_di_type(&ty.clone(), |gc| ty_to_debug_struct_ty_body(ty, gc))
 }
 
 /// The debug type describing `ty`'s in-memory layout, built by expanding its fields. The caching

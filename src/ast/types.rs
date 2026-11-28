@@ -1738,7 +1738,7 @@ impl TypeNode {
         // may write a namespace-qualified type (e.g., `Main::MyType`) which would not
         // match the unresolved local name in `impl_type` at this stage.  The equivalent
         // check is performed after name resolution in `validate_trait_impl`.
-        if !is_impl && app_seq[1].to_string() != impl_type.to_string() {
+        if !is_impl && app_seq[1] != *impl_type {
             return Err(general_err(is_impl, impl_type, src_for_err));
         }
         let impl_type_as_written = app_seq[1].clone();
@@ -2518,7 +2518,7 @@ impl Scheme {
                 if pred.trait_id != eq.assoc_type.trait_id() {
                     continue;
                 }
-                if pred.ty.to_string() != eq.args[0].to_string() {
+                if pred.ty != eq.args[0] {
                     continue;
                 }
                 ok = true;
@@ -2634,7 +2634,7 @@ impl Scheme {
         // This restriction is necessary to ensure that type reduction by equalities is deterministic.
         for i in 0..self.equalities.len() {
             for j in i + 1..self.equalities.len() {
-                if self.equalities[i].lhs().to_string() == self.equalities[j].lhs().to_string() {
+                if self.equalities[i].lhs() == self.equalities[j].lhs() {
                     return Err(Errors::from_msg_srcs(
                         "Multiple equality constraints with the same left side are not allowed."
                             .to_string(),

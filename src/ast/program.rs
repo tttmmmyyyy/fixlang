@@ -53,7 +53,6 @@ use crate::type_size::{no_size_reason, LayoutWalk};
 use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::Write;
 use std::mem::{replace, take};
@@ -1694,17 +1693,25 @@ impl Program {
     }
 
     /// Reports that the program has no global value `value_name`, or that its declared type differs
-    /// from `required_ty`. A value declared at a more general type, such as
-    /// `[m : Monad] m ()` where `IO ()` is required, is reported too. The errors are placed at the
-    /// declaration of the value and at `required_src`.
+    /// from `required_ty`, a type with no type variable. A value declared at a more general type,
+    /// such as `[m : Monad] m ()` where `IO ()` is required, is reported too. The errors are placed
+    /// at the declaration of the value and at `required_src`.
     pub fn check_value_has_type(
         &self,
         value_name: &FullName,
         required_ty: &Arc<TypeNode>,
         required_src: &Option<Span>,
     ) -> Result<(), Errors> {
+        assert!(
+            required_ty.is_ground(),
+            "a value is required to have `{}`, a type with a type variable",
+            required_ty.to_string()
+        );
         let gv = self.find_global_value(value_name, required_src)?;
-        if gv.scm.to_string_normalize() != required_ty.to_string() {
+        let declared_at_required_ty = gv.scm.predicates.is_empty()
+            && gv.scm.equalities.is_empty()
+            && gv.scm.ty == *required_ty;
+        if !declared_at_required_ty {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "The value `{}` should have type `{}`.",
@@ -2101,7 +2108,7 @@ impl Program {
         // variadic argument is reported once per type it is inferred to have, since those
         // instantiations are what give one argument more than one type.
         let mut reported_c_functions: Set<Name> = Default::default();
-        let mut reported_variadic_args: BTreeSet<(Option<Span>, String)> = Default::default();
+        let mut reported_variadic_args: Set<(Option<Span>, Arc<TypeNode>)> = Default::default();
         let mut symbol_names: Vec<&FullName> = self.symbols.keys().collect();
         symbol_names.sort();
         for symbol_name in symbol_names {
@@ -2131,7 +2138,7 @@ impl Program {
                     let Some(msg) = unpassable_variadic_type_msg(arg_ty) else {
                         continue;
                     };
-                    if !reported_variadic_args.insert((arg.source.clone(), arg_ty.to_string())) {
+                    if !reported_variadic_args.insert((arg.source.clone(), arg_ty.clone())) {
                         continue;
                     }
                     errors.append(Errors::from_msg_srcs(msg, &[&arg.source]));
