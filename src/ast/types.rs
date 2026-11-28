@@ -2512,31 +2512,15 @@ impl Scheme {
                     }
                 }
             }
-            // For each associated type usage, e.g., `Elem c = I64`, we check that `c : Collects` is in the constraint.
-            let mut ok = false;
-            for pred in &preds {
-                if pred.trait_id != eq.assoc_type.trait_id() {
-                    continue;
-                }
-                if pred.ty != eq.args[0] {
-                    continue;
-                }
-                ok = true;
-                break;
-            }
-            if !ok {
-                let pred = Predicate {
-                    trait_id: eq.assoc_type.trait_id(),
-                    ty: eq.args[0].clone(),
-                    src: None,
-                    trait_src: None,
-                    required_by: None,
-                };
+            // An equality on an associated type, e.g., `Elem c = I64`, needs the constraint that
+            // its first argument implements the trait, e.g., `c : Collects`.
+            let required = Predicate::make(eq.assoc_type.trait_id(), eq.args[0].clone());
+            if !preds.contains(&required) {
                 return Err(Errors::from_msg_srcs(
                     format!(
                         "The equality constraint `{}` is invalid here because `{}` is not assumed.",
                         eq.to_string(),
-                        pred.to_string()
+                        required.to_string()
                     ),
                     &[&eq.src],
                 ));
@@ -2746,6 +2730,11 @@ impl Scheme {
                 buf.push(tv);
             }
         }
+    }
+
+    /// Whether this scheme carries a trait constraint or an equality constraint.
+    pub fn has_constraints(&self) -> bool {
+        !self.predicates.is_empty() || !self.equalities.is_empty()
     }
 
     /// Whether this scheme generalizes the type variable `name`.
