@@ -51,14 +51,13 @@ pub struct TestOptions {
 }
 
 impl TestOptions {
-    /// Whether the options select the test `test`.
-    fn selects(&self, test: &TestCase) -> bool {
-        self.selection.includes(test.kind)
-            && (self.filters.is_empty()
-                || self
-                    .filters
-                    .iter()
-                    .any(|filter| test.name.contains(filter.as_str())))
+    /// Whether the `--filter` options let the test `test` run.
+    fn filters_pass(&self, test: &TestCase) -> bool {
+        self.filters.is_empty()
+            || self
+                .filters
+                .iter()
+                .any(|filter| test.name.contains(filter.as_str()))
     }
 }
 
@@ -191,9 +190,9 @@ impl TestOutcome {
 /// its executable is kept at that path.
 pub fn test_command(mut config: Configuration, options: TestOptions) {
     let program = panic_if_err(load_source_files(&config));
-    let tests = panic_if_err(collect_tests(&program, &config))
+    let tests = panic_if_err(collect_tests(&program, &config, options.selection))
         .into_iter()
-        .filter(|test| options.selects(test))
+        .filter(|test| options.filters_pass(test))
         .collect::<Vec<_>>();
     if tests.is_empty() {
         panic_if_err::<()>(Err(no_test_error(&options)));
@@ -218,13 +217,34 @@ pub fn test_command(mut config: Configuration, options: TestOptions) {
     process::exit(if passed { 0 } else { 1 });
 }
 
-/// The tests of the user's files of `config` (see `UserSourceFiles`), which `program` is loaded from
-/// among other files, in the order
-/// `fix test` shows their failures in: `Test::test`, the values the `TEST[...]` pragmas name, and
-/// the Fix examples of the comments. The tests of each kind are ordered by the file and then by
-/// where they stand in it.
-fn collect_tests(program: &Program, config: &Configuration) -> Result<Vec<TestCase>, Errors> {
-    let user_files = UserSourceFiles::of(config);
+/// The tests of the kinds `selection` includes in the user's files of `config` (see
+/// `UserSourceFiles`), which `program` is loaded from among other files, in the order `fix test`
+/// shows their failures in: `Test::test`, the values the `TEST[...]` pragmas name, and the Fix
+/// examples of the comments. The tests of each kind are ordered by the file and then by where they
+/// stand in it. The Fix examples are read only where `selection` includes them, so an error in the
+/// info string of an example stops only a run that includes the examples.
+fn collect_tests(
+    program: &Program,
+    config: &Configuration,
+    selection: TestSelection,
+) -> Result<Vec<TestCase>, Errors> {
+    let mut tests = vec![];
+    if selection.includes(TestKind::Declared) {
+        tests.extend(declared_tests(program, &UserSourceFiles::of(config)));
+    }
+    if selection.includes(TestKind::DocTest) {
+        tests.extend(
+            collect_examples(program, &config.root_source_files)?
+                .iter()
+                .map(TestCase::of_example),
+        );
+    }
+    Ok(tests)
+}
+
+/// `Test::test` and the values the `TEST[...]` pragmas name, among the global values of `program`
+/// declared in `user_files`, in that order.
+fn declared_tests(program: &Program, user_files: &UserSourceFiles) -> Vec<TestCase> {
     // The parser gives each `TEST[...]` pragma and each type signature its span.
     let in_user_files = |span: &Option<Span>| {
         let span = span
@@ -257,10 +277,7 @@ fn collect_tests(program: &Program, config: &Configuration) -> Result<Vec<TestCa
             statement.ignore,
         ));
     }
-    for example in collect_examples(program, &config.root_source_files)? {
-        tests.push(TestCase::of_example(&example));
-    }
-    Ok(tests)
+    tests
 }
 
 /// The number of tests `fix test` runs at once where `--test-threads` is not given: the number of

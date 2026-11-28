@@ -354,7 +354,8 @@ fn test_error_on_the_wrapper_is_reported_at_the_fence() {
 
 /// The info string of a Fix example carries `ignore`, `no_run` or neither, separated from `fix` by
 /// spaces, an example in the expression form has an expression after its import statements, and a
-/// comment closes each example it opens. `fix test` rejects any other before it runs a test.
+/// comment closes each example it opens. `fix test` rejects any other before it runs a test, and
+/// `fix test --no-doc`, which leaves the examples out, runs `Test::test`.
 #[test]
 fn test_malformed_examples_are_rejected() {
     let lib = r#"module Lib;
@@ -381,8 +382,8 @@ fn test_malformed_examples_are_rejected() {
 // ```
 //
 // ```fix
-value : I64;
-value = 1;
+double : I64 -> I64;
+double = |x| 2 * x;
 "#;
     let dir = project_dir(&[("lib.fix", lib)], &[("test.fix", TEST_ANNOUNCING_ITSELF)]);
     let output = fix_test(&dir, &[]);
@@ -423,6 +424,14 @@ value = 1;
     assert!(
         !String::from_utf8_lossy(&output.stdout).contains("Test::test ran"),
         "no test runs\n{}",
+        streams(&output)
+    );
+
+    let output = fix_test(&dir, &["--no-doc"]);
+    assert!(
+        output.status.success()
+            && String::from_utf8_lossy(&output.stderr).contains("test Test::test ... ok"),
+        "`fix test --no-doc` runs `Test::test`\n{}",
         streams(&output)
     );
 }
