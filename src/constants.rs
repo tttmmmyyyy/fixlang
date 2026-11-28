@@ -1,6 +1,3 @@
-use inkwell::{context::Context, types::IntType, values::IntValue};
-use std::env;
-
 pub const NAMESPACE_SEPARATOR: &str = "::";
 pub const MODULE_SEPARATOR: &str = ".";
 
@@ -495,20 +492,19 @@ pub const TUPLE_SIZE_BASE: u32 = 3;
 // Is tuple unboxed?
 pub const TUPLE_UNBOX: bool = true;
 
-// The type in LLVM corresponding to `pthread_once_t` of this system.
-pub fn pthread_once_init_flag_type<'c>(ctx: &'c Context) -> IntType<'c> {
-    // TODO: we should compile C program including "sizeof(pthread_once_t)" and run it to get the correct size.
-    if env::consts::OS == "macos" {
-        ctx.i128_type()
-    } else {
-        ctx.i32_type()
-    }
-}
+/// The width in bits of a global value's initialization flag, which holds one of the
+/// `INIT_FLAG_*` values.
+pub const INIT_FLAG_BITS: u32 = 8;
 
-// The value of `PTHREAD_ONCE_INIT` of this system.
-pub fn pthread_once_init_flag_value<'c>(ctx: &'c Context) -> IntValue<'c> {
-    pthread_once_init_flag_type(ctx).const_zero()
-}
+/// The value of a global value's initialization flag before the value is stored. A global's
+/// accessor reads the flag before it reads the value.
+pub const INIT_FLAG_UNINITIALIZED: u64 = 0;
+/// The value of a global value's initialization flag once the value is stored, which it keeps for
+/// the rest of the program.
+pub const INIT_FLAG_INITIALIZED: u64 = 1;
+/// The value of a global value's initialization flag while a thread of a `--threaded` build runs
+/// the function storing the value. `fixruntime_run_once` alone writes it.
+pub const INIT_FLAG_INITIALIZING: u64 = 2;
 
 pub const GLOBAL_VAR_NAME_ARGC: &str = "fixruntime_argc";
 pub const GLOBAL_VAR_NAME_ARGV: &str = "fixruntime_argv";

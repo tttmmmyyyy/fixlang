@@ -1,12 +1,17 @@
 use crate::configuration::OutputFileType;
-use crate::constants::{C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
+use crate::constants::{
+    C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, INIT_FLAG_BITS,
+    INIT_FLAG_INITIALIZED, INIT_FLAG_INITIALIZING, INIT_FLAG_UNINITIALIZED,
+};
 use crate::generator::Generator;
+use crate::object::int_type_of_bits;
 use crate::tbaa::MemoryRegion;
 use inkwell::attributes::AttributeLoc;
+use inkwell::context::Context;
 use inkwell::module::Linkage;
-use inkwell::types::{BasicMetadataTypeEnum, FunctionType};
+use inkwell::types::{BasicMetadataTypeEnum, FunctionType, IntType};
 use inkwell::values::{BasicValue, FunctionValue};
-use inkwell::AddressSpace;
+use inkwell::{AddressSpace, AtomicOrdering, IntPredicate};
 
 /// The runtime function that ends the program where a check has failed, writing the C string it
 /// takes to standard error as the report. It returns to no one.
@@ -36,9 +41,12 @@ pub const RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE: &str = "fixruntime_shift_amount_out
 pub const RUNTIME_FLOAT_TO_INTEGER_OUT_OF_RANGE: &str = "fixruntime_float_to_integer_out_of_range";
 /// libc `sprintf`, which writes a formatted value into a buffer the caller provides.
 pub const RUNTIME_SPRINTF: &str = "sprintf";
-/// libc `pthread_once`, which runs an initializer at the first thread to reach it and makes every
-/// other thread wait for that run to finish.
-pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
+/// The runtime function a `--threaded` build initializes each global value through. It takes the
+/// global's initialization flag and a function of no arguments that stores the value, runs that
+/// function in the first thread to call it, and returns in every thread once the value is stored.
+pub const RUNTIME_RUN_ONCE: &str = "fixruntime_run_once";
+/// libc `sched_yield`, which gives up the processor to another thread.
+pub const RUNTIME_SCHED_YIELD: &str = "sched_yield";
 /// The runtime function giving the number of command line arguments the program was started with.
 pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";
 /// The runtime function giving the command line argument at an index, as a C string.
@@ -133,7 +141,7 @@ pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     );
     build_sprintf_function(gc, mode);
     if gc.config.threaded {
-        build_pthread_once_function(gc, mode);
+        build_run_once_function(gc, mode);
     }
     build_get_argc_function(gc, mode);
     build_get_argv_function(gc, mode);
@@ -239,15 +247,121 @@ fn build_sprintf_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     declare_external_runtime_function(gc, mode, RUNTIME_SPRINTF, fn_ty);
 }
 
-/// Declare `pthread_once`, which takes the flag recording whether the initializer has run and the
-/// initializer itself. A multi-threaded program initializes each global through it.
-pub fn build_pthread_once_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
+/// The integer type of a global value's initialization flag, which holds one of the
+/// `INIT_FLAG_*` values.
+pub fn init_flag_type<'c>(context: &'c Context) -> IntType<'c> {
+    int_type_of_bits(context, INIT_FLAG_BITS)
+}
+
+/// Build `fixruntime_run_once`, which takes a global value's initialization flag and the function
+/// storing the value, and the declaration of `sched_yield` it calls. The function runs `init` in
+/// the first thread to call it, and returns in every thread once `init` has returned in that one:
+///
+/// ```text
+/// if compare-and-swap(flag: INIT_FLAG_UNINITIALIZED -> INIT_FLAG_INITIALIZING) succeeds:
+///     init()
+///     store INIT_FLAG_INITIALIZED into flag, with release ordering
+/// else:
+///     until flag, read with acquire ordering, is INIT_FLAG_INITIALIZED:
+///         sched_yield()
+/// ```
+///
+/// The flag leaves `INIT_FLAG_UNINITIALIZED` at the compare-and-swap and never returns to it, so
+/// one thread alone runs `init`. A thread finding the flag set reads it with acquire ordering, as
+/// the accessor does, so it sees what `init` stored before the release store set it. The
+/// compare-and-swap is relaxed: the thread that wins it reads nothing another thread wrote.
+///
+/// A thread that arrives while another runs `init` spins, calling `sched_yield` on each turn of the
+/// loop. Two threads meet here only when both read a global value for the first time at once.
+fn build_run_once_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let sched_yield_ty = gc.context.i32_type().fn_type(&[], false);
+    declare_external_runtime_function(gc, mode, RUNTIME_SCHED_YIELD, sched_yield_ty);
+    let init_ty = gc.context.void_type().fn_type(&[], false);
     let fn_ty = gc
         .context
         .void_type()
         .fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
-    declare_external_runtime_function(gc, mode, RUNTIME_PTHREAD_ONCE, fn_ty);
+    let Some(func) = declare_or_lookup_runtime_function(gc, mode, RUNTIME_RUN_ONCE, fn_ty) else {
+        return;
+    };
+    // A global's accessor calls this only until the global is initialized.
+    gc.add_enum_attribute(func, "cold", AttributeLoc::Function);
+    gc.add_enum_attribute(func, "noinline", AttributeLoc::Function);
+    let flag_ptr = func.get_nth_param(0).unwrap().into_pointer_value();
+    flag_ptr.set_name("init_flag");
+    let init = func.get_nth_param(1).unwrap().into_pointer_value();
+    let flag_ty = init_flag_type(gc.context);
+
+    let _builder_guard = gc.push_builder();
+    let entry_bb = gc.context.append_basic_block(func, "entry");
+    let init_bb = gc.context.append_basic_block(func, "initialize");
+    let wait_bb = gc.context.append_basic_block(func, "wait");
+    let yield_bb = gc.context.append_basic_block(func, "yield");
+    let done_bb = gc.context.append_basic_block(func, "done");
+
+    gc.builder().position_at_end(entry_bb);
+    let exchange = gc
+        .builder()
+        .build_cmpxchg(
+            flag_ptr,
+            flag_ty.const_int(INIT_FLAG_UNINITIALIZED, false),
+            flag_ty.const_int(INIT_FLAG_INITIALIZING, false),
+            AtomicOrdering::Monotonic,
+            AtomicOrdering::Monotonic,
+        )
+        .unwrap();
+    let won = gc
+        .builder()
+        .build_extract_value(exchange, 1, "won")
+        .unwrap()
+        .into_int_value();
+    gc.builder()
+        .build_conditional_branch(won, init_bb, wait_bb)
+        .unwrap();
+
+    gc.builder().position_at_end(init_bb);
+    gc.builder()
+        .build_indirect_call(init_ty, init, &[], "")
+        .unwrap();
+    gc.build_store(
+        MemoryRegion::Data,
+        flag_ptr,
+        flag_ty.const_int(INIT_FLAG_INITIALIZED, false),
+    )
+    .set_atomic_ordering(AtomicOrdering::Release)
+    .expect("a store takes release ordering");
+    gc.builder().build_return(None).unwrap();
+
+    gc.builder().position_at_end(wait_bb);
+    let flag = gc
+        .build_load_ordered(
+            MemoryRegion::Data,
+            flag_ty,
+            flag_ptr,
+            Some(AtomicOrdering::Acquire),
+            "flag",
+        )
+        .into_int_value();
+    let initialized = gc
+        .builder()
+        .build_int_compare(
+            IntPredicate::EQ,
+            flag,
+            flag_ty.const_int(INIT_FLAG_INITIALIZED, false),
+            "initialized",
+        )
+        .unwrap();
+    gc.builder()
+        .build_conditional_branch(initialized, done_bb, yield_bb)
+        .unwrap();
+
+    gc.builder().position_at_end(yield_bb);
+    gc.call_runtime(RUNTIME_SCHED_YIELD, &[]);
+    gc.builder().build_unconditional_branch(wait_bb).unwrap();
+
+    gc.builder().position_at_end(done_bb);
+    gc.builder().build_return(None).unwrap();
 }
 
 /// Build `fixruntime_get_argc`, which returns the number of command line arguments the program was

@@ -1,0 +1,30 @@
+module Main;
+
+// A global value computed on its first read. `start_initialization` counts the runs of the
+// initializer and holds the thread that runs it long enough for the others to arrive while it is
+// running. Its answer is what the length is computed from, so the call stays in the initializer
+// however the program is optimized.
+squares : Array I64;
+squares = (
+    let size = FFI_CALL[CInt start_initialization()].i64;
+    Iterator::range(0, size).map(|i| i * i).to_array
+);
+
+// `start` plus the sum of the elements of `squares`, which every thread computes. A thread that read
+// the value before the initializing thread had stored all of it gets a different sum.
+sum_squares : I64 -> I64;
+sum_squares = |start| squares.to_iter.fold(start, Add::add);
+FFI_EXPORT[sum_squares, fix_sum_squares];
+
+read_from_threads : I64 -> IO ();
+read_from_threads = |threads| (
+    FFI_CALL_IO[() read_from_threads(CInt), threads.c_int]
+);
+
+main : IO ();
+main = (
+    read_from_threads(8);;
+    let runs = FFI_CALL[CInt initialization_runs()].i64;
+    if runs != 1 { undefined("the initializer ran " + runs.to_string + " times") };
+    pure()
+);

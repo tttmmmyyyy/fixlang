@@ -10,11 +10,11 @@ use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
 use crate::constants::{
-    pthread_once_init_flag_type, pthread_once_init_flag_value, CLOSURE_CAPTURE_IDX,
-    CLOSURE_FUNPTR_IDX, DYNAMIC_OBJ_CAP_IDX,
+    CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, DYNAMIC_OBJ_CAP_IDX, INIT_FLAG_INITIALIZED,
+    INIT_FLAG_UNINITIALIZED,
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
-use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
+use crate::fixstd::runtime::{init_flag_type, RUNTIME_RUN_ONCE};
 use crate::generator::{
     enum_attribute_kind_id, global_accessor_name, module_functions, object_file_symbol_name,
     Generator, Object,
@@ -31,7 +31,7 @@ use inkwell::basic_block::BasicBlock;
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
-use inkwell::{AddressSpace, IntPredicate};
+use inkwell::{AddressSpace, AtomicOrdering, IntPredicate};
 use std::sync::Arc;
 
 impl<'c, 'm> Generator<'c, 'm> {
@@ -805,19 +805,11 @@ impl<'c, 'm> Generator<'c, 'm> {
             owned_linkage,
         );
 
-        let (flag_ty, flag_init_val) = if self.config.threaded {
-            (
-                pthread_once_init_flag_type(self.context),
-                pthread_once_init_flag_value(self.context),
-            )
-        } else {
-            let ty = self.context.i8_type();
-            (ty, ty.const_zero())
-        };
+        let flag_ty = init_flag_type(self.context);
         let init_flag_ptr = self.add_global_variable(
             &format!("InitFlag#{}", object_file_symbol_name(&global_init.symbol)),
             flag_ty.into(),
-            flag_init_val.into(),
+            flag_ty.const_int(INIT_FLAG_UNINITIALIZED, false).into(),
             owned_linkage,
         );
 
@@ -826,57 +818,63 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(entry_bb);
         let _di_scope_guard = self.push_debug_subprogram(acc_fn, global_init.init.source.clone());
 
-        // Compute and store the value on the first access alone.
-        let end_bb = if !self.config.threaded {
-            let flag = self
-                .build_load(MemoryRegion::Data, flag_ty, init_flag_ptr, "load_init_flag")
-                .into_int_value();
-            let is_zero = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    flag,
-                    flag.get_type().const_zero(),
-                    "flag_is_zero",
-                )
-                .unwrap();
-            let store_bb = self.context.append_basic_block(acc_fn, "flag_is_zero");
-            let end_bb = self.context.append_basic_block(acc_fn, "flag_is_nonzero");
-            let branch = self
-                .builder()
-                .build_conditional_branch(is_zero, store_bb, end_bb)
-                .unwrap();
+        // Compute and store the value on the first access alone. A `--threaded` build reads the
+        // flag with acquire ordering, so that a thread finding the flag set also finds the value
+        // the initializing thread stored before setting it.
+        let flag = self
+            .build_load_ordered(
+                MemoryRegion::Data,
+                flag_ty,
+                init_flag_ptr,
+                self.config.threaded.then_some(AtomicOrdering::Acquire),
+                "load_init_flag",
+            )
+            .into_int_value();
+        let is_not_initialized = self
+            .builder()
+            .build_int_compare(
+                IntPredicate::NE,
+                flag,
+                flag_ty.const_int(INIT_FLAG_INITIALIZED, false),
+                "is_not_initialized",
+            )
+            .unwrap();
+        let init_bb = self.context.append_basic_block(acc_fn, "not_initialized");
+        let end_bb = self.context.append_basic_block(acc_fn, "initialized");
+        let branch = self
+            .builder()
+            .build_conditional_branch(is_not_initialized, init_bb, end_bb)
+            .unwrap();
 
-            // The flag is zero on the first access alone. Saying so keeps the store away from the
-            // reads a program spends its time on.
-            let i32_ty = self.context.i32_type();
-            let weights = self.context.metadata_node(&[
-                self.context.metadata_string("branch_weights").into(),
-                i32_ty.const_int(1, false).into(),
-                i32_ty
-                    .const_int(Self::ACCESSES_PER_INITIALIZATION, false)
-                    .into(),
-            ]);
-            branch
-                .set_metadata(weights, self.context.get_kind_id("prof"))
-                .unwrap();
+        // The flag is unset on the first access alone. Saying so keeps the initialization away
+        // from the reads a program spends its time on.
+        let i32_ty = self.context.i32_type();
+        let weights = self.context.metadata_node(&[
+            self.context.metadata_string("branch_weights").into(),
+            i32_ty.const_int(1, false).into(),
+            i32_ty
+                .const_int(Self::ACCESSES_PER_INITIALIZATION, false)
+                .into(),
+        ]);
+        branch
+            .set_metadata(weights, self.context.get_kind_id("prof"))
+            .unwrap();
 
+        self.builder().position_at_end(init_bb);
+        if !self.config.threaded {
             // Both stores stay here, so that every write to the storage and to the flag is in
             // front of a reader. That is what the lifting rests on: a reader that could not see
             // them would have to assume the call above writes them, and read both again on every
             // turn of its loop.
-            self.builder().position_at_end(store_bb);
             self.store_init_value(init_value_fn, global_var_ptr);
             self.build_store(
                 MemoryRegion::Data,
                 init_flag_ptr,
-                flag_ty.const_int(1, false),
+                flag_ty.const_int(INIT_FLAG_INITIALIZED, false),
             );
-            self.builder().build_unconditional_branch(end_bb).unwrap();
-            end_bb
         } else {
-            // `pthread_once` takes a function of no arguments and no result, so the store happens
-            // inside that function, where a reader cannot see it.
+            // `fixruntime_run_once` takes a function of no arguments and no result, so the store
+            // happens inside that function.
             let once_fn = self.module.add_function(
                 &format!("InitOnce#{}", object_file_symbol_name(&global_init.symbol)),
                 self.context.void_type().fn_type(&[], false),
@@ -893,16 +891,14 @@ impl<'c, 'm> Generator<'c, 'm> {
                 self.set_debug_location(None);
             }
             self.call_runtime(
-                RUNTIME_PTHREAD_ONCE,
+                RUNTIME_RUN_ONCE,
                 &[
                     init_flag_ptr.into(),
                     once_fn.as_global_value().as_pointer_value().into(),
                 ],
             );
-            let end_bb = self.context.append_basic_block(acc_fn, "end_bb");
-            self.builder().build_unconditional_branch(end_bb).unwrap();
-            end_bb
-        };
+        }
+        self.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Return the stored value.
         self.builder().position_at_end(end_bb);
@@ -976,8 +972,8 @@ const GLOBAL_ACCESSOR_ATTRIBUTE: &str = "fix-global-accessor";
 /// program's entry point, which `build_object_files` implements after the unit's own code. A reader
 /// counted short leaves the initializer in an accessor that its readers then pay a call for.
 ///
-/// A `--threaded` build reaches its initializer through `pthread_once`, so its accessor is a call
-/// and a load whatever the initializer's size, and the attribute decides nothing.
+/// A `--threaded` build reaches its initializer through `fixruntime_run_once`, so the initializer
+/// stays out of the accessor whatever its size, and the attribute decides nothing.
 pub(crate) fn keep_initializers_out_of_shared_accessors(module: &Module, config: &Configuration) {
     let noinline = module
         .get_context()

@@ -1,12 +1,17 @@
-//! Whether a value shared between threads is counted safely, checked by ThreadSanitizer.
+//! Whether a multi-threaded program shares values between threads safely, checked by
+//! ThreadSanitizer.
 //!
 //! `Std::mark_threaded` is what puts a value's reference count into the mode that updates it
 //! atomically, and the promise is that a program which uses it has no data race in its reference
-//! counting. This runs a program that shares one value with eight threads and asks ThreadSanitizer
-//! whether the promise held.
+//! counting. The `hammer` program shares one value with eight threads, and ThreadSanitizer reports
+//! whether the promise held. Its control runs the same program without the call, and ThreadSanitizer
+//! has to report a race there: a check that cannot fail says nothing about the runs where it passes.
 //!
-//! The control is the same program run without the call. It has to be reported: a check that cannot
-//! fail says nothing about the runs where it passes.
+//! A global value is computed on its first read, and the promise is that the threads reading it see
+//! it computed once and read it whole. The `first_read` program reads one global value from two
+//! groups of eight threads: one group arrives while the initializer is running and waits for it, and
+//! the other reads the value after the initializer has finished, with nothing but the global's
+//! accessor ordering its read after the initializing thread's writes.
 
 use crate::misc::{function_name, platform_thread_sanitizer_supported};
 use crate::tests::test_util::{copy_dir_recursive, fix_command};
@@ -14,24 +19,32 @@ use std::path::{Path, PathBuf};
 use std::process::Output;
 use tempfile::TempDir;
 
-/// The argument that asks the program to hand the value over the way the language says to.
+/// The argument that asks the `hammer` program to hand the value over the way the language says
+/// to.
 const MARK_ARGUMENT: &str = "mark";
 
-/// What the program prints once the threads have finished with the value.
+/// What the `hammer` program prints once the threads have finished with the value.
 const EXPECTED_OUTPUT: &str = "ok";
 
-/// Copies the harness project into a temporary directory and returns it with the project's path
-/// inside it.
-fn setup_test_env() -> (TempDir, PathBuf) {
+/// The project that shares one value with eight threads.
+const HAMMER_PROJECT: &str = "hammer";
+
+/// The project that reads one global value from threads arriving during and after its
+/// initialization.
+const FIRST_READ_PROJECT: &str = "first_read";
+
+/// Copies the harness projects into a temporary directory and returns it with the path of the
+/// project `project` inside it.
+fn setup_test_env(project: &str) -> (TempDir, PathBuf) {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let cases = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/tests/test_thread_safety/cases");
     copy_dir_recursive(&cases, &temp_dir.path().to_path_buf()).expect("Failed to copy test cases");
-    let project_dir = temp_dir.path().join("hammer");
+    let project_dir = temp_dir.path().join(project);
     (temp_dir, project_dir)
 }
 
-/// Builds the harness at `opt_level` under the sanitizer named by `sanitizer`, runs it with
-/// `program_args`, and returns what it produced, through `fix run`.
+/// Builds the project at `project_dir` at `opt_level` under the sanitizer named by `sanitizer`,
+/// runs it with `program_args`, and returns what it produced, through `fix run`.
 ///
 /// Going through `fix run` puts the compiler's own way of starting an instrumented program under
 /// test: the sanitizer maps its shadow memory to addresses derived from the program's own, so it
@@ -78,9 +91,9 @@ fn skip_unless_thread_sanitizer_available(test_name: &str) -> bool {
     false
 }
 
-/// Builds the harness at `opt_level` and asks ThreadSanitizer about both of its runs.
+/// Builds the `hammer` program at `opt_level` and asks ThreadSanitizer about both of its runs.
 fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
-    let (_temp_dir, project_dir) = setup_test_env();
+    let (_temp_dir, project_dir) = setup_test_env(HAMMER_PROJECT);
 
     // The program the language asks for: every thread reaches the value through
     // `Std::mark_threaded`, so the counts are updated atomically and nothing races.
@@ -145,7 +158,7 @@ fn test_instrumentation_is_not_taken_from_an_uninstrumented_build() {
     if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }
-    let (_temp_dir, project_dir) = setup_test_env();
+    let (_temp_dir, project_dir) = setup_test_env(HAMMER_PROJECT);
 
     // Warmed by the same subcommand the checked run uses: what names an object includes which
     // subcommand asked for it, so a build and a run never share one to begin with.
@@ -171,4 +184,53 @@ fn test_instrumentation_is_not_taken_from_an_uninstrumented_build() {
         String::from_utf8_lossy(&checked.stdout),
         String::from_utf8_lossy(&checked.stderr),
     );
+}
+
+/// Builds the `first_read` program at `opt_level` under the sanitizer named by `sanitizer`, runs it,
+/// and asserts that it ran to completion with no race reported. The program itself checks that the
+/// initializer ran once and that every thread read the whole value.
+fn assert_first_read_from_threads_is_safe(opt_level: &str, sanitizer: &str) {
+    let (_temp_dir, project_dir) = setup_test_env(FIRST_READ_PROJECT);
+    let output = run_harness(&project_dir, opt_level, sanitizer, &[]);
+    assert_eq!(
+        races_reported(&output),
+        0,
+        "reading a global value from threads during and after its initialization should race \
+         nowhere at -O {}.\nstderr: {}",
+        opt_level,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.status.success(),
+        "the program should run to completion at -O {}.\nstdout: {}\nstderr: {}",
+        opt_level,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
+/// Verifies that the threads reading a global value during and after its initialization run its
+/// initializer once and each read the whole value.
+#[test]
+fn test_a_global_read_from_threads_is_initialized_once() {
+    assert_first_read_from_threads_is_safe("max", "none");
+}
+
+/// Verifies that the threads reading a global value during and after its initialization see what
+/// the initializing thread stored without a race, in a build with the optimizations off.
+#[test]
+fn test_a_global_read_from_threads_is_race_free_unoptimized() {
+    if !skip_unless_thread_sanitizer_available(function_name!()) {
+        return;
+    }
+    assert_first_read_from_threads_is_safe("none", "thread");
+}
+
+/// Verifies the same at `-O max`, where the accessor of the global is inlined into its readers.
+#[test]
+fn test_a_global_read_from_threads_is_race_free_optimized() {
+    if !skip_unless_thread_sanitizer_available(function_name!()) {
+        return;
+    }
+    assert_first_read_from_threads_is_safe("max", "thread");
 }

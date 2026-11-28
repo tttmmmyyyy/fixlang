@@ -139,7 +139,7 @@ main = (
 );
 "#;
     let mut config = Configuration::develop_mode();
-    config.set_threaded();
+    config.threaded = true;
     test_source(source, config);
 }
 
@@ -168,7 +168,7 @@ main = (
 );
 "#;
     let mut config = Configuration::develop_mode();
-    config.set_threaded();
+    config.threaded = true;
     test_source(source, config);
 }
 
@@ -197,7 +197,7 @@ main = (
     for opt_level in [FixOptimizationLevel::None, FixOptimizationLevel::Max] {
         let mut config = Configuration::develop_mode();
         config.set_fix_opt_level(opt_level);
-        config.set_threaded();
+        config.threaded = true;
         test_source(source, config);
     }
 }
