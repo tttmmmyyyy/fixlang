@@ -8843,7 +8843,7 @@ impl BuiltinOp for IsUniqueOp {
 pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
-    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let obj_type = type_tyvar_star(TYPE_NAME);
     let ret_type = make_tuple_ty(vec![make_bool_ty(), obj_type.clone()]);
     let scm = Scheme::generalize(
         &[],
@@ -10167,14 +10167,14 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
     const DTOR_NAME: &str = "dtor";
     const IOS_NAME: &str = "ios";
 
-    let a_ty = type_tyvar(TYPE_NAME, &kind_star());
+    let a_ty = type_tyvar_star(TYPE_NAME);
 
     let scm = Scheme::generalize(
         &[],
         vec![],
         vec![],
         type_arrow(
-            type_tyvar(TYPE_NAME, &kind_star()),
+            type_tyvar_star(TYPE_NAME),
             type_arrow(
                 type_arrow(a_ty.clone(), make_io_runner_ty(a_ty.clone())),
                 make_io_runner_ty(make_destructor_ty(a_ty.clone())),
@@ -10315,7 +10315,7 @@ impl BuiltinOp for MarkThreadedOp {
 pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
-    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let obj_type = type_tyvar_star(TYPE_NAME);
     let scm = Scheme::generalize(
         &[],
         vec![],
