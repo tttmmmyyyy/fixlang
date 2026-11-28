@@ -1245,7 +1245,7 @@ impl TypeNode {
     ///
     /// # Arguments
     /// * `type_name_path` — the types the walk has expanded on the way to this one, each with its
-    ///   normalized string. A type whose normalized string is met twice is an alias leading back
+    ///   normal form (`normalize`). A type whose normal form is met twice is an alias leading back
     ///   to itself, and the report quotes it as written where the walk first met it. The step
     ///   pushes this type for the steps below it and pops it before returning, so the path is
     ///   left as it was given.
@@ -1254,12 +1254,15 @@ impl TypeNode {
     fn resolve_type_aliases_internal(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
-        type_name_path: &mut Vec<(String, Arc<TypeNode>)>,
+        type_name_path: &mut Vec<(Arc<TypeNode>, Arc<TypeNode>)>,
         entry_type_src: &Option<Span>,
     ) -> Result<Arc<TypeNode>, Errors> {
         // Check circular aliasing.
-        let type_name = self.to_string_normalize();
-        if let Some((_, first_met)) = type_name_path.iter().find(|(name, _)| *name == type_name) {
+        let normal_form = self.normalize();
+        if let Some((_, first_met)) = type_name_path
+            .iter()
+            .find(|(met_normal_form, _)| *met_normal_form == normal_form)
+        {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Circular type aliasing is found in `{}`.",
@@ -1268,7 +1271,7 @@ impl TypeNode {
                 &[entry_type_src],
             ));
         }
-        type_name_path.push((type_name, self.clone()));
+        type_name_path.push((normal_form, self.clone()));
         let resolved =
             self.resolve_type_aliases_after_cycle_check(env, type_name_path, entry_type_src);
         type_name_path.pop();
@@ -1281,7 +1284,7 @@ impl TypeNode {
     fn resolve_type_aliases_after_cycle_check(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
-        type_name_path: &mut Vec<(String, Arc<TypeNode>)>,
+        type_name_path: &mut Vec<(Arc<TypeNode>, Arc<TypeNode>)>,
         entry_type_src: &Option<Span>,
     ) -> Result<Arc<TypeNode>, Errors> {
         // First, treat the case where top-level type constructor is a type alias.
@@ -1881,10 +1884,13 @@ impl PartialEq for Type {
 }
 
 impl TypeNode {
-    /// This type written in source syntax, with its type variables renamed `a`, `b`, ... in order
-    /// of appearance, so that two types differing only in the names of their variables are written
-    /// alike.
-    pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
+    /// This type with its free type variables renamed `a`, `b`, ... in order of first appearance.
+    /// Two types have normal forms equal by `==` exactly when they differ only in the names and the
+    /// kinds of their type variables.
+    ///
+    /// # Examples
+    /// `x -> Array y -> x` becomes `a -> Array b -> a`.
+    pub fn normalize(self: &Arc<TypeNode>) -> Arc<TypeNode> {
         let mut renaming = Substitution::default();
         for (no, tv) in self.free_vars_vec().iter().enumerate() {
             let merge_ok = renaming.merge(&Substitution::single(
@@ -1893,7 +1899,17 @@ impl TypeNode {
             ));
             assert!(merge_ok, "`{}` is renamed twice", tv.name);
         }
-        renaming.substitute_type(self).to_string()
+        renaming.substitute_type(self)
+    }
+
+    /// `normalize` written in source syntax.
+    ///
+    /// Two types give one string exactly when they differ only in the names and the kinds of their
+    /// type variables: a type wildcard is renamed like any other type variable, so the `_` that
+    /// `to_string` writes for it never stands in this string. A symbol name and the key of a type
+    /// checking cache are made from this string on that account.
+    pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
+        self.normalize().to_string()
     }
 
     /// This type written in source syntax, under the names its own type variables carry, with each
