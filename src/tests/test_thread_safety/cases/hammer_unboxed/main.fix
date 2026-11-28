@@ -1,0 +1,44 @@
+module Main;
+
+// Takes the pair out of the box the pointer names, takes and drops many references to the boxed
+// value the pair holds, and writes through it. The threads share one box, retained once for each of
+// them, so taking the pair out releases the box under contention, and the value inside it is
+// counted under contention as well.
+hammer_one : Ptr -> IO ();
+hammer_one = |ptr| (
+    let pair : (Box I64, I64) = *FFI::unpack_from_thread(ptr);
+    let (inner, n) = pair;
+    loop_m(0, |i|
+        if i == 4000 { break_m $ () };
+        let ptr = *inner.FFI::boxed_to_retained_ptr;
+        let taken : Box I64 = *FFI::boxed_from_retained_ptr(ptr);
+        if taken.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
+        continue_m $ i + 1
+    );;
+    let inner = inner.set_value(inner.@value + n);
+    if inner.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
+    pure()
+);
+FFI_EXPORT[hammer_one, fix_hammer_one];
+
+main : IO ();
+main = (
+    let args = *get_args;
+    // Built from the program's arguments, so that the boxed value is on the heap with a count.
+    let n = args.@(0).@size;
+    let threads = 8;
+
+    // One box for all the threads: `pack_for_thread` wraps the unboxed pair in it once, and the
+    // function `get_funptr_retain_for_thread` points to takes one more reference for each further
+    // thread.
+    let ptr = *FFI::pack_for_thread((Box::make(n), n));
+    let retain = (|_| undefined("") : (Box I64, I64)).FFI::get_funptr_retain_for_thread;
+    loop_m(1, |i|
+        if i == threads { break_m $ () };
+        FFI_CALL_IO[() call_refcount_funptr(Ptr, Ptr), retain, ptr];;
+        continue_m $ i + 1
+    );;
+
+    FFI_CALL_IO[() hammer_from_threads(Ptr, CInt), ptr, threads.c_int];;
+    println("ok")
+);

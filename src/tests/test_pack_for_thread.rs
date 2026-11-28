@@ -9,7 +9,8 @@
 use crate::configuration::Configuration;
 use crate::misc::function_name;
 use crate::tests::test_util::{
-    deprecation_report, test_source, test_source_fail, test_source_with_c_under,
+    deprecation_report, run_source_assert_failed, test_source, test_source_fail,
+    test_source_with_c_under,
 };
 
 /// The configuration of a program that hands values to other threads.
@@ -195,4 +196,61 @@ pub fn test_mark_threaded_is_deprecated_in_favor_of_pack_for_thread() {
         "the report should name the replacement.\nreport: {}",
         report
     );
+}
+
+/// The pointer `pack_for_thread` returns is never null, even for an unboxed value whose bits are
+/// all zero: a foreign library may read a null pointer as "no value yet".
+#[test]
+pub fn test_pack_for_thread_never_returns_null() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            let zero = (*IO::get_args).@size - (*IO::get_args).@size;
+
+            let ptr = *FFI::pack_for_thread(zero);
+            assert(|_|"the pointer for an I64 zero is null", ptr != nullptr);;
+            let got : I64 = *FFI::unpack_from_thread(ptr);
+            assert_eq(|_|"an I64 zero", got, 0);;
+
+            let ptr = *FFI::pack_for_thread(nullptr);
+            assert(|_|"the pointer for a null Ptr is null", ptr != nullptr);;
+            let got : Ptr = *FFI::unpack_from_thread(ptr);
+            assert(|_|"a null Ptr", got == nullptr);;
+
+            let ptr = *FFI::pack_for_thread(());
+            assert(|_|"the pointer for a unit is null", ptr != nullptr);;
+            let got : () = *FFI::unpack_from_thread(ptr);
+
+            pure()
+        );
+    "##;
+    test_source(&source, threaded_config());
+}
+
+/// A program without multi-threading that calls both `Std::mark_threaded` and
+/// `Std::FFI::pack_for_thread` is told about each of them.
+#[test]
+pub fn test_both_functions_requiring_multi_threading_are_reported() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            let value = [1, 2, 3].mark_threaded;
+            let ptr = *FFI::pack_for_thread(value);
+            let got : Array I64 = *FFI::unpack_from_thread(ptr);
+            println(got.to_string)
+        );
+    "##;
+    let report = run_source_assert_failed(source, Configuration::develop_mode());
+    for name in ["`Std::mark_threaded`", "`Std::FFI::pack_for_thread`"] {
+        assert!(
+            report.contains(&format!("{} requires multi-threading", name)),
+            "the report should name {}.\nreport: {}",
+            name,
+            report
+        );
+    }
 }

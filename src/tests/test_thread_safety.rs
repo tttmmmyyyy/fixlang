@@ -152,6 +152,53 @@ fn test_shared_reference_counting_is_race_free_optimized() {
     assert_shared_reference_counting_is_race_free("max");
 }
 
+/// The project that shares one box holding an unboxed pair with eight threads.
+const HAMMER_UNBOXED_PROJECT: &str = "hammer_unboxed";
+
+/// Builds the `hammer_unboxed` program at `opt_level` and asserts that ThreadSanitizer reports no
+/// race: `pack_for_thread` puts the box it wraps an unboxed value in into multi-threaded mode,
+/// together with everything the value reaches.
+fn assert_shared_unboxed_value_is_race_free(opt_level: &str) {
+    let (_temp_dir, project_dir) = setup_test_env(HAMMER_UNBOXED_PROJECT);
+    let output = run_harness(&project_dir, opt_level, "thread", &[]);
+    assert_eq!(
+        races_reported(&output),
+        0,
+        "counting an unboxed value handed over through `Std::FFI::pack_for_thread` should race \
+         nowhere at -O {}.\nstderr: {}",
+        opt_level,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.status.success()
+            && String::from_utf8_lossy(&output.stdout).contains(EXPECTED_OUTPUT),
+        "the program should run to completion at -O {}.\nstdout: {}\nstderr: {}",
+        opt_level,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
+/// Verifies that one box holding an unboxed value, handed to eight threads through
+/// `Std::FFI::pack_for_thread` and `Std::FFI::get_funptr_retain_for_thread`, is counted without a
+/// race in a build with the optimizations off.
+#[test]
+fn test_shared_unboxed_value_is_race_free_unoptimized() {
+    if !skip_unless_thread_sanitizer_available(function_name!()) {
+        return;
+    }
+    assert_shared_unboxed_value_is_race_free("none");
+}
+
+/// Verifies that the same sharing stays race-free at `-O max`.
+#[test]
+fn test_shared_unboxed_value_is_race_free_optimized() {
+    if !skip_unless_thread_sanitizer_available(function_name!()) {
+        return;
+    }
+    assert_shared_unboxed_value_is_race_free("max");
+}
+
 /// Verifies that a build asking for the instrumentation carries it even after the same program was
 /// built without it. The objects a build leaves behind are reused by the next build of the same
 /// program, so the instrumentation has to be part of what names them; otherwise the checked build
