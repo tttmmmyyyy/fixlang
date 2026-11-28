@@ -1141,13 +1141,13 @@ impl Configuration {
             // Reach the generated code through what they decide, which is pushed in their place:
             // `llvm_passes` is the pipeline `llvm_passes_override` gives where it gives one and the
             // optimization level implies otherwise, `llvm_options` is what LLVM is told, of which
-            // `llvm_args` is the part the user names, `entry_io_value_name` is what the
-            // subcommand decides about the code, and `target_cpu_name` and `target_cpu_features`
-            // are the CPU the code is generated for, which the host, the patterns and valgrind
-            // decide.
+            // `llvm_args` is the part the user names, `entry_io_value_name` is what `test_build`
+            // decides about the code, and `target_cpu_name` and `target_cpu_features` are the CPU
+            // the code is generated for, which the host, the patterns and valgrind decide. The
+            // sources `test_build` adds are hashed as the other sources are.
             llvm_passes_override: _,
             llvm_args: _,
-            subcommand: _,
+            test_build: _,
             host_cpu: _,
             disable_cpu_features_regex: _,
             valgrind_tool: _,
@@ -1158,12 +1158,14 @@ impl Configuration {
             extra_source_files: _,
             root_source_files: _,
             project_sources: _,
-            test_build: _,
             preliminary_commands: _,
 
-            // How the compiler goes about its work, which leaves what it produces alone. How many
-            // symbols a compilation unit holds decides which object files a build has rather than
-            // what one of them holds, so `build_object_files_cache_hash` covers `cu_size`.
+            // How the compiler goes about its work, which leaves what it produces alone. The
+            // subcommand decides how far the compiler goes and what it does with the program it
+            // builds. How many symbols a compilation unit holds decides which object files a build
+            // has rather than what one of them holds, so `build_object_files_cache_hash` covers
+            // `cu_size`.
+            subcommand: _,
             cu_size: _,
             num_worker_thread: _,
             type_check_store: _,
@@ -1256,8 +1258,7 @@ impl Configuration {
         // measure whichever one compiled first.
         object_generation.push_list(&self.llvm_passes());
 
-        // Which value the entry point of the program runs. This is the whole of what the subcommand
-        // decides about the generated code, so `fix build` and `fix run` share their object files.
+        // Which value the entry point of the program runs, which a build of `fix test` decides.
         object_generation.push_text(&self.entry_io_value_name().to_string());
 
         // Each macro turns on a part of the runtime, and they are passed to the C compiler as they
@@ -1489,8 +1490,10 @@ mod tests {
         llvm_passes_for_speed, Configuration, FixOptimizationLevel, OutputFileType, Sanitizer,
         SubCommand, ValgrindTool,
     };
+    use crate::ast::name::FullName;
     use crate::build::cpu_features::{HostCpu, ValgrindCpu};
     use crate::misc::{platform_valgrind_supported, Map};
+    use crate::test_build::TestBuild;
     use std::fs;
     use std::path::Path;
 
@@ -1734,12 +1737,14 @@ mod tests {
                 Box::new(|config: &mut Configuration| config.emit_symbols = true),
             ),
             (
-                "subcommand",
+                "test_build",
                 Box::new(|config: &mut Configuration| {
-                    // What the subcommand decides about the generated code is which entry point the
-                    // program is given, so the subcommand that differs here is the one whose entry
-                    // point runs the tests.
-                    config.subcommand = SubCommand::Test
+                    // What a build of `fix test` decides about the generated code is which value the
+                    // entry point runs.
+                    config.test_build = Some(TestBuild::of_value(FullName::from_strs(
+                        &["Lib"],
+                        "some_test",
+                    )))
                 }),
             ),
         ];
@@ -1864,11 +1869,10 @@ mod tests {
         assert_eq!(config.target_cpu_features(), format!("+{}", decodable[0]));
     }
 
-    /// `fix build` and `fix run` produce the same code from the same program, so they share the hash
-    /// naming the object files they may reuse. `fix test` gives the program another entry point,
-    /// which is what the subcommand decides about the code.
+    /// Every subcommand produces the same code from the same program, so they share the hash
+    /// naming the object files they may reuse.
     #[test]
-    fn test_the_object_generation_hash_separates_the_subcommands_by_their_entry_point() {
+    fn test_the_object_generation_hash_is_shared_by_the_subcommands() {
         let hash_of = |subcommand: SubCommand| {
             let mut config = Configuration::develop_mode();
             config.subcommand = subcommand;
@@ -1879,11 +1883,11 @@ mod tests {
             hash_of(SubCommand::Run),
             "a build and a run generate one program, so each may take the object files of the other."
         );
-        assert_ne!(
+        assert_eq!(
             hash_of(SubCommand::Build),
             hash_of(SubCommand::Test),
-            "a test build gives the program the entry point running the tests, so its object files \
-             are its own."
+            "the subcommand leaves the generated code alone: what a build of `fix test` changes in \
+             it is the entry point, which `test_build` gives."
         );
     }
 }
