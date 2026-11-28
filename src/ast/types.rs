@@ -2042,17 +2042,17 @@ impl TypeNode {
             "{}{}_{}",
             work_name,
             state.name_suffix(),
-            self.hash_with_capture(capture)
+            self.digest_with_capture(capture)
         )
     }
 
     /// A digest of this type together with `capture`, short enough to embed in a symbol name. Two
-    /// types with the same normalized form and the same captures hash alike.
+    /// types with the same normalized form and the same captures have the same digest.
     ///
     /// # Arguments
     /// * `capture` — the captured types of a dynamic object, which distinguish two dynamic objects
     ///   of the same type. Empty for every other type.
-    pub fn hash_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
+    pub fn digest_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
         // If the type is not dynamic, then the capturing types should be empty.
         assert!(self.is_dynamic() || capture.len() == 0);
         let mut key = "".to_string();
@@ -2071,7 +2071,7 @@ impl TypeNode {
     }
 
     /// A digest of this type, short enough to embed in a symbol name. Two types with the same
-    /// normalized form hash alike.
+    /// normalized form have the same digest.
     pub fn digest(self: &Arc<TypeNode>) -> String {
         let type_string = self.to_string_normalize();
         format!("{:x}", md5::compute(type_string))

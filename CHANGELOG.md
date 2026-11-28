@@ -24,6 +24,7 @@
 - #1060, #1065: A type error now explains a type variable that comes from the type of a global value an expression uses, as in `` `#3` is `m` in the type of `Std::Iterator::fold_m`. ``, and points at that expression. It used to leave such a variable unexplained.
 - #267, #1045, #1081: A trait constraint that cannot be deduced is now reported at the value whose type requires it, together with that value's type: for `let x = 1.0 % 2.0;`, the error `` `Std::F64 : Std::Rem` cannot be deduced. `` points at `%`. When the type the constraint is on became known only later, the error used to point at the next name in the program, such as the `pure` on the following line, and quote that name's type.
 - #1018, #1021, #1057: A type wildcard `_` is now an error outside the type annotation of an expression or a pattern, such as in `f : Array _ -> I64` or `impl Array _ : Tr`. It used to be taken as a type variable that no other `_` shares, and its errors named it `#typewildcard0`. Write a type variable such as `a` there. A `_` in an annotation, as in `[1] : Array _ _` or `some(_ : _)`, is now quoted as `_` in errors, and one in an annotation inside an `impl` member with no signature of its own is no longer rejected as an unknown type variable.
+- #1063: `FFI_EXPORT` of a value whose type has a type variable and no constraint, such as `f : x -> x`, is now refused because the type has a type variable. It used to be refused for having a constraint unless the type variables were named `a`, `b`, ... in order.
 
 #### Tool
 
