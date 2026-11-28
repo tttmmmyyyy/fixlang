@@ -1,5 +1,7 @@
 Traverses all values reachable from the given value, and changes the reference counters of them into multi-threaded mode.
 
+This function is deprecated. Use `Std::FFI::pack_for_thread` instead: it changes the mode and returns the pointer to hand over in one call, so no operation can come between the two.
+
 Building a program that calls this function requires multi-threading to be enabled by the `--threaded` compiler option or by the `threaded` field of the project file of the program being built. A library that calls this function is used by turning multi-threading on there.
 
 # How a value reaches another thread

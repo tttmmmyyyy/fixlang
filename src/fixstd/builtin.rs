@@ -10432,8 +10432,9 @@ impl BuiltinOp for MarkThreadedOp {
         // This op returns the object it was given, yet its result is `Unknown` and its argument is
         // consumed, and it must stay that way. Unique-check elimination drops a check on the strength
         // of a value being uniquely owned, which for a value another thread can reach is only sound
-        // because a threaded value can never be held through a `Fresh` handle: the two ways to make a
-        // value threaded — this op and `boxed_from_retained_ptr` — both hand back a `Unknown` one.
+        // because a threaded value can never be held through a `Fresh` handle: of the ways to make a
+        // value threaded, this op, `boxed_from_retained_ptr` and `unpack_from_thread` hand back an
+        // `Unknown` one, and `pack_for_thread` hands back no handle at all, only a pointer.
         // Declaring the argument a passthrough would break that on both counts, since it also declares
         // the argument unconsumed: the caller would keep a `Fresh` handle to an object it has just
         // published to other threads, and a write through that handle would race.

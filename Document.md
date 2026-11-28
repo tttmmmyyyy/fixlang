@@ -2474,7 +2474,7 @@ There are also some things to note in the implementation on the Fix side.
     - To achieve this, the Fix function that is called from the foreign language and receives a pointer should be an `IO` action (like `get_fix_array_element` above). By executing the `IO` action returned by `boxed_from_retained_ptr` in it, it is guaranteed that the received pointer is converted to a Fix value only once.
     - If you don't follow the above, the optimization by the Fix compiler may cause the number of times the pointer is received from the foreign language and the number of calls to `boxed_from_retained_ptr` to not match.
 - Fix's reference counting is not thread-safe by default. Therefore, if you distribute a pointer received from Fix to multiple threads on the foreign language side, data races may occur regarding the increment and decrement of the reference counter.
-    - To avoid this, call `Std::mark_threaded : a -> a` on the boxed type value immediately before calling `boxed_to_retained_ptr`, with nothing in between, to set the reference counting to thread-safe mode. See [Multithreading](#multithreading) for why the two calls belong together.
+    - To avoid this, get the pointer by `Std::FFI::pack_for_thread` instead of `boxed_to_retained_ptr`, which sets the reference counting to thread-safe mode. See [Multithreading](#multithreading).
 
 ### Accessing fields of Fix's struct value from C
 
@@ -2539,14 +2539,14 @@ Fix has no function that starts a thread or creates a lock. A multi-threaded pro
 
 Enable multi-threading with the `--threaded` compiler option or the `threaded` field of the project file. It adds a check of each object's mode to every reference counting operation, which lowers the run-time performance of the program. Leave it off for a single-threaded program.
 
-The project being built decides the setting, so a library that needs multi-threading is used by turning it on there. Building a program that calls `Std::mark_threaded` with multi-threading off fails, and the error quotes the call, which is what names the library that needs it.
+The project being built decides the setting, so a library that needs multi-threading is used by turning it on there. Building a program that calls `Std::FFI::pack_for_thread` with multi-threading off fails, and the error quotes the call, which is what names the library that needs it.
 
-A Fix value reaches another thread as a pointer to a boxed value, so wrap a value of an unboxed type in `Std::Box`. Handing a value over then goes as follows.
+A Fix value reaches another thread as a pointer. Handing a value over goes as follows.
 
-- `Std::mark_threaded` puts the reference counters of all values reachable from a value into multi-threaded mode, in which they are updated atomically.
-- Call `Std::FFI::boxed_to_retained_ptr` on the value `Std::mark_threaded` returned to get a pointer to it, and pass the pointer to the threading library with `FFI_CALL_IO`. **Hand that value straight to `Std::FFI::boxed_to_retained_ptr`, and do nothing else with it in between**: multi-threaded mode is a state stored in the object, and an operation on the value — reading it included — can return the object to single-threaded mode. `Std::mark_threaded`'s own documentation states the rule and why.
-- From the entry point of the thread, call a Fix function exported by `FFI_EXPORT` and give it the pointer. An exported function receives a boxed parameter as such a pointer, and `Std::FFI::boxed_from_retained_ptr` turns a `Ptr` back into a boxed value.
-- Sending a value on to a further thread goes through `Std::mark_threaded` again, whatever the value's history: a value that arrived from another thread is in multi-threaded mode when it arrives, and an operation this thread performs on it can return it to single-threaded mode.
+- `Std::FFI::pack_for_thread : a -> IO Ptr` puts the reference counters of all values reachable from a value into multi-threaded mode, in which they are updated atomically, and returns a retained pointer to the value. Pass the pointer to the threading library with `FFI_CALL_IO`. A value of any type can be handed over: a value of an unboxed type is wrapped in a `Std::Box`, and the pointer points to the box.
+- From the entry point of the thread, call a Fix function exported by `FFI_EXPORT` and give it the pointer. `Std::FFI::unpack_from_thread : Ptr -> IO a` takes the value from the pointer.
+- When the foreign language keeps the pointer and releases or retains it, it calls the functions that `Std::FFI::get_funptr_release_for_thread` and `Std::FFI::get_funptr_retain_for_thread` return pointers to.
+- Sending a value on to a further thread goes through `Std::FFI::pack_for_thread` again, whatever the value's history: a value that arrived from another thread is in multi-threaded mode when it arrives, and an operation this thread performs on it can return it to single-threaded mode.
 
 The pointer carries the responsibility for the reference count described in [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language).
 
@@ -2556,8 +2556,8 @@ While another thread holds a reference to a value, the value is shared, so a fun
 
 `--sanitize thread`, or the `sanitize` field of the project file, builds the program with
 [ThreadSanitizer](https://clang.llvm.org/docs/ThreadSanitizer.html), which reports a data race when one occurs while
-the program runs, so that you can check that every value another thread reaches has been passed
-through `Std::mark_threaded`.
+the program runs, so that you can check that every value another thread reaches has been handed over
+through `Std::FFI::pack_for_thread`.
 
 `fix run` runs the program the way ThreadSanitizer needs. Run a program built by `fix build` as
 follows on Linux, where ThreadSanitizer requires address space layout randomization to be off:
