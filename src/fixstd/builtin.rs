@@ -9388,14 +9388,14 @@ pub fn get_rc_function_ptr(
     operation: RcFunctionOperation,
     pointee: RcFunctionPointee,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
-    const TARGET_TY_NAME: &str = "a";
+    const VALUE_TY_NAME: &str = "a";
     const VAR_NAME: &str = "x";
 
-    let target_type = type_tyvar_star(TARGET_TY_NAME);
-    let arg_type = type_tyapp(make_lazy_ty(), target_type.clone());
+    let value_type = type_tyvar_star(VALUE_TY_NAME);
+    let arg_type = type_tyapp(make_lazy_ty(), value_type.clone());
     let ret_type = make_ptr_ty();
     let preds = match pointee {
-        RcFunctionPointee::Boxed => vec![Predicate::make(make_boxed_trait(), target_type.clone())],
+        RcFunctionPointee::Boxed => vec![Predicate::make(make_boxed_trait(), value_type.clone())],
         RcFunctionPointee::PackedForThread => vec![],
     };
     let scm = Scheme::generalize(
