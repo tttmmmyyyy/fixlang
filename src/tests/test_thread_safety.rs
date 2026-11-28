@@ -1,11 +1,12 @@
 //! Whether a multi-threaded program shares values between threads safely, checked by
 //! ThreadSanitizer.
 //!
-//! `Std::mark_threaded` is what puts a value's reference count into the mode that updates it
-//! atomically, and the promise is that a program which uses it has no data race in its reference
-//! counting. The `hammer` program shares one value with eight threads, and ThreadSanitizer reports
-//! whether the promise held. Its control runs the same program without the call, and ThreadSanitizer
-//! has to report a race there: a check that cannot fail says nothing about the runs where it passes.
+//! `Std::FFI::pack_for_thread` is what puts a value's reference count into the mode that updates it
+//! atomically, and the promise is that a program which hands its values to other threads through it
+//! has no data race in its reference counting. The `hammer` program shares one value with eight
+//! threads, and ThreadSanitizer reports whether the promise held. Its control hands the value over
+//! through `Std::FFI::boxed_to_retained_ptr` instead, and ThreadSanitizer has to report a race
+//! there: a check that cannot fail says nothing about the runs where it passes.
 //!
 //! A global value is computed on its first read, and the promise is that the threads reading it see
 //! it computed once and read it whole. The `first_read` program reads one global value from two
@@ -96,12 +97,13 @@ fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
     let (_temp_dir, project_dir) = setup_test_env(HAMMER_PROJECT);
 
     // The program the language asks for: every thread reaches the value through
-    // `Std::mark_threaded`, so the counts are updated atomically and nothing races.
+    // `Std::FFI::pack_for_thread`, so the counts are updated atomically and nothing races.
     let marked = run_harness(&project_dir, opt_level, "thread", &[MARK_ARGUMENT]);
     assert_eq!(
         races_reported(&marked),
         0,
-        "counting a value handed over through `Std::mark_threaded` should race nowhere at -O {}.\
+        "counting a value handed over through `Std::FFI::pack_for_thread` should race nowhere at \
+         -O {}.\
          \nstderr: {}",
         opt_level,
         String::from_utf8_lossy(&marked.stderr)
@@ -115,11 +117,12 @@ fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
         String::from_utf8_lossy(&marked.stderr),
     );
 
-    // The same program without the call. Reporting this is what gives the run above its weight.
+    // The same program handing the value over without the mark. Reporting this is what gives the
+    // run above its weight.
     let unmarked = run_harness(&project_dir, opt_level, "thread", &[]);
     assert!(
         races_reported(&unmarked) > 0,
-        "sharing a value that was never handed over through `Std::mark_threaded` should be \
+        "sharing a value that was never handed over through `Std::FFI::pack_for_thread` should be \
          reported at -O {}, and nothing was.\nstdout: {}\nstderr: {}",
         opt_level,
         String::from_utf8_lossy(&unmarked.stdout),
@@ -127,8 +130,8 @@ fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
     );
 }
 
-/// Verifies that a value handed to eight threads through `Std::mark_threaded` is counted without a
-/// race in a build with the optimizations off.
+/// Verifies that a value handed to eight threads through `Std::FFI::pack_for_thread` is counted
+/// without a race in a build with the optimizations off.
 #[test]
 fn test_shared_reference_counting_is_race_free_unoptimized() {
     if !skip_unless_thread_sanitizer_available(function_name!()) {

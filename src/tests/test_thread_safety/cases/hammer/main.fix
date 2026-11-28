@@ -16,7 +16,7 @@ module Main;
 // eight threads then share a value without touching its count and the control cannot fail.
 hammer_one : Ptr -> IO ();
 hammer_one = |ptr| (
-    let value : Box (Box I64) = *FFI::boxed_from_retained_ptr(ptr);
+    let value : Box (Box I64) = *FFI::unpack_from_thread(ptr);
     let inner = value.@value;
     loop_m(0, |i|
         if i == 4000 { break_m $ () };
@@ -40,13 +40,13 @@ hammer_from_threads = |ptr, threads| (
     FFI_CALL_IO[() hammer_from_threads(Ptr, CInt), ptr, threads.c_int]
 );
 
-// Takes `count` references to `value` and returns the pointer they all name, one for each thread to
-// drop.
-retain_many : I64 -> Box (Box I64) -> IO Ptr;
-retain_many = |count, value| (
+// Hands `value` over `count` times through `hand_over` and returns the pointer every hand-over
+// names, one reference for each thread to drop. The value is boxed, so each pointer names its object.
+hand_over_many : (Box (Box I64) -> IO Ptr) -> I64 -> Box (Box I64) -> IO Ptr;
+hand_over_many = |hand_over, count, value| (
     loop_m((0, nullptr), |(i, ptr)|
         if i == count { break_m $ ptr };
-        let ptr = *value.FFI::boxed_to_retained_ptr;
+        let ptr = *hand_over(value);
         continue_m $ (i + 1, ptr)
     )
 );
@@ -64,13 +64,14 @@ main = (
     // it is given.
     let value = Box::make(Box::make(args.@(0).@size));
 
-    // An argument asks for the value to be handed over the way the language says to. Run without it
-    // and the reference counts are updated non-atomically while eight threads share the value,
-    // which is the race this program exists to produce.
-    let value = if args.@size >= 2 { value.mark_threaded } else { value };
+    // An argument asks for the value to be handed over the way the language says to, through
+    // `pack_for_thread`. Run without it, the value is handed over through `boxed_to_retained_ptr`,
+    // which leaves it in single-threaded mode: the reference counts are updated non-atomically
+    // while eight threads share the value, which is the race this program exists to produce.
+    let hand_over = if args.@size >= 2 { FFI::pack_for_thread } else { FFI::boxed_to_retained_ptr };
 
     let threads = 8;
-    let ptr = *value.retain_many(threads);
+    let ptr = *value.hand_over_many(hand_over, threads);
 
     // Nothing here holds the value any more: the threads hold every reference to it, so whichever
     // of them finishes last is the one that destroys it, and the destructor runs while the others
