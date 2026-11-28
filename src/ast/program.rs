@@ -66,8 +66,8 @@ use std::vec;
 #[derive(Clone)]
 pub struct Symbol {
     /// The name this symbol is known by, unique across the program. Instantiation builds it from
-    /// `generic_name` and `TypeNode::digest` of `ty` (`determine_symbol_name`); a pass that mints a symbol
-    /// appends a segment of its own.
+    /// `generic_name` and `TypeNode::digest` of `ty` (`determine_symbol_name`); a pass that mints a
+    /// symbol appends a segment of its own.
     pub name: FullName,
     /// The name of the global value this symbol is an instantiation of, shared by the instantiations
     /// of it at every type.
@@ -1846,8 +1846,8 @@ impl Program {
     }
 
     /// The name the instantiation of the generic value `name` at type `ty` is known by: `name` with
-    /// `TypeNode::digest` of `ty` appended. Two requests for the same type therefore name one symbol, and
-    /// requests for different types name different ones.
+    /// `TypeNode::digest` of `ty` appended. Two requests for the same type therefore name one
+    /// symbol, and requests for different types name different ones.
     fn determine_symbol_name(
         &self,
         name: &FullName,

@@ -59,8 +59,8 @@ pub const FIX_NAME: &str = "fix";
 
 /// Is this symbol `Std::fix` or an instance of it? An instance is named after the original,
 /// followed by `INSTANCIATED_NAME_SEPARATOR` and the `TypeNode::digest` of the type it is
-/// instantiated at, so the separator is what tells `fix#<digest>` apart from a name that only begins
-/// with `fix`.
+/// instantiated at, so the separator is what tells `fix#<digest>` apart from a name that only
+/// begins with `fix`.
 pub fn is_std_fix(name: &FullName) -> bool {
     if name.namespace.names != [STD_NAME] {
         return false;
