@@ -237,8 +237,12 @@ pub enum IOType {
 }
 
 impl ExportedFunctionType {
-    // Check if a type is valid for a value which is exported.
-    // - src: Used for error messages.
+    /// The C function type an exported value of the scheme `scm` takes, or an error saying why a
+    /// value of that scheme cannot be exported.
+    ///
+    /// # Arguments
+    /// * `err_msg_prefix` — the start of each error message, naming the exported value.
+    /// * `src` — where the export is written, which an error points at.
     pub fn validate(
         scm: Arc<Scheme>,
         type_env: &TypeEnv,
@@ -255,7 +259,7 @@ impl ExportedFunctionType {
         let ty = scm.ty.clone();
 
         // The type cannot contain any type variables.
-        if ty.free_vars_vec().len() > 0 {
+        if !ty.is_ground() {
             return Err(Errors::from_msg_srcs(
                 err_msg_prefix
                     + "the type of an exported value should not contain any type variables.",
