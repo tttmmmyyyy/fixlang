@@ -15,8 +15,9 @@ use crate::{
     misc::function_name,
     target_triple::build_target_triple,
     tests::test_util::{
-        assert_source_prints, compile_c_object, emitted_llvm_ir, fix_command, standalone_generator,
-        test_source, test_source_fail, test_source_with_c, test_source_with_c_under, EmittedIr,
+        assert_source_prints, compile_c_object, emitted_llvm_ir, fix_command,
+        run_source_assert_failed, standalone_generator, test_source, test_source_fail,
+        test_source_with_c, test_source_with_c_under, EmittedIr,
     },
 };
 use inkwell::{attributes::AttributeLoc, context::Context, targets::TargetTriple};
@@ -1017,6 +1018,38 @@ pub fn test_ffi_call_variadic_argument_of_a_non_c_type_fails() {
         &source_calling_with("Wrap { v : -1_I8 }"),
         Configuration::develop_mode(),
         "`Main::Wrap` cannot be passed through the `...` of an `FFI_CALL`",
+    );
+}
+
+/// An argument past the declared parameters of an `FFI_CALL` in a generic function is reported once
+/// for each type it is inferred to have, however many instantiations give it that type.
+#[test]
+pub fn test_ffi_call_variadic_argument_is_reported_once_per_type() {
+    let source = r##"
+        module Main;
+
+        report : a -> b -> CInt;
+        report = |x, _| FFI_CALL[CInt c_report(CInt, ...), 1.c_int, x];
+
+        main : IO ();
+        main = println((report(true, 1) + report(true, "one") + report("two", 2)).to_string);
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert_eq!(
+        errmsg
+            .matches("`Std::Bool` cannot be passed through the `...`")
+            .count(),
+        1,
+        "the argument is reported once at `Bool`, which two instantiations give it\n{}",
+        errmsg
+    );
+    assert_eq!(
+        errmsg
+            .matches("`Std::String` cannot be passed through the `...`")
+            .count(),
+        1,
+        "the argument is reported at `String` too\n{}",
+        errmsg
     );
 }
 
