@@ -962,7 +962,7 @@ fn parse_module(
 
     errors.eat_err(fix_mod.add_global_values(items.global_value_defns, items.global_value_decls));
     fix_mod.add_type_defns(items.type_defns);
-    errors.eat_err(fix_mod.add_traits(items.trait_infos, items.trait_impls, items.trait_aliases));
+    errors.eat_err(fix_mod.add_traits(items.trait_defns, items.trait_impls, items.trait_aliases));
     errors.eat_err(fix_mod.add_import_statements(import_statements));
     fix_mod.used_tuple_sizes.append(&mut ctx.tuple_sizes);
     fix_mod.export_statements = items.export_statements;
@@ -995,7 +995,7 @@ struct ModuleItems {
     /// The definitions of structs, unions and type aliases.
     type_defns: Vec<TypeDefn>,
     /// The trait definitions, as in `trait a : ToFoo { ... }`.
-    trait_infos: Vec<TraitDefn>,
+    trait_defns: Vec<TraitDefn>,
     /// The trait aliases, as in `trait Foo = Bar + Baz;`.
     trait_aliases: Vec<TraitAlias>,
     /// The trait implementations, as in `impl I64 : ToFoo { ... }`.
@@ -1042,7 +1042,7 @@ fn parse_global_defns(
             Rule::trait_defn => {
                 errors.eat_err_or(
                     parse_trait_defn(pair, ctx, &mut items.deprecation_statements),
-                    |ti| items.trait_infos.push(ti),
+                    |ti| items.trait_defns.push(ti),
                 );
             }
             Rule::trait_alias_defn => {

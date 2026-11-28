@@ -352,8 +352,8 @@ pub fn run_tests(
         for (dispatch_index, (index, _, to_run)) in tests.into_iter().enumerate() {
             if to_run {
                 runs.push(Run {
-                    test: index,
-                    executable: executables.len() - 1,
+                    test_index: index,
+                    executable_index: executables.len() - 1,
                     dispatch_index: Some(dispatch_index),
                 });
             } else {
@@ -391,8 +391,8 @@ pub fn run_tests(
                     Ok(executable) => {
                         executables.push(executable);
                         runs.push(Run {
-                            test: index,
-                            executable: executables.len() - 1,
+                            test_index: index,
+                            executable_index: executables.len() - 1,
                             dispatch_index: None,
                         });
                     }
@@ -412,9 +412,9 @@ pub fn run_tests(
 /// A run of a test by one of the executables built.
 struct Run {
     /// The index of the test.
-    test: usize,
+    test_index: usize,
     /// The index of the executable among those built.
-    executable: usize,
+    executable_index: usize,
     /// The index the dispatcher of the executable runs the test by, or `None` where the executable
     /// has no dispatcher and runs the test alone.
     dispatch_index: Option<usize>,
@@ -435,9 +435,9 @@ fn run_in_parallel(
     let commands = runs
         .iter()
         .map(|run| {
-            let command = run_command(&executables[run.executable], run.dispatch_index, args)
+            let command = run_command(&executables[run.executable_index], run.dispatch_index, args)
                 .map_err(|errors| errors.to_string());
-            (run.test, command)
+            (run.test_index, command)
         })
         .collect::<Vec<_>>();
     let commands = Mutex::new(commands.into_iter());
