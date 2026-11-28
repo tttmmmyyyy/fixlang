@@ -4,7 +4,7 @@ import ThreadingLib;
 
 main : IO ();
 main = (
-    let value = ThreadingLib::publish(Box::make(42));
-    let values = ThreadingLib::publish_array([1, 2, 3]);
+    let value : Box I64 = *FFI::unpack_from_thread(*ThreadingLib::publish(Box::make(42)));
+    let values : Array I64 = *FFI::unpack_from_thread(*ThreadingLib::publish_array([1, 2, 3]));
     println((value.@value + values.@(0)).to_string)
 );

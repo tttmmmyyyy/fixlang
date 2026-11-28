@@ -4,8 +4,8 @@ import ThreadingLib;
 
 main : IO ();
 main = (
-    let value = ThreadingLib::publish(Box::make(42));
-    let values = ThreadingLib::publish_array([1, 2, 3]);
-    let total = Box::make(value.@value + values.@(0)).mark_threaded;
+    let value : Box I64 = *FFI::unpack_from_thread(*ThreadingLib::publish(Box::make(42)));
+    let values : Array I64 = *FFI::unpack_from_thread(*ThreadingLib::publish_array([1, 2, 3]));
+    let total : Box I64 = *FFI::unpack_from_thread(*FFI::pack_for_thread(Box::make(value.@value + values.@(0))));
     println(total.@value.to_string)
 );

@@ -154,6 +154,26 @@ pub fn test_pack_for_thread_requires_multi_threading() {
     );
 }
 
+/// The deprecated `Std::mark_threaded` goes on asking for multi-threading as `pack_for_thread`
+/// does.
+#[test]
+pub fn test_mark_threaded_requires_multi_threading() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            let value = [1, 2, 3].mark_threaded;
+            println(value.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Std::mark_threaded` requires multi-threading",
+    );
+}
+
 /// `Std::mark_threaded` is deprecated in favor of `pack_for_thread`, which makes the pointer in the
 /// same call.
 #[test]
