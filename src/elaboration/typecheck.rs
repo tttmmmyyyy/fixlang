@@ -2413,14 +2413,8 @@ impl TypeCheckContext {
                 )?;
 
                 // The first argument should implement the trait of the associated type.
-                let pred = Predicate {
-                    trait_id: assoc_ty.trait_id(),
-                    ty: args[0].clone(),
-                    src: None,
-                    trait_src: None,
-                    required_by: None,
-                };
-                self.predicates.push(pred);
+                self.predicates
+                    .push(Predicate::make(assoc_ty.trait_id(), args[0].clone()));
 
                 let ty = ty.set_assocty_args(args);
 
