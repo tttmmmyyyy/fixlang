@@ -18,7 +18,6 @@ Therefore, to achieve maximum effect, it must be applied before global symbol in
 
 */
 
-use std::{mem::replace, sync::Arc};
 use crate::{
     ast::{
         expr::expr_var_typed,
@@ -35,6 +34,7 @@ use crate::{
     fixstd::builtin::make_tuple_name_abs,
     misc::{info_msg, Map},
 };
+use std::{mem::replace, sync::Arc};
 
 /// Replaces the body of each instantiated act-family function whose functor is `Std::Identity`,
 /// `Std::Const C` or `Std::Tuple2 X` with a call to the specialized implementation. An error here
