@@ -35,7 +35,8 @@ use crate::configuration::{Configuration, DiagnosticsConfig, SubCommand};
 use crate::constants::{
     BIND_RESULT_VAR_PREFIX, COMPOSE_FUNCTION_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME,
     INDEXABLE_TRAIT_NAME, IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
-    PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
+    PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TEST_IGNORE_MARK,
+    TYPE_WILDCARD_VAR_PREFIX,
 };
 use crate::error::{Error, Errors};
 use crate::ffi::unsupported_128_bit_integer_msg;
@@ -1533,9 +1534,6 @@ fn parse_deprecated_statement(
         src: Some(span),
     })
 }
-
-/// The name of the mark that has `fix test` leave a test out, as in `TEST[f, ignore];`.
-const TEST_IGNORE_MARK: &str = "ignore";
 
 /// Parse a `TEST[<path>];` or `TEST[<path>, ignore];` pragma into a `TestStatement`. A mark other
 /// than `ignore` is reported.

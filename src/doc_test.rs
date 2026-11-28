@@ -9,7 +9,7 @@
 
 use crate::{
     ast::{name::Name, program::Program},
-    constants::{DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME, STD_NAME},
+    constants::{DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME, STD_NAME, TEST_IGNORE_MARK},
     error::Errors,
     hash::md5_hex,
     misc::{save_temporary_source, to_absolute_path, Set},
@@ -23,8 +23,6 @@ use std::path::PathBuf;
 
 /// The language an info string names to make a code block a Fix example.
 const FIX_LANGUAGE: &str = "fix";
-/// The mark of an info string that leaves a Fix example out of the tests.
-const IGNORE_MARK: &str = "ignore";
 /// The mark of an info string that has a Fix example compiled but not run.
 const NO_RUN_MARK: &str = "no_run";
 
@@ -298,14 +296,14 @@ fn example_of_block(
     let mut no_run = false;
     for mark in words {
         match mark {
-            IGNORE_MARK => ignore = true,
+            TEST_IGNORE_MARK => ignore = true,
             NO_RUN_MARK => no_run = true,
             _ => {
                 return Err(Errors::from_msg_srcs(
                     format!(
                         "Unknown mark `{}` in the info string of a Fix example. The marks are `{}` \
                          and `{}`, separated by spaces.",
-                        mark, IGNORE_MARK, NO_RUN_MARK
+                        mark, TEST_IGNORE_MARK, NO_RUN_MARK
                     ),
                     &[&fence],
                 ))
@@ -316,7 +314,7 @@ fn example_of_block(
         return Err(Errors::from_msg_srcs(
             format!(
                 "A Fix example is marked both `{}` and `{}`.",
-                IGNORE_MARK, NO_RUN_MARK
+                TEST_IGNORE_MARK, NO_RUN_MARK
             ),
             &[&fence],
         ));

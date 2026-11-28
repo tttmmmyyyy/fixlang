@@ -76,6 +76,10 @@ pub const DOC_TEST_MODULE_NAME: &str = "DocTest";
 /// The environment variable that tells a program built from several tests which of them to run, by
 /// its index among them.
 pub const TEST_INDEX_ENV_VAR: &str = "FIX_TEST_INDEX";
+/// The mark that has `fix test` report a test as ignored without building it, which a Fix example
+/// takes in its info string, as in ```` ```fix,ignore ````, and a `TEST[...]` pragma after the
+/// value it names, as in `TEST[f, ignore];`.
+pub const TEST_IGNORE_MARK: &str = "ignore";
 pub const BOXED_TRAIT_NAME: &str = "Boxed";
 pub const WITH_RETAINED_NAME: &str = "with_retained";
 #[allow(unused)]
