@@ -1244,7 +1244,7 @@ impl TypeNode {
     /// One step of the `resolve_type_aliases` walk.
     ///
     /// # Arguments
-    /// * `type_name_path` — the types the walk has expanded on the way to this one, each with its
+    /// * `walk_path` — the types the walk has expanded on the way to this one, each with its
     ///   normal form (`normalize`). A type whose normal form is met twice is an alias leading back
     ///   to itself, and the report quotes it as written where the walk first met it. The step
     ///   pushes this type for the steps below it and pops it before returning, so the path is
@@ -1254,12 +1254,12 @@ impl TypeNode {
     fn resolve_type_aliases_internal(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
-        type_name_path: &mut Vec<(Arc<TypeNode>, Arc<TypeNode>)>,
+        walk_path: &mut Vec<(Arc<TypeNode>, Arc<TypeNode>)>,
         entry_type_src: &Option<Span>,
     ) -> Result<Arc<TypeNode>, Errors> {
         // Check circular aliasing.
         let normal_form = self.normalize();
-        if let Some((_, first_met)) = type_name_path
+        if let Some((_, first_met)) = walk_path
             .iter()
             .find(|(met_normal_form, _)| *met_normal_form == normal_form)
         {
@@ -1271,20 +1271,20 @@ impl TypeNode {
                 &[entry_type_src],
             ));
         }
-        type_name_path.push((normal_form, self.clone()));
+        walk_path.push((normal_form, self.clone()));
         let resolved =
-            self.resolve_type_aliases_after_cycle_check(env, type_name_path, entry_type_src);
-        type_name_path.pop();
+            self.resolve_type_aliases_after_cycle_check(env, walk_path, entry_type_src);
+        walk_path.pop();
         resolved
     }
 
     /// Expands the type alias at the head of this type, or, when the head is not an alias,
     /// resolves the aliases in the types this one is built from. The caller has checked this type
-    /// for a cycle and pushed it onto `type_name_path`.
+    /// for a cycle and pushed it onto `walk_path`.
     fn resolve_type_aliases_after_cycle_check(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
-        type_name_path: &mut Vec<(Arc<TypeNode>, Arc<TypeNode>)>,
+        walk_path: &mut Vec<(Arc<TypeNode>, Arc<TypeNode>)>,
         entry_type_src: &Option<Span>,
     ) -> Result<Arc<TypeNode>, Errors> {
         // First, treat the case where top-level type constructor is a type alias.
@@ -1324,7 +1324,7 @@ impl TypeNode {
                     let src = Span::unite_both(resolved.get_source(), arg.get_source());
                     resolved = type_tyapp(resolved, arg).set_source(src);
                 }
-                return resolved.resolve_type_aliases_internal(env, type_name_path, entry_type_src);
+                return resolved.resolve_type_aliases_internal(env, walk_path, entry_type_src);
             }
         }
         // Treat other cases.
@@ -1334,17 +1334,17 @@ impl TypeNode {
             Type::TyApp(fun_ty, arg_ty) => Ok(self
                 .set_tyapp_fun(fun_ty.resolve_type_aliases_internal(
                     env,
-                    type_name_path,
+                    walk_path,
                     entry_type_src,
                 )?)
                 .set_tyapp_arg(arg_ty.resolve_type_aliases_internal(
                     env,
-                    type_name_path,
+                    walk_path,
                     entry_type_src,
                 )?)),
             Type::AssocTy(_, args) => {
                 let args = collect_results(args.iter().map(|arg| {
-                    arg.resolve_type_aliases_internal(env, type_name_path, entry_type_src)
+                    arg.resolve_type_aliases_internal(env, walk_path, entry_type_src)
                 }))?;
                 Ok(self.set_assocty_args(args))
             }
