@@ -34,7 +34,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     // Specialize `act_` on the functor it is used at. It runs before the pass that unwraps
     // newtypes, which is what lets it recognize what it specializes: it finds an `act_` by asking
     // `TypeEnv::is_struct_act` about the symbol's name, and it recognizes `Std::Identity` and
-    // `Std::Const` by the string of the type. Both are one-field unboxed structs, so unwrapping
+    // `Std::Const` in the symbol's type. Both are one-field unboxed structs, so unwrapping
     // replaces them and leaves neither question answerable.
     run_pass(
         prg,
