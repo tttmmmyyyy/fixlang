@@ -9541,7 +9541,7 @@ pub fn test_unsaturated_type_alias() {
 
 /// Two type aliases each defined as the other are reported as circular.
 #[test]
-pub fn test_detect_circular_type_aliasing_0() {
+pub fn test_two_type_aliases_standing_for_each_other_are_circular() {
     let source = r##"
     module Main;
 
@@ -9564,7 +9564,7 @@ pub fn test_detect_circular_type_aliasing_0() {
 /// A type alias whose definition contains the alias itself, `type Hoge = Array Hoge`, is
 /// reported as circular.
 #[test]
-pub fn test_detect_circular_type_aliasing_1() {
+pub fn test_a_type_alias_holding_itself_in_its_value_is_circular() {
     let source = r##"
     module Main;
 
@@ -9586,7 +9586,7 @@ pub fn test_detect_circular_type_aliasing_1() {
 /// A type alias with a parameter whose definition applies the alias again, `type Hoge a = Hoge
 /// I64`, is reported as circular, and the report names the applied alias.
 #[test]
-pub fn test_detect_circular_type_aliasing_2() {
+pub fn test_a_type_alias_standing_for_itself_at_another_argument_is_circular() {
     let source = r##"
     module Main;
 
