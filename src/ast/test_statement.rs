@@ -1,4 +1,4 @@
-// AST types for the `TEST[name_path];` pragma.
+//! The AST of the `TEST[...]` pragma.
 
 use crate::ast::name::{FullName, NameSpace};
 use crate::parse::sourcefile::Span;
