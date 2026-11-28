@@ -2235,6 +2235,9 @@ impl Program {
                 }
             });
         }
+        if uses.is_empty() {
+            return Errors::empty();
+        }
         // The symbols are held in a map, so an order is chosen here to keep the report the same from
         // one build to the next.
         uses.sort_by(|a, b| a.0.cmp(b.0));

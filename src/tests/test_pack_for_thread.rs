@@ -135,7 +135,8 @@ pub fn test_funptrs_for_thread_count_the_object_the_pointer_names() {
 }
 
 /// `pack_for_thread` puts its value into multi-threaded mode, which a build without
-/// multi-threading lacks, so such a build is refused at the call.
+/// multi-threading lacks, so such a build is refused at the call. The report names that call
+/// alone: the call of `_pack_for_thread_ios` in the body of `pack_for_thread` is part of it.
 #[test]
 pub fn test_pack_for_thread_requires_multi_threading() {
     let source = r##"
@@ -148,15 +149,22 @@ pub fn test_pack_for_thread_requires_multi_threading() {
             println(got.to_string)
         );
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "`Std::FFI::pack_for_thread` requires multi-threading",
+    let report = run_source_assert_failed(source, Configuration::develop_mode());
+    assert!(
+        report.contains("`Std::FFI::pack_for_thread` requires multi-threading"),
+        "the report should name `pack_for_thread`.\nreport: {}",
+        report
+    );
+    assert!(
+        !report.contains("_pack_for_thread_ios"),
+        "the report should leave out the function `pack_for_thread` is written with.\nreport: {}",
+        report
     );
 }
 
 /// `Std::FFI::_pack_for_thread_ios`, which `pack_for_thread` is written with, asks for
-/// multi-threading when a program calls it directly, as `pack_for_thread` does.
+/// multi-threading when a program calls it directly, as `pack_for_thread` does, and the report
+/// quotes that call.
 #[test]
 pub fn test_a_direct_call_of_pack_for_thread_ios_requires_multi_threading() {
     let source = r##"
@@ -169,10 +177,16 @@ pub fn test_a_direct_call_of_pack_for_thread_ios_requires_multi_threading() {
             println(got.to_string)
         );
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "`Std::FFI::_pack_for_thread_ios` requires multi-threading",
+    let report = run_source_assert_failed(source, Configuration::develop_mode());
+    assert!(
+        report.contains("`Std::FFI::_pack_for_thread_ios` requires multi-threading"),
+        "the report should name `_pack_for_thread_ios`.\nreport: {}",
+        report
+    );
+    assert!(
+        report.contains("FFI::_pack_for_thread_ios([1, 2, 3])"),
+        "the report should quote the call.\nreport: {}",
+        report
     );
 }
 
