@@ -2198,8 +2198,8 @@ impl Program {
         errors.to_result()
     }
 
-    /// The error naming every call of the generic value `name` this program reaches, which asks for
-    /// multi-threading; empty where it reaches none.
+    /// The error that names every call of the generic value `name` this program reaches and says that
+    /// `name` requires multi-threading; empty where the program reaches no call.
     fn uses_requiring_multi_threading(&self, name: &FullName) -> Errors {
         // A generic value is instantiated once per type it is used at, and every instance answers to
         // the name it was written as.

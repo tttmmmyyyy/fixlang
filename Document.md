@@ -2474,7 +2474,7 @@ There are also some things to note in the implementation on the Fix side.
     - To achieve this, the Fix function that is called from the foreign language and receives a pointer should be an `IO` action (like `get_fix_array_element` above). By executing the `IO` action returned by `boxed_from_retained_ptr` in it, it is guaranteed that the received pointer is converted to a Fix value only once.
     - If you don't follow the above, the optimization by the Fix compiler may cause the number of times the pointer is received from the foreign language and the number of calls to `boxed_from_retained_ptr` to not match.
 - Fix's reference counting is not thread-safe by default. Therefore, if you distribute a pointer received from Fix to multiple threads on the foreign language side, data races may occur regarding the increment and decrement of the reference counter.
-    - To avoid this, get the pointer by `Std::FFI::pack_for_thread` instead of `boxed_to_retained_ptr`, which sets the reference counting to thread-safe mode. See [Multithreading](#multithreading).
+    - To avoid this, get the pointer with `Std::FFI::pack_for_thread` in place of `boxed_to_retained_ptr`. `Std::FFI::pack_for_thread` sets the reference counting to thread-safe mode. See [Multithreading](#multithreading).
 
 ### Accessing fields of Fix's struct value from C
 

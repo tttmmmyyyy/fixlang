@@ -9258,7 +9258,9 @@ fn thread_packed_ty(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Arc<TypeNode> {
 /// The reference-counting operation a function from `GetRcFunctionPtrOp` performs.
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum RcFunctionOperation {
+    /// Decrements the object's reference count, and destroys the object when the count reaches zero.
     Release,
+    /// Increments the object's reference count.
     Retain,
 }
 
@@ -9277,19 +9279,23 @@ impl RcFunctionOperation {
 pub enum RcFunctionPointee {
     /// A pointer from `Std::FFI::boxed_to_retained_ptr`, to the object of a value of a boxed type.
     Boxed,
-    /// A pointer from `Std::FFI::pack_for_thread`, to the object `thread_packed_ty` names.
+    /// A pointer from `Std::FFI::pack_for_thread`, to the value's own object for a boxed type and to
+    /// the `Std::Box` holding the value for an unboxed one.
     PackedForThread,
 }
 
 /// The builtin operation of `Std::FFI::get_funptr_release`, `Std::FFI::get_funptr_retain`,
 /// `Std::FFI::get_funptr_release_for_thread` and `Std::FFI::get_funptr_retain_for_thread`: the
 /// `Ptr` naming a function of type `void (*)(void*)` that performs `operation` on the object a
-/// pointer of the kind `pointee` names. The operand is a lazy value whose type names the type of
-/// the value the pointer was made from.
+/// pointer of the kind `pointee` names.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GetRcFunctionPtrOp {
+    /// The name the operand is bound to in the scope of this body: a lazy value whose type is the
+    /// type of the value the pointer was made from.
     var_name: FullName,
+    /// The operation the function performs.
     operation: RcFunctionOperation,
+    /// The kind of pointer the function takes.
     pointee: RcFunctionPointee,
 }
 
@@ -9422,14 +9428,16 @@ pub fn get_rc_function_ptr(
 
 /// The builtin operation of `Std::FFI::_pack_for_thread_ios`: puts every object reachable from the
 /// value into multi-threaded mode and gives a retained pointer to it, boxing a value of an unboxed
-/// type first (`thread_packed_ty`).
+/// type first.
 ///
 /// The marking and the pointer are made in one operation, so that no operation on the value can
 /// fall between them: one that finds the object uniquely referenced would put it back into
 /// single-threaded mode.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PackForThreadIOSOp {
+    /// The name the value to be handed over is bound to in the scope of this body.
     val_name: FullName,
+    /// The name the `IOState` is bound to in the scope of this body.
     ios_name: FullName,
 }
 
@@ -9535,7 +9543,9 @@ pub fn pack_for_thread_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// of an unboxed type is taken out of the `Std::Box` the pointer names.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct UnpackFromThreadIOSOp {
+    /// The name the pointer from `Std::FFI::pack_for_thread` is bound to in the scope of this body.
     ptr_name: FullName,
+    /// The name the `IOState` is bound to in the scope of this body.
     ios_name: FullName,
 }
 

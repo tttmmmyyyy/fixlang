@@ -117,8 +117,8 @@ fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
         String::from_utf8_lossy(&marked.stderr),
     );
 
-    // The same program handing the value over without the mark. Reporting this is what gives the
-    // run above its weight.
+    // The same program handing the value over through `Std::FFI::boxed_to_retained_ptr`, which leaves
+    // it in single-threaded mode. A race reported here is what gives the run above its weight.
     let unmarked = run_harness(&project_dir, opt_level, "thread", &[]);
     assert!(
         races_reported(&unmarked) > 0,
@@ -156,8 +156,8 @@ fn test_shared_reference_counting_is_race_free_optimized() {
 const HAMMER_UNBOXED_PROJECT: &str = "hammer_unboxed";
 
 /// Builds the `hammer_unboxed` program at `opt_level` and asserts that ThreadSanitizer reports no
-/// race: `pack_for_thread` puts the box it wraps an unboxed value in into multi-threaded mode,
-/// together with everything the value reaches.
+/// race: `pack_for_thread` wraps the unboxed value in a box, and puts the box and everything the
+/// value reaches into multi-threaded mode.
 fn assert_shared_unboxed_value_is_race_free(opt_level: &str) {
     let (_temp_dir, project_dir) = setup_test_env(HAMMER_UNBOXED_PROJECT);
     let output = run_harness(&project_dir, opt_level, "thread", &[]);
