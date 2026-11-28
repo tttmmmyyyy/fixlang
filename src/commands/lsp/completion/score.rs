@@ -16,10 +16,13 @@
 
 use super::index::CompletionIndex;
 use crate::ast::name::FullName;
+use crate::ast::predicate::Predicate;
 use crate::ast::program::Program;
 use crate::ast::types::{TyCon, TypeNode};
 use crate::elaboration::typecheck::{InstantiationMode, TypeCheckContext, UnifOrOtherErr};
 use crate::misc::Map;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
 /// Request-scoped cache for the `reduce_predicates` verdict of the
@@ -29,7 +32,7 @@ use std::sync::{Arc, Mutex};
 /// verdict, so the expensive instance search runs once instead of once
 /// per candidate. Wrapped in a `Mutex` because the ranking loop runs
 /// the probes across worker threads.
-pub(super) type PredMemo = Mutex<Map<String, bool>>;
+pub(super) type PredMemo = Mutex<Map<Vec<Predicate>, bool>>;
 
 /// Bucket a dot-completion candidate falls into; lower values rank
 /// higher in the completion list.
@@ -282,23 +285,30 @@ fn try_unify_receiver(
     verdict
 }
 
-/// Canonical key for the memo: the candidate's predicates with the
-/// accumulated substitution applied (so the receiver tyvar is replaced by
-/// the concrete receiver type), rendered and sorted so the order in which
-/// they were collected doesn't matter. Fresh type-variable names are
-/// deterministic across candidates (each probe starts from a clone of the
-/// same template, so `new_tyvar_name` hands out the same `#aN` names), so
-/// structurally identical constraint sets produce identical keys.
-fn predicates_key(tc: &TypeCheckContext) -> String {
-    let mut parts: Vec<String> = tc
+/// Key for the memo: the candidate's predicates with the accumulated
+/// substitution applied (so the receiver tyvar is replaced by the concrete
+/// receiver type), sorted by their hashes so that the order in which they
+/// were collected does not matter. Two keys are equal exactly when they hold
+/// the same predicates in the same order; two predicates whose hashes collide
+/// keep the order they were collected in, which can only cost a memo hit.
+/// Fresh type-variable names are deterministic across candidates (each
+/// probe starts from a clone of the same template, so `new_tyvar_name`
+/// hands out the same `#aN` names), so candidates that bind to the same
+/// constraints produce equal keys.
+fn predicates_key(tc: &TypeCheckContext) -> Vec<Predicate> {
+    let mut preds: Vec<Predicate> = tc
         .predicates
         .iter()
         .map(|p| {
             let mut p = p.clone();
             tc.substitute_predicate(&mut p);
-            p.to_string()
+            p
         })
         .collect();
-    parts.sort();
-    parts.join(";")
+    preds.sort_by_cached_key(|p| {
+        let mut hasher = DefaultHasher::new();
+        p.hash(&mut hasher);
+        hasher.finish()
+    });
+    preds
 }

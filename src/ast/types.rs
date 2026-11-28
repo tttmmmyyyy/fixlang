@@ -1738,7 +1738,7 @@ impl TypeNode {
         // may write a namespace-qualified type (e.g., `Main::MyType`) which would not
         // match the unresolved local name in `impl_type` at this stage.  The equivalent
         // check is performed after name resolution in `validate_trait_impl`.
-        if !is_impl && app_seq[1].to_string() != impl_type.to_string() {
+        if !is_impl && app_seq[1] != *impl_type {
             return Err(general_err(is_impl, impl_type, src_for_err));
         }
         let impl_type_as_written = app_seq[1].clone();
@@ -2042,17 +2042,17 @@ impl TypeNode {
             "{}{}_{}",
             work_name,
             state.name_suffix(),
-            self.hash_with_capture(capture)
+            self.digest_with_capture(capture)
         )
     }
 
     /// A digest of this type together with `capture`, short enough to embed in a symbol name. Two
-    /// types with the same normalized form and the same captures hash alike.
+    /// types with the same normalized form and the same captures have the same digest.
     ///
     /// # Arguments
     /// * `capture` — the captured types of a dynamic object, which distinguish two dynamic objects
     ///   of the same type. Empty for every other type.
-    pub fn hash_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
+    pub fn digest_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
         // If the type is not dynamic, then the capturing types should be empty.
         assert!(self.is_dynamic() || capture.len() == 0);
         let mut key = "".to_string();
@@ -2071,8 +2071,8 @@ impl TypeNode {
     }
 
     /// A digest of this type, short enough to embed in a symbol name. Two types with the same
-    /// normalized form hash alike.
-    pub fn hash(self: &Arc<TypeNode>) -> String {
+    /// normalized form have the same digest.
+    pub fn digest(self: &Arc<TypeNode>) -> String {
         let type_string = self.to_string_normalize();
         format!("{:x}", md5::compute(type_string))
     }
@@ -2512,31 +2512,15 @@ impl Scheme {
                     }
                 }
             }
-            // For each associated type usage, e.g., `Elem c = I64`, we check that `c : Collects` is in the constraint.
-            let mut ok = false;
-            for pred in &preds {
-                if pred.trait_id != eq.assoc_type.trait_id() {
-                    continue;
-                }
-                if pred.ty.to_string() != eq.args[0].to_string() {
-                    continue;
-                }
-                ok = true;
-                break;
-            }
-            if !ok {
-                let pred = Predicate {
-                    trait_id: eq.assoc_type.trait_id(),
-                    ty: eq.args[0].clone(),
-                    src: None,
-                    trait_src: None,
-                    required_by: None,
-                };
+            // An equality on an associated type, e.g., `Elem c = I64`, needs the constraint that
+            // its first argument implements the trait, e.g., `c : Collects`.
+            let required = Predicate::make(eq.assoc_type.trait_id(), eq.args[0].clone());
+            if !preds.contains(&required) {
                 return Err(Errors::from_msg_srcs(
                     format!(
                         "The equality constraint `{}` is invalid here because `{}` is not assumed.",
                         eq.to_string(),
-                        pred.to_string()
+                        required.to_string()
                     ),
                     &[&eq.src],
                 ));
@@ -2634,7 +2618,7 @@ impl Scheme {
         // This restriction is necessary to ensure that type reduction by equalities is deterministic.
         for i in 0..self.equalities.len() {
             for j in i + 1..self.equalities.len() {
-                if self.equalities[i].lhs().to_string() == self.equalities[j].lhs().to_string() {
+                if self.equalities[i].lhs() == self.equalities[j].lhs() {
                     return Err(Errors::from_msg_srcs(
                         "Multiple equality constraints with the same left side are not allowed."
                             .to_string(),
@@ -2746,6 +2730,11 @@ impl Scheme {
                 buf.push(tv);
             }
         }
+    }
+
+    /// Whether this scheme carries a trait constraint or an equality constraint.
+    pub fn has_constraints(&self) -> bool {
+        !self.predicates.is_empty() || !self.equalities.is_empty()
     }
 
     /// Whether this scheme generalizes the type variable `name`.
